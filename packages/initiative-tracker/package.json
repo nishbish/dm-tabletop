@@ -2,10 +2,31 @@
   "name": "@dm-tabletop/initiative-tracker",
   "version": "0.0.0",
   "license": "AGPL-3.0-only",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "description": "Standalone initiative tracker (turn order and rounds) for tabletop RPG sessions. No dependencies.",
+  "main": "dist/initiative-tracker.js",
+  "module": "dist/initiative-tracker.js",
+  "types": "dist/types/index.d.ts",
+  "files": [
+    "dist/initiative-tracker.js",
+    "dist/types",
+    "NOTICE.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/initiative-tracker.js"
+    }
+  },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev": "vite dev/ --host 127.0.0.1 --port 5174",
+    "build": "vite build && tsc -p tsconfig.build.json && vite build -c vite.page.config.mjs",
+    "e2e": "npm run build && playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "happy-dom": "^21.0.3",
+    "vite": "^8.3.4"
   }
 }

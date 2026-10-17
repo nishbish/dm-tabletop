@@ -1,11 +1,13 @@
-node_modules/
+**/node_modules/
 .env
 .env.*
 !.env.example
-dist/
-coverage/
+**/dist/
+**/coverage/
 *.log
 .DS_Store
-data/
+# runtime data directories only (not src/data in packages)
+/data/
+/packages/*/data/
 **/e2e/.results/
-playwright-report/
+**/playwright-report/
