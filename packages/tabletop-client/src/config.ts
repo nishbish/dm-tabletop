@@ -30,7 +30,8 @@ export interface ModelInfo {
 
 // The login token, or a function returning one. A function is called before EVERY connection
 // attempt (including reconnects), so a short-lived token can be fetched fresh each time.
-export type TokenSource = string | (() => string | Promise<string>);
+// The function receives the room about to be joined (it changes when the user moves to another room).
+export type TokenSource = string | ((join: { roomId: string }) => string | Promise<string>);
 
 export interface TabletopOptions {
   serverUrl?: string;

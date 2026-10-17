@@ -25,11 +25,11 @@ export interface TabletopOptions {
   serverUrl?: string;
   /**
    * Sent in the join message; the server's authenticate hook decides what it means. Default: random per browser tab.
-   * A function is called before every connection attempt (also reconnects) and may be async, so short-lived tokens
-   * are fetched fresh. If it throws or rejects, that attempt failed and the usual backoff applies; an error with
+   * A function is called with `{ roomId }` (the room about to be joined) before every connection attempt, also
+   * reconnects and room switches. It may be async, so short-lived tokens are fetched fresh. If it throws or rejects, that attempt failed and the usual backoff applies; an error with
    * `fatal: true` stops retrying instead.
    */
-  token?: string | (() => string | Promise<string>);
+  token?: string | ((join: { roomId: string }) => string | Promise<string>);
   roomId?: string;
   /** Offline demo, no server needed. */
   demo?: boolean;

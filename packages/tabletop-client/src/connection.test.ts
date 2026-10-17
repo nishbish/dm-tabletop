@@ -634,7 +634,8 @@ describe('reconnect', () => {
 describe('token providers', () => {
   it('calls the function before every attempt, including reconnects', async () => {
     let n = 0;
-    const provider = vi.fn(async () => 'token-' + ++n);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the parameter documents the call shape
+    const provider = vi.fn(async (_join: { roomId: string }) => 'token-' + ++n);
     const s = setup({ token: provider });
     expect(FakeSocket.instances.length).toBe(0); // waits for the token
     await flush();
@@ -650,9 +651,10 @@ describe('token providers', () => {
     s.socket().open();
     expect(s.socket().sent[0]).toEqual({ type: 'join', token: 'token-2', roomId: 'r1' });
 
-    s.connection.switchRoom('r2'); // a room switch is a new attempt too
+    s.connection.switchRoom('r2'); // a room switch is a new attempt too, for the new room
     await flush();
     expect(provider).toHaveBeenCalledTimes(3);
+    expect(provider).toHaveBeenLastCalledWith({ roomId: 'r2' });
   });
 
   it('accepts a plain synchronous function', async () => {

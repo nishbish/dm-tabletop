@@ -53,22 +53,22 @@ names are not prefixed), so it is best used on a page of its own or in an iframe
 
 ### Options
 
-| Option         | Default                                                        | Meaning                                                                                                                                                                                                                              |
-| -------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `serverUrl`    | `ws(s)://<this host>:3000`                                     | WebSocket address of the server                                                                                                                                                                                                      |
-| `token`        | random, kept per browser tab                                   | Sent in the join message. The server's authenticate hook decides what it means. The default server accepts any token and uses it as the user id. May also be a function `() => string \| Promise<string>` (see "Tokens that expire") |
-| `roomId`       | `default`                                                      | Room to join                                                                                                                                                                                                                         |
-| `demo`         | `false`                                                        | Offline demo room, no server needed. Changes are not saved                                                                                                                                                                           |
-| `assetBaseUrl` | `''`                                                           | Prefix for files the viewer loads itself: default image locations and skybox faces                                                                                                                                                   |
-| `imageUrl`     | `<assetBaseUrl>/images/models/<src>` or `/images/planes/<src>` | `({kind: 'model' \| 'plane', src, size, quality}) => url`. Absolute URLs and `data:` URIs in `src` are used as they are. Use this to point at your own image proxy                                                                   |
-| `avatarUrl`    | a small drawn circle with the initial                          | `({userId, name}) => url` for the player list                                                                                                                                                                                        |
-| `uploadModel`  | none: upload UI hidden                                         | `async (formData) => result` called when the host uploads a token image (see below)                                                                                                                                                  |
-| `uploadPlane`  | none: upload UI hidden                                         | same for map images                                                                                                                                                                                                                  |
-| `inviteLink`   | none: invite button hidden                                     | `(code) => url`; the host app provides the code (see "Host-app extension points")                                                                                                                                                    |
-| `trackerUrl`   | none: tracker pane hidden                                      | URL of an initiative tracker to embed in an iframe                                                                                                                                                                                   |
-| `resolveModel` | built-in cylinder tokens                                       | `async (modelId) => {id, name, src, baseColor, ...} \| null`, see "Tokens and models"                                                                                                                                                |
-| `skybox`       | plain gradient sky                                             | `{day: {path, extension}, night: {...}}`: six face images `<assetBaseUrl>/<path>_<ft\|bk\|up\|dn\|rt\|lf><extension>` (`.tga` works too)                                                                                             |
-| `debug`        | `false`                                                        | Exposes `tabletop.debug.map`, the internal state object                                                                                                                                                                              |
+| Option         | Default                                                        | Meaning                                                                                                                                                                                                                                      |
+| -------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `serverUrl`    | `ws(s)://<this host>:3000`                                     | WebSocket address of the server                                                                                                                                                                                                              |
+| `token`        | random, kept per browser tab                                   | Sent in the join message. The server's authenticate hook decides what it means. The default server accepts any token and uses it as the user id. May also be a function `({roomId}) => string \| Promise<string>` (see "Tokens that expire") |
+| `roomId`       | `default`                                                      | Room to join                                                                                                                                                                                                                                 |
+| `demo`         | `false`                                                        | Offline demo room, no server needed. Changes are not saved                                                                                                                                                                                   |
+| `assetBaseUrl` | `''`                                                           | Prefix for files the viewer loads itself: default image locations and skybox faces                                                                                                                                                           |
+| `imageUrl`     | `<assetBaseUrl>/images/models/<src>` or `/images/planes/<src>` | `({kind: 'model' \| 'plane', src, size, quality}) => url`. Absolute URLs and `data:` URIs in `src` are used as they are. Use this to point at your own image proxy                                                                           |
+| `avatarUrl`    | a small drawn circle with the initial                          | `({userId, name}) => url` for the player list                                                                                                                                                                                                |
+| `uploadModel`  | none: upload UI hidden                                         | `async (formData) => result` called when the host uploads a token image (see below)                                                                                                                                                          |
+| `uploadPlane`  | none: upload UI hidden                                         | same for map images                                                                                                                                                                                                                          |
+| `inviteLink`   | none: invite button hidden                                     | `(code) => url`; the host app provides the code (see "Host-app extension points")                                                                                                                                                            |
+| `trackerUrl`   | none: tracker pane hidden                                      | URL of an initiative tracker to embed in an iframe                                                                                                                                                                                           |
+| `resolveModel` | built-in cylinder tokens                                       | `async (modelId) => {id, name, src, baseColor, ...} \| null`, see "Tokens and models"                                                                                                                                                        |
+| `skybox`       | plain gradient sky                                             | `{day: {path, extension}, night: {...}}`: six face images `<assetBaseUrl>/<path>_<ft\|bk\|up\|dn\|rt\|lf><extension>` (`.tga` works too)                                                                                                     |
+| `debug`        | `false`                                                        | Exposes `tabletop.debug.map`, the internal state object                                                                                                                                                                                      |
 
 `createTabletop` returns `{ destroy(), getSceneStats(), getTokenPosition(id), getTokenScreenPosition(id), debug }`.
 The last three exist mainly for tests.
@@ -80,13 +80,13 @@ app's business; the plain server has none.
 
 ### Tokens that expire
 
-If `token` is a function, the viewer calls it before **every** connection attempt: the first one, each reconnect and each
-room switch. A host app can therefore hand out short-lived login tokens and just fetch a fresh one each time:
+If `token` is a function, the viewer calls it with `{ roomId }` (the room it is about to join) before **every** connection
+attempt: the first one, each reconnect and each room switch. A host app can therefore hand out short-lived login tokens and just fetch a fresh one each time:
 
 ```js
 createTabletop(el, {
-  token: async () =>
-    (await fetch('/my/token-endpoint', { method: 'POST' })).json().then((r) => r.token),
+  token: async ({ roomId }) =>
+    (await fetch('/my/token-endpoint/' + roomId, { method: 'POST' })).json().then((r) => r.token),
 });
 ```
 
@@ -126,6 +126,10 @@ asking.
 | `getRooms`, `addRoom`, `deleteRoom` (request) | to server | reply `{rooms: [{room_id, name}]}`. Choosing a room joins it over the same connection                                                                              | Message "not available"                                                                        |
 | `refreshInviteCode` (request)                 | to server | reply `{inviteCode}`; with `options.inviteLink` the link is copied to the clipboard                                                                                | Invite button hidden (no `inviteLink`) or message                                              |
 | `focusCamera` (update)                        | both      | args `{xpos, ypos, zpos, xtarget, ytarget, ztarget, roomId?}`, broadcast by the server                                                                             | Message "not available"                                                                        |
+
+Folder, model and plane ids in these replies are opaque strings (UUIDs work); the top level of a library is folder id `0`.
+In a `getModels` / `getPlaneImages` reply `folderId` is the folder being shown and `parentId` its parent (`0` at the top), which
+is what the "up" button goes back to.
 
 `saveCamera` (sent by the original client, ignored by its server) is no longer sent.
 

@@ -425,7 +425,7 @@ export function createConnection(options: ResolvedOptions, sink: Sink): Connecti
     const timeout = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => reject(new Error('timed out')), TOKEN_TIMEOUT_MS);
     });
-    Promise.race([Promise.resolve().then(source), timeout]).then(
+    Promise.race([Promise.resolve().then(() => source({ roomId })), timeout]).then(
       (value) => {
         if (timer) clearTimeout(timer);
         if (mine !== generation) return;
