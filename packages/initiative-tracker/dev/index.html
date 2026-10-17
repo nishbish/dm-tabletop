@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Initiative tracker demo</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        font-family: system-ui, sans-serif;
+        background: #e9eaee;
+        color: #1b1b1f;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #0c0d10;
+          color: #ececf1;
+        }
+      }
+      main,
+      footer {
+        max-width: 60rem;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 1.3rem;
+      }
+      footer {
+        margin-top: 24px;
+        font-size: 0.85rem;
+        line-height: 1.4;
+      }
+      footer a {
+        color: inherit;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Initiative tracker</h1>
+      <div id="app"></div>
+    </main>
+    <footer>
+      <p>
+        This work includes material taken from the System Reference Document 5.1 (&ldquo;SRD
+        5.1&rdquo;) by Wizards of the Coast LLC and available at
+        <a href="https://dnd.wizards.com/resources/systems-reference-document"
+          >https://dnd.wizards.com/resources/systems-reference-document</a
+        >. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License
+        available at
+        <a href="https://creativecommons.org/licenses/by/4.0/legalcode"
+          >https://creativecommons.org/licenses/by/4.0/legalcode</a
+        >.
+      </p>
+    </footer>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
