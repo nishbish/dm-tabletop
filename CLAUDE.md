@@ -10,7 +10,7 @@ Open-source code for two things:
 
 A separate, PRIVATE repo ("platform") handles accounts, Stripe billing and subscription checks, and consumes the packages here. This repo must work on its own for anyone who self-hosts.
 
-## Layout (planned — keep this section up to date)
+## Layout (keep this section up to date)
 
 ```
 packages/
@@ -44,12 +44,14 @@ npm workspaces at the root. One shared `tsconfig.base.json`.
 - Use `import`/`export` syntax, compiled to CommonJS-compatible output unless there is a good reason otherwise.
 - Prefer boring, well-known libraries (`ws` or Socket.IO, `express` or `fastify`). Ask before adding a new dependency.
 
-## Commands (fill in as they are created)
+## Commands
 
 - Install: `npm install`
-- Dev: TODO
-- Test: TODO
-- Lint/format: TODO
+- Dev: `npx tsx <file>` (a package-specific dev script will be added with each package's real code)
+- Test: `npm test` (vitest, all workspaces)
+- Typecheck: `npm run typecheck`
+- Lint: `npm run lint` (eslint, flat config)
+- Format: `npm run format` (write) / `npm run format:check` (check only), prettier
 
 ## Testing
 
