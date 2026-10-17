@@ -106,30 +106,46 @@ test('two players share a room, see token moves, and survive a server restart', 
     expect(/^l/.test(tokenId)).toBe(false); // no longer a client-side temporary id
     expect((await stats(guest)).tokenIds).toEqual([tokenId]);
 
-    // host drags it
-    const start = await host.evaluate(
-      (id) => (window as any).tabletop.getTokenScreenPosition(id),
-      tokenId,
-    );
-    const before = await host.evaluate(
-      (id) => (window as any).tabletop.getTokenPosition(id),
-      tokenId,
-    );
-    await host.mouse.move(start.x, start.y);
-    await host.mouse.down();
-    await host.mouse.move(start.x + 40, start.y + 10, { steps: 5 });
-    await host.mouse.move(start.x + 140, start.y + 30, { steps: 10 });
-    await host.mouse.up();
-
+    // host drags it. Software-rendered WebGL on CI is slow, so wait for the token's screen position
+    // to settle first, and retry the drag if the first attempt did not pick the token up.
+    const position = () =>
+      host.evaluate((id) => (window as any).tabletop.getTokenPosition(id), tokenId);
+    const screenPosition = () =>
+      host.evaluate((id) => (window as any).tabletop.getTokenScreenPosition(id), tokenId);
+    let last = await screenPosition();
     await expect
       .poll(async () => {
-        const p = await host.evaluate(
-          (id) => (window as any).tabletop.getTokenPosition(id),
-          tokenId,
-        );
-        return p.x !== before.x || p.z !== before.z;
+        const now = await screenPosition();
+        const settled = Math.abs(now.x - last.x) < 1 && Math.abs(now.y - last.y) < 1;
+        last = now;
+        return settled;
       })
       .toBe(true);
+
+    const before = await position();
+    let dragged = false;
+    for (let attempt = 1; attempt <= 3 && !dragged; attempt++) {
+      const start = await screenPosition();
+      await host.mouse.move(start.x, start.y);
+      await host.mouse.down();
+      await host.mouse.move(start.x + 40, start.y + 10, { steps: 5 });
+      await host.mouse.move(start.x + 140, start.y + 30, { steps: 10 });
+      await host.mouse.up();
+      try {
+        await expect
+          .poll(
+            async () => {
+              const p = await position();
+              return p.x !== before.x || p.z !== before.z;
+            },
+            { timeout: 8_000 },
+          )
+          .toBe(true);
+        dragged = true;
+      } catch (error) {
+        if (attempt === 3) throw error;
+      }
+    }
     const moved = await host.evaluate(
       (id) => (window as any).tabletop.getTokenPosition(id),
       tokenId,

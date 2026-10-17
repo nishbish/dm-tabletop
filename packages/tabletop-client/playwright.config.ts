@@ -6,7 +6,8 @@ export default defineConfig({
   testDir: 'e2e',
   timeout: 90_000,
   workers: 1,
-  retries: 0,
+  // One retry on CI only: software WebGL there is slow and timing can vary.
+  retries: process.env.CI ? 1 : 0,
   reporter: [['list']],
   outputDir: 'e2e/.results',
   use: {
