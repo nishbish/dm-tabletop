@@ -6101,6 +6101,16 @@ return {
 		var token = map.objects.tokens[tokenId];
 		return token ? { x: token.position.x, y: token.position.y, z: token.position.z } : null;
 	},
+	// Where a token's base is on screen, in page coordinates (used by tests to drag it).
+	getTokenScreenPosition: function(tokenId) {
+		var token = map.objects.tokens[tokenId];
+		if (!token) { return null; }
+
+		var point = new THREE.Vector3(token.position.x, token.position.y - 0.45, token.position.z).project(map.objects.camera);
+		var rect = map.canvas.getBoundingClientRect();
+
+		return { x: rect.left + ((point.x + 1) / 2) * rect.width, y: rect.top + ((1 - point.y) / 2) * rect.height };
+	},
 	// Only available with options.debug: the internal state object.
 	debug: options.debug ? { map: map, connection: connection, updateClient: updateClient } : undefined
 };

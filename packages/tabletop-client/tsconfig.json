@@ -3,7 +3,8 @@
   "compilerOptions": {
     "lib": ["ES2022", "DOM"],
     "noEmit": true,
-    "rootDir": "."
+    "rootDir": ".",
+    "types": ["node"]
   },
   "include": ["src/**/*.ts", "e2e/**/*.ts", "playwright.config.ts", "types/**/*.d.ts"]
 }

@@ -1,9 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- the room is a loosely typed object, like the server state */
 // Offline demo room, drawn from scratch: two small rooms with doors, walls and a few default
 // tokens. (The original demo embedded a map that used uploaded pictures.)
 // Shape = the "room" object stateToRoom() produces.
 
 export function createDemoRoom(): Record<string, any> {
-  // eslint-disable-line @typescript-eslint/no-explicit-any
   const wall = (id: number, group: string, x: number, z: number) => [
     String(id),
     { wallGroupId: group, position: { x, z } },

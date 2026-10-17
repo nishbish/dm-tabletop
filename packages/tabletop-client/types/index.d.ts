@@ -63,6 +63,7 @@ export interface Tabletop {
   destroy(): void;
   getSceneStats(): SceneStats | null;
   getTokenPosition(tokenId: string): { x: number; y: number; z: number } | null;
+  getTokenScreenPosition(tokenId: string): { x: number; y: number } | null;
   debug?: unknown;
 }
 

@@ -15,7 +15,9 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "demo": "npm run demo -w @dm-tabletop/tabletop-client",
+    "e2e": "npm run e2e -w @dm-tabletop/tabletop-client"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
