@@ -25,7 +25,28 @@ await server.start();
 // later: await server.stop();   // saves everything, closes sockets with code 1001
 ```
 
-Requires Node 20+; SQLite storage uses Node's built-in `node:sqlite` and needs Node 22.5+.
+Requires Node 22.5+ (the SQLite storage uses the built-in `node:sqlite`).
+
+## Building and using it from another repository
+
+The package is TypeScript; `npm run build -w @dm-tabletop/tabletop-server` compiles it to `packages/tabletop-server/dist`
+(CommonJS plus `.d.ts` files; tests are not included). `dist` is git-ignored, and only `dist` is published (`files`).
+
+From a sibling checkout, use a local path dependency and build it first:
+
+```
+# in the other repo's package.json:  "@dm-tabletop/tabletop-server": "file:../public-repo/packages/tabletop-server"
+(cd ../public-repo && npm install && npm run build -w @dm-tabletop/tabletop-server)
+npm install
+```
+
+```ts
+import { createTabletopServer, PostgresStorage } from '@dm-tabletop/tabletop-server';
+```
+
+A `file:` dependency is symlinked, so rebuild after changing the package. It brings its own `ws` and `pg`
+(install the public repo's dependencies once). The CLI is available as `tabletop-server` (`node dist/cli.js`).
+Requires Node 22.5+.
 
 ## Environment variables (CLI)
 
