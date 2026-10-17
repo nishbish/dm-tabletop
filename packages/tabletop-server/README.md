@@ -239,10 +239,54 @@ createTabletopServer({
 });
 ```
 
-The context gives you `kind`, `name`, `args` (untrusted: validate them), `user` (`userId`, `name`, `role`), `room` (`room.state`),
-`reply(args)`, `broadcast(args, { includeSelf?, name? })` and `markDirty()` (call it after changing `room.state` so the room is saved).
+The context gives you `kind`, `name`, `args` (untrusted: validate them), `user` (`userId`, `name`, `role`, `socket`), `room` (`room.id`, `room.state`,
+`room.connections`, `room.hosts`), `server` (the running server, see below), `reply(args)`, `broadcast(args, { includeSelf?, name? })`
+and `markDirty()` (call it after changing `room.state` so the room is saved).
 Throw `HandlerError` to send a message back to the sender as an error; any other exception is logged and reported as `internal error`.
 A handler with the same name as a built-in replaces it. Handlers from one connection may run concurrently if they are async.
+
+## Hosting app hooks
+
+Small hooks for an app that embeds the server (they add no behaviour of their own).
+
+**Mounting on your own http server.** `server.handleUpgrade(req, socket, head)` completes the websocket handshake for an
+upgrade request that arrived on _your_ `http.Server`. You decide which requests are ours (for example only the path `/ws`).
+The old way, `server.httpServer.emit('upgrade', req, socket, head)`, keeps working.
+
+```ts
+const tabletop = createTabletopServer({ storage });
+myHttpServer.on('upgrade', (req, socket, head) => {
+  if (new URL(req.url, 'http://x').pathname === '/ws') tabletop.handleUpgrade(req, socket, head);
+  else socket.destroy();
+});
+```
+
+**`onJoin` / `onLeave` options.** Called after a connection has joined (the `joined` message is already sent) and after a joined
+connection has closed. Use them for presence, usage counters and the like.
+
+```ts
+createTabletopServer({
+  storage,
+  onJoin: ({ userId, name, roomId, role, connectionCount }) => {},
+  onLeave: ({ userId, roomId, role, remainingConnectionsOfUser }) => {}, // 0 = the user is gone from the room
+});
+```
+
+They may be async. They are not awaited by the message handling, calls for the same user and room run one after another in the
+order the events happened (a fast reconnect never applies its "leave" after its "join"), an error or rejected promise is logged
+and ignored, and `stop()` waits for those still running. They are not called for rejected joins.
+
+**Reaching other rooms.** A handler only sees the connections of its own room. On the server object (also `ctx.server`):
+
+| Method                                   | What                                                                                                                                                                                                                                                                                                                            |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sendToUsers(userIds, message, filter?)` | Sends a JSON object to every connection of those users in any loaded room; returns how many. `filter(conn, room)` narrows it                                                                                                                                                                                                    |
+| `broadcastAllRooms(message, predicate?)` | Same for every connection in every loaded room that passes `predicate`                                                                                                                                                                                                                                                          |
+| `discardRoom(roomId, closeCode = 4404)`  | Drops a loaded room from memory **without saving it**, closes its connections with `closeCode`, resolves `true` if it was loaded. Waits for a save that is already running, so you can delete the stored copy right afterwards. Someone joining that id later loads whatever storage has (for a deleted room: a new empty room) |
+
+`message` is sent as it is, so use the wire shape: `{ type: 'update', name: 'focusCamera', args, from }`.
+`discardRoom` exists so that a deleted room is not written back by a debounced save. The close code `4404` is exported as
+`ROOM_DISCARDED_CLOSE_CODE`.
 
 ## Persistence guarantees
 

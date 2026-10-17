@@ -1,12 +1,21 @@
 import * as crypto from 'node:crypto';
 import * as http from 'node:http';
+import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer } from 'ws';
 import { builtInHandlers } from './handlers';
 import { createLogger } from './logger';
 import { Connection, Handler, HandlerContext, Room } from './room';
 import { createEmptyState, migrate } from './state';
 import { isValidRoomId } from './storage/roomId';
-import { Args, AuthenticateFn, AuthResult, Logger, RoomStorage } from './types';
+import {
+  Args,
+  AuthenticateFn,
+  AuthResult,
+  JoinEvent,
+  LeaveEvent,
+  Logger,
+  RoomStorage,
+} from './types';
 import { HandlerError, optionalEcho } from './validate';
 
 export interface TabletopServerOptions {
@@ -22,7 +31,17 @@ export interface TabletopServerOptions {
   logger?: Logger;
   // Extra event names (asset libraries, room lists, ...) supplied by the hosting app.
   handlers?: { [name: string]: Handler };
+  // Lifecycle callbacks for the hosting app (presence, usage stats...). onJoin runs after a
+  // connection joined (the `joined` message is already sent), onLeave after a joined connection
+  // closed. They run one after another for the same user and room, in the order the events
+  // happened, are never awaited by the server's message handling, and an error (or a rejected
+  // promise) is logged and otherwise ignored. stop() waits for those still running.
+  onJoin?: (event: JoinEvent) => void | Promise<void>;
+  onLeave?: (event: LeaveEvent) => void | Promise<void>;
 }
+
+// Close code sent to connections of a room removed with discardRoom().
+export const ROOM_DISCARDED_CLOSE_CODE = 4404;
 
 export interface TabletopServer {
   // Starts listening; resolves with the actual port (useful when port is 0).
@@ -30,6 +49,28 @@ export interface TabletopServer {
   stop(): Promise<void>;
   httpServer: http.Server;
   rooms: Map<string, Room>;
+  // Completes a websocket handshake for a request that arrived on the host app's own http server:
+  //   appServer.on('upgrade', (req, socket, head) => { if (req.url is ours) tabletop.handleUpgrade(req, socket, head); });
+  // The path is not checked here; the host decides which requests are ours.
+  handleUpgrade(req: http.IncomingMessage, socket: Duplex, head: Buffer): void;
+  // Sends `message` (any JSON object, usually {type:"update", name, args}) to every connection of
+  // the given users in ANY loaded room, e.g. to tell members who are in another room. `filter`
+  // narrows it down. Returns how many connections it was sent to.
+  sendToUsers(
+    userIds: string[],
+    message: object,
+    filter?: (connection: Connection, room: Room) => boolean,
+  ): number;
+  // Same for every connection in every loaded room that passes `predicate` (default: all).
+  broadcastAllRooms(
+    message: object,
+    predicate?: (connection: Connection, room: Room) => boolean,
+  ): number;
+  // Drops a room from memory WITHOUT saving it and closes its connections with `closeCode`
+  // (default 4404), so a deleted room is not written back by a pending save. Waits for a save
+  // that is already running, so afterwards the host app can safely delete the stored copy.
+  // Resolves false when the room was not loaded.
+  discardRoom(roomId: string, closeCode?: number): Promise<boolean>;
 }
 
 const MAX_MESSAGE_BYTES = 64 * 1024;
@@ -89,13 +130,31 @@ export function createTabletopServer(options: TabletopServerOptions): TabletopSe
   });
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
-  httpServer.on('upgrade', (req, socket, head) => {
+  function handleUpgrade(req: http.IncomingMessage, socket: Duplex, head: Buffer): void {
     if (stopping) {
       socket.destroy();
       return;
     }
     wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, req));
-  });
+  }
+  // The standalone server (and the old way of mounting: httpServer.emit('upgrade', ...)).
+  httpServer.on('upgrade', handleUpgrade);
+
+  // ---------- host app callbacks ----------
+
+  // Hook calls for one user in one room run in order (a quick reconnect must not apply its
+  // "leave" after its "join"), and are remembered so stop() can wait for them.
+  const hookChains = new Map<string, Promise<void>>();
+  function runHook(key: string, name: string, run: () => void | Promise<void>): void {
+    const previous = hookChains.get(key) || Promise.resolve();
+    const next: Promise<void> = previous
+      .then(run)
+      .catch((err) => logger.error(name + ' hook failed', { error: err && err.message }))
+      .finally(() => {
+        if (hookChains.get(key) === next) hookChains.delete(key);
+      });
+    hookChains.set(key, next);
+  }
 
   // ---------- sending ----------
 
@@ -145,6 +204,7 @@ export function createTabletopServer(options: TabletopServerOptions): TabletopSe
       connections: new Set(),
       hosts: new Set(),
       dirty: false,
+      discarded: false,
       dirtySince: 0,
       timer: null,
       saving: Promise.resolve(),
@@ -158,6 +218,7 @@ export function createTabletopServer(options: TabletopServerOptions): TabletopSe
   // Mark changed and (re)start the debounce timer. Continuous changes (a long drag) keep pushing
   // the save back, but never further than maxSaveDelayMs after the first unsaved change.
   function markDirty(room: Room): void {
+    if (room.discarded) return;
     const now = Date.now();
     if (!room.dirty) {
       room.dirty = true;
@@ -180,6 +241,7 @@ export function createTabletopServer(options: TabletopServerOptions): TabletopSe
     }
     // Saves for one room run one after another so an older snapshot can't overwrite a newer one.
     room.saving = room.saving.then(async () => {
+      if (room.discarded) return;
       if (!room.dirty) {
         unloadIfEmpty(room);
         return;
@@ -327,9 +389,18 @@ export function createTabletopServer(options: TabletopServerOptions): TabletopSe
         return;
       }
 
-      const joinedRoom = await getRoom(auth.roomId);
+      let joinedRoom = await getRoom(auth.roomId);
+      // The room may have been unloaded or discarded while we waited.
+      if (!joinedRoom.discarded && rooms.get(joinedRoom.id) !== joinedRoom) {
+        joinedRoom = await getRoom(auth.roomId);
+      }
       if (closed || stopping) {
         unloadIfEmpty(joinedRoom); // don't keep a room loaded for a client that already left
+        return;
+      }
+      if (joinedRoom.discarded) {
+        sendError(socket, 'room not found');
+        socket.close(ROOM_DISCARDED_CLOSE_CODE, 'room discarded');
         return;
       }
 
@@ -366,6 +437,17 @@ export function createTabletopServer(options: TabletopServerOptions): TabletopSe
         // other connections of this same user are not "others", but there are none here anyway
       }
       logger.info('user joined', { roomId: joinedRoom.id, userId: newConn.userId, role });
+      const onJoin = options.onJoin;
+      if (onJoin) {
+        const event: JoinEvent = {
+          userId: newConn.userId,
+          name: newConn.name,
+          roomId: joinedRoom.id,
+          role,
+          connectionCount: joinedRoom.connectionsOf(newConn.userId).length,
+        };
+        runHook(joinedRoom.id + '\n' + newConn.userId, 'onJoin', () => onJoin(event));
+      }
     }
   }
 
@@ -387,8 +469,19 @@ export function createTabletopServer(options: TabletopServerOptions): TabletopSe
   function leave(room: Room, conn: Connection): void {
     room.connections.delete(conn);
     logger.info('user left', { roomId: room.id, userId: conn.userId });
-    if (room.connectionsOf(conn.userId).length === 0) {
+    const remaining = room.connectionsOf(conn.userId).length;
+    if (remaining === 0) {
       broadcast(room, presence('disconnected', conn));
+    }
+    const onLeave = options.onLeave;
+    if (onLeave) {
+      const event: LeaveEvent = {
+        userId: conn.userId,
+        roomId: room.id,
+        role: conn.role,
+        remainingConnectionsOfUser: remaining,
+      };
+      runHook(room.id + '\n' + conn.userId, 'onLeave', () => onLeave(event));
     }
     if (room.connections.size === 0) {
       // Last one out: save now (unloading happens inside flushRoom once it's saved).
@@ -430,12 +523,18 @@ export function createTabletopServer(options: TabletopServerOptions): TabletopSe
       return;
     }
 
+    if (room.discarded) {
+      sendError(socket, 'room not found', idField);
+      return;
+    }
+
     const ctx: HandlerContext = {
       kind,
       name,
       args: message.args as Args,
       user: conn,
       room,
+      server: api,
       reply: (args) => send(socket, { type: 'response', name, args, ...idField }),
       broadcast: (args, opts) => {
         const options2 = opts || {};
@@ -459,6 +558,61 @@ export function createTabletopServer(options: TabletopServerOptions): TabletopSe
         sendError(socket, 'internal error', { name, ...idField });
       }
     }
+  }
+
+  // ---------- helpers for the host app ----------
+
+  function sendToUsers(
+    userIds: string[],
+    message: object,
+    filter?: (connection: Connection, room: Room) => boolean,
+  ): number {
+    const wanted = new Set(userIds);
+    return broadcastAllRooms(
+      message,
+      (c, room) => wanted.has(c.userId) && (!filter || filter(c, room)),
+    );
+  }
+
+  function broadcastAllRooms(
+    message: object,
+    predicate?: (connection: Connection, room: Room) => boolean,
+  ): number {
+    let count = 0;
+    rooms.forEach((room) => {
+      room.connections.forEach((c) => {
+        if (predicate && !predicate(c, room)) return;
+        send(c.socket, message);
+        count += 1;
+      });
+    });
+    return count;
+  }
+
+  async function discardRoom(
+    roomId: string,
+    closeCode: number = ROOM_DISCARDED_CLOSE_CODE,
+  ): Promise<boolean> {
+    // A load that is still running would register the room right after we dropped it.
+    const pending = loading.get(roomId);
+    if (pending) await pending.catch(() => undefined);
+    const room = rooms.get(roomId);
+    if (!room) return false;
+    room.discarded = true;
+    room.dirty = false;
+    if (room.timer) clearTimeout(room.timer);
+    room.timer = null;
+    rooms.delete(roomId);
+    Array.from(room.connections).forEach((c) => {
+      try {
+        c.socket.close(closeCode, 'room discarded');
+      } catch {
+        // already closing
+      }
+    });
+    await room.saving; // a save that already started must finish before the caller deletes the row
+    logger.info('room discarded', { roomId });
+    return true;
   }
 
   // ---------- lifecycle ----------
@@ -503,8 +657,20 @@ export function createTabletopServer(options: TabletopServerOptions): TabletopSe
     }
     // Disconnect handlers may have re-flushed; make sure nothing dirty is left behind.
     await Promise.all(Array.from(rooms.values()).map((room) => flushRoom(room)));
+    // onLeave hooks for the sockets closed above.
+    await Promise.all(Array.from(hookChains.values()));
     logger.info('server stopped');
   }
 
-  return { start, stop, httpServer, rooms };
+  const api: TabletopServer = {
+    start,
+    stop,
+    httpServer,
+    rooms,
+    handleUpgrade,
+    sendToUsers,
+    broadcastAllRooms,
+    discardRoom,
+  };
+  return api;
 }
