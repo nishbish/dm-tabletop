@@ -1,4 +1,4 @@
-export { createTabletopServer } from './server';
+export { createTabletopServer, ROOM_DISCARDED_CLOSE_CODE } from './server';
 export type { TabletopServer, TabletopServerOptions } from './server';
 export { createEmptyState, migrate, CURRENT_STATE_VERSION } from './state';
 export { MemoryStorage } from './storage/memory';

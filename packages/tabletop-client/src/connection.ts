@@ -61,7 +61,9 @@ export function backoffDelay(attempt: number, random: () => number = () => 0.5):
 }
 
 // Close codes after which retrying cannot help.
-const FATAL_CLOSE_CODES = [4400, 4401];
+const FATAL_CLOSE_CODES = [4400, 4401, 4404];
+// A token provider that has not answered after this long counts as failed.
+const TOKEN_TIMEOUT_MS = 15000;
 
 // Host-app events: friendly text when the server does not know them.
 const UNSUPPORTED_TEXT: Record<string, string> = {
@@ -406,12 +408,49 @@ export function createConnection(options: ResolvedOptions, sink: Sink): Connecti
   }
 
   function open(): void {
-    const Impl = (options.WebSocketImpl as any) || WebSocket; // eslint-disable-line @typescript-eslint/no-explicit-any
     const mine = ++generation;
     resetSessionState();
     setStatus(
       attempt === 0 && !joinedBefore ? { state: 'connecting' } : { state: 'reconnecting', attempt },
     );
+    const source = options.token;
+    if (typeof source !== 'function') {
+      openSocket(mine, source);
+      return;
+    }
+    // A token function runs for every attempt. If it fails or hangs this attempt failed, and the
+    // normal backoff applies. An error with `fatal: true` (a login that can never work, e.g. the
+    // member was removed) stops the retrying instead.
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error('timed out')), TOKEN_TIMEOUT_MS);
+    });
+    Promise.race([Promise.resolve().then(() => source({ roomId })), timeout]).then(
+      (value) => {
+        if (timer) clearTimeout(timer);
+        if (mine !== generation) return;
+        if (typeof value !== 'string') return tokenFailed(new Error('not a string'));
+        openSocket(mine, value);
+      },
+      (err) => {
+        if (timer) clearTimeout(timer);
+        if (mine === generation) tokenFailed(err);
+      },
+    );
+  }
+
+  function tokenFailed(err: { fatal?: boolean; message?: string } | null): void {
+    if (err && err.fatal === true) {
+      const message = String(err.message || 'The server did not accept this login.');
+      setStatus({ state: 'failed', message });
+      sink.notify(message, 'error');
+      return;
+    }
+    scheduleReconnect('Could not get a login token');
+  }
+
+  function openSocket(mine: number, token: string): void {
+    const Impl = (options.WebSocketImpl as any) || WebSocket; // eslint-disable-line @typescript-eslint/no-explicit-any
     let ws: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     try {
       ws = new Impl(options.serverUrl);
@@ -422,7 +461,7 @@ export function createConnection(options: ResolvedOptions, sink: Sink): Connecti
     socket = ws;
     ws.onopen = () => {
       if (mine !== generation) return;
-      ws.send(JSON.stringify({ type: 'join', token: options.token, roomId }));
+      ws.send(JSON.stringify({ type: 'join', token, roomId }));
     };
     ws.onmessage = (event: { data: unknown }) => {
       if (mine !== generation) return;
@@ -448,7 +487,9 @@ export function createConnection(options: ResolvedOptions, sink: Sink): Connecti
         const message =
           code === 4401
             ? 'The server did not accept this login.'
-            : 'The server rejected the join request.';
+            : code === 4404
+              ? 'This room no longer exists.'
+              : 'The server rejected the join request.';
         setStatus({ state: 'failed', message });
         sink.notify(message, 'error');
         return;
@@ -457,10 +498,10 @@ export function createConnection(options: ResolvedOptions, sink: Sink): Connecti
     };
   }
 
-  function scheduleReconnect(): void {
+  function scheduleReconnect(message?: string): void {
     const delayMs = backoffDelay(attempt);
     attempt++;
-    setStatus({ state: 'reconnecting', attempt, delayMs });
+    setStatus({ state: 'reconnecting', attempt, delayMs, message });
     if (retryTimer) clearTimeout(retryTimer);
     retryTimer = setTimeout(() => {
       retryTimer = null;

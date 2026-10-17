@@ -28,9 +28,14 @@ export interface ModelInfo {
   baseColor: number;
 }
 
+// The login token, or a function returning one. A function is called before EVERY connection
+// attempt (including reconnects), so a short-lived token can be fetched fresh each time.
+// The function receives the room about to be joined (it changes when the user moves to another room).
+export type TokenSource = string | ((join: { roomId: string }) => string | Promise<string>);
+
 export interface TabletopOptions {
   serverUrl?: string;
-  token?: string;
+  token?: TokenSource;
   roomId?: string;
   demo?: boolean;
   assetBaseUrl?: string;
@@ -57,7 +62,7 @@ export interface SkyboxOptions {
 
 export interface ResolvedOptions extends TabletopOptions {
   serverUrl: string;
-  token: string;
+  token: TokenSource;
   roomId: string;
   demo: boolean;
   assetBaseUrl: string;

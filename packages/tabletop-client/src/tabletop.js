@@ -2842,6 +2842,10 @@ function editModel(e) {
 	}
 }
 
+function isFolderId(id) {
+	return id !== undefined && id !== null && id !== false && id !== 0 && id !== '0' && id !== '';
+}
+
 function getModel(modelId) {
 	//populate token pane
 	var args = {
@@ -5605,7 +5609,8 @@ var clientRequest = {
 			paginaiton.input.prev.style.display = 'none';
 
 			//up button
-			if (args.folderId > 0) {
+			// NOTE(port): folder ids are opaque strings too (UUIDs); the top level is 0, '0' or empty.
+			if (isFolderId(args.folderId)) {
 				paginaiton.input.up.style.display = 'block';
 				paginaiton.input.up.addEventListener('click', function() {
 					changeTokenPage(args.parentId, args.parentId, 0);
@@ -5761,7 +5766,8 @@ var clientRequest = {
 			paginaiton.input.prev.style.display = 'none';
 
 			//up button
-			if (args.folderId > 0) {
+			// NOTE(port): folder ids are opaque strings too (UUIDs); the top level is 0, '0' or empty.
+			if (isFolderId(args.folderId)) {
 				paginaiton.input.up.style.display = 'block';
 				paginaiton.input.up.addEventListener('click', function() {
 					changePlanePage(args.parentId, args.parentParentId, 0);

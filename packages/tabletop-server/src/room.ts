@@ -1,4 +1,5 @@
 import type { WebSocket } from 'ws';
+import type { TabletopServer } from './server';
 import { Args, Role, RoomState } from './types';
 
 export interface Connection {
@@ -16,6 +17,8 @@ export interface Room {
   // Users promoted to host while this room is loaded (assignHost, or host by authentication).
   hosts: Set<string>;
   dirty: boolean;
+  // Set by discardRoom(): the room must never be saved again.
+  discarded: boolean;
   // Internal save bookkeeping (used by the server, not by handlers).
   dirtySince: number;
   timer: NodeJS.Timeout | null;
@@ -29,8 +32,12 @@ export interface HandlerContext {
   args: Args;
   user: Connection;
   room: Room;
-  // Reply to the sender only (use from requests).
-  reply(args: object): void;
+  // The running server: lets a handler reach members connected to other rooms (sendToUsers,
+  // broadcastAllRooms), look at the loaded rooms, or discard one.
+  server: TabletopServer;
+  // Reply to the sender only (use from requests). `name` answers as a different request, e.g. an
+  // "addRoom" handler replying with the updated "getRooms" list; the requestId is kept.
+  reply(args: object, options?: { name?: string }): void;
   // Send {type:"update", name, args, from} to the other members (and the sender if includeSelf).
   // `name` defaults to the event being handled.
   broadcast(args: object, options?: { includeSelf?: boolean; name?: string }): void;

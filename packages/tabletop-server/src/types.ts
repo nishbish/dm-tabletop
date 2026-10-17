@@ -91,3 +91,22 @@ export interface RoomStorage {
   loadRoom(id: string): Promise<RoomState | null>;
   saveRoom(id: string, state: RoomState): Promise<void>;
 }
+
+// Passed to the onJoin hook after a connection joined a room.
+export interface JoinEvent {
+  userId: string;
+  name: string;
+  roomId: string;
+  role: Role;
+  // How many connections this user has in the room, counting the new one (1 = first connection).
+  connectionCount: number;
+}
+
+// Passed to the onLeave hook after a joined connection closed.
+export interface LeaveEvent {
+  userId: string;
+  roomId: string;
+  role: Role;
+  // Connections this user still has in the same room (0 = they are gone from it).
+  remainingConnectionsOfUser: number;
+}
