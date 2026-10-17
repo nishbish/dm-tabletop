@@ -2,10 +2,37 @@
   "name": "@dm-tabletop/tabletop-client",
   "version": "0.0.0",
   "license": "AGPL-3.0-only",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/tabletop-client.js",
+  "types": "types/index.d.ts",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev": "vite dev/ --host 127.0.0.1 --port 5173",
+    "build": "vite build && vite build -c vite.page.config.mjs",
+    "demo": "node scripts/demo.mjs",
+    "e2e": "npm run build && playwright test"
+  },
+  "dependencies": {
+    "material-icons": "^1.13.14",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "vite": "^8.3.4"
+  },
+  "description": "Three.js viewer for the 3D tabletop. Talks protocol v2 of tabletop-server.",
+  "module": "dist/tabletop-client.js",
+  "files": [
+    "dist/tabletop-client.js",
+    "dist/tabletop-client.css",
+    "dist/assets",
+    "types"
+  ],
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./dist/tabletop-client.js"
+    },
+    "./style.css": "./dist/tabletop-client.css"
   }
 }

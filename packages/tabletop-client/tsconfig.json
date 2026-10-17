@@ -1,8 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "dist",
+    "lib": ["ES2022", "DOM"],
+    "noEmit": true,
     "rootDir": "."
   },
-  "include": ["src"]
+  "include": ["src/**/*.ts", "e2e/**/*.ts", "playwright.config.ts", "types/**/*.d.ts"]
 }
