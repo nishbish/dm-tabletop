@@ -47,7 +47,7 @@ npm workspaces at the root. One shared `tsconfig.base.json`.
 ## Commands
 
 - Install: `npm install`
-- Dev: `npx tsx <file>` (a package-specific dev script will be added with each package's real code)
+- Dev: `npx tsx <file>`; tabletop-server: `npm run dev -w @dm-tabletop/tabletop-server` (reads `.env.example` variables from the environment)
 - Test: `npm test` (vitest, all workspaces)
 - Typecheck: `npm run typecheck`
 - Lint: `npm run lint` (eslint, flat config)
