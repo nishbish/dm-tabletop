@@ -1,4 +1,12 @@
-// Placeholder so the workspace builds and tests; real code replaces this.
-export function tabletopServerName(): string {
-  return 'tabletop-server';
-}
+export { createTabletopServer } from './server';
+export type { TabletopServer, TabletopServerOptions } from './server';
+export { createEmptyState, migrate, CURRENT_STATE_VERSION } from './state';
+export { MemoryStorage } from './storage/memory';
+export { FileStorage } from './storage/file';
+export { SqliteStorage } from './storage/sqlite';
+export { PostgresStorage } from './storage/postgres';
+export { isValidRoomId } from './storage/roomId';
+export { createLogger } from './logger';
+export { HandlerError } from './validate';
+export type { Connection, Handler, HandlerContext, Room } from './room';
+export * from './types';
