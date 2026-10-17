@@ -6,6 +6,19 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "start": "tsx src/cli.ts",
+    "dev": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "pg": "^8.23.1",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "@types/ws": "^8.18.2"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
