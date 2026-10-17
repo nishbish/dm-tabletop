@@ -131,7 +131,7 @@ export function createConnection(options: ResolvedOptions, sink: Sink): Connecti
       name: m.name,
       src: '',
       baseColor: m.baseColor,
-      customerId: '0',
+      ownerId: '0',
     }));
   }
 
@@ -314,7 +314,7 @@ export function createConnection(options: ResolvedOptions, sink: Sink): Connecti
     attempt = 0;
     recentNotes.clear();
     sink.update('userJoined', {
-      customer_id: msg.userId,
+      user_id: msg.userId,
       name,
       picture: options.avatarUrl({ userId: msg.userId, name }),
       room,
@@ -377,12 +377,12 @@ export function createConnection(options: ResolvedOptions, sink: Sink): Connecti
       case 'presence':
         if (msg.event === 'connected') {
           sink.update('clientConnected', {
-            customer_id: msg.userId,
+            user_id: msg.userId,
             name: msg.name,
             picture: options.avatarUrl({ userId: msg.userId, name: msg.name }),
           });
         } else {
-          sink.update('clientDisconnected', { customer_id: msg.userId });
+          sink.update('clientDisconnected', { user_id: msg.userId });
         }
         return;
       case 'error':
@@ -496,7 +496,7 @@ export function createConnection(options: ResolvedOptions, sink: Sink): Connecti
           const you = { userId: 'demo-user', name: 'You' };
           room.clients['demo-user'].picture = options.avatarUrl(you);
           sink.update('userJoined', {
-            customer_id: you.userId,
+            user_id: you.userId,
             name: you.name,
             picture: options.avatarUrl(you),
             room,

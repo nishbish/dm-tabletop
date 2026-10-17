@@ -140,18 +140,18 @@ describe('protocol mapping, viewer -> server', () => {
       name: 'removeWallPoint',
       args: { wallPointId: '3' },
     });
-    expect(toServer('assignDM', { customer_id: 'bob' })).toEqual({
+    expect(toServer('assignDM', { user_id: 'bob' })).toEqual({
       name: 'assignHost',
       args: { userId: 'bob' },
     });
-    expect(toServer('assignToken', { tokenId: 1, customer_id: 'bob' })?.args).toEqual({
+    expect(toServer('assignToken', { tokenId: 1, user_id: 'bob' })?.args).toEqual({
       tokenId: '1',
       userId: 'bob',
       owned: true,
     });
-    expect(
-      toServer('assignToken', { tokenId: 1, customer_id: 'bob', owned: false })?.args.owned,
-    ).toBe(false);
+    expect(toServer('assignToken', { tokenId: 1, user_id: 'bob', owned: false })?.args.owned).toBe(
+      false,
+    );
     expect(toServer('updateDoorState', { doorId: 1, open: 1 })?.args).toEqual({
       doorId: '1',
       open: true,
@@ -181,7 +181,7 @@ describe('protocol mapping, viewer -> server', () => {
       tempId: 't',
     });
     expect(toServer('saveCamera', {})).toBeNull();
-    expect(toServer('ping', { x: 1, z: 2, customer_id: 'me' })?.args).toEqual({ x: 1, z: 2 });
+    expect(toServer('ping', { x: 1, z: 2, user_id: 'me' })?.args).toEqual({ x: 1, z: 2 });
   });
 });
 
@@ -266,19 +266,19 @@ describe('protocol mapping, server -> viewer', () => {
     });
     expect(only('assignHost', { userId: 'bob' })).toEqual({
       name: 'updateDM',
-      args: { customer_id: 'bob' },
+      args: { user_id: 'bob' },
     });
     expect(
       only('assignToken', { tokenId: '1', userId: 'bob', owned: true, owners: ['bob'] }).args,
     ).toEqual({
       tokenId: '1',
-      customer_id: 'bob',
+      user_id: 'bob',
       owners: ['bob'],
     });
     expect(only('ping', { x: 1, z: 2 }, 'alice').args).toEqual({
       x: 1,
       z: 2,
-      customer_id: 'alice',
+      user_id: 'alice',
     });
     expect(
       only('updateTokenSettings', { tokenId: '1', hideAvatar: true, disableCamLook: false }).args,
@@ -327,7 +327,7 @@ describe('connection', () => {
     await join(s, emptyState({ tokens: { '1': token('default-blue') } }));
     expect(FakeSocket.instances[0].sent[0]).toEqual({ type: 'join', token: 'me', roomId: 'r1' });
     const joined = s.calls.find((c) => c.name === 'userJoined')!;
-    expect(joined.args.customer_id).toBe('me');
+    expect(joined.args.user_id).toBe('me');
     expect(joined.args.room.models.map((m: any) => m.id)).toEqual(['default-blue']);
     expect(s.connection.status).toBe('connected');
   });
@@ -406,11 +406,11 @@ describe('connection', () => {
     });
     await flush();
     expect(s.calls.find((c) => c.name === 'clientConnected')!.args).toMatchObject({
-      customer_id: 'bob',
+      user_id: 'bob',
       name: 'Bob',
     });
     expect(s.calls.find((c) => c.name === 'clientDisconnected')!.args).toEqual({
-      customer_id: 'bob',
+      user_id: 'bob',
     });
     expect(s.calls.find((c) => c.kind === 'request' && c.name === 'getRooms')).toBeTruthy();
   });

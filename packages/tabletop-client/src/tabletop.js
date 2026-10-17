@@ -96,7 +96,7 @@ var clock = new THREE.Clock();
 var mixer;
 
 var sessionId = 0;
-var customer_id;
+var user_id;
 var isDM = demo ? true : false;
 
 var parseData = {
@@ -279,8 +279,8 @@ function getUserDetailItems() {
 		//remove duplicates
 		var users = map.users;
 		
-		for (const [customer_id, user] of Object.entries(users)) {
-			items.push({'thumb': map.users[customer_id].picture, 'name': map.users[customer_id].name, data: customer_id,  action: (e) => assignToken(e) });	
+		for (const [user_id, user] of Object.entries(users)) {
+			items.push({'thumb': map.users[user_id].picture, 'name': map.users[user_id].name, data: user_id,  action: (e) => assignToken(e) });	
 		}
 	}
 	
@@ -1276,7 +1276,7 @@ function createToken(pos, scale, modelId, local = true, owners = [], tokenId = f
 
 	//add icons for owned tokens
 	if (!token.settings.hideAvatar) {
-		if (isDM || owners.indexOf(customer_id) > -1) {
+		if (isDM || owners.indexOf(user_id) > -1) {
 			addAvatar(token);
 		}
 		else {
@@ -1431,7 +1431,7 @@ function updateTokenTextureSize(maxSize) {
 	for (var i=0;i<map.objects.tokens.length;i++) {
 		var parent = map.objects.tokens[i];
 		var model = map.models[map.objects.tokens[i].modelId];
-		var basic = customer_id in map.objects.tokens[i].owners;
+		var basic = user_id in map.objects.tokens[i].owners;
 		
 		makeTokenInstance(parent, model, basic);
 	}
@@ -1439,7 +1439,7 @@ function updateTokenTextureSize(maxSize) {
 	for (const [tokenId, token] of Object.entries(map.objects.tokens)) {
 		var parent = token;
 		var model = map.models[token.modelId];
-		var basic = customer_id in token.owners;
+		var basic = user_id in token.owners;
 		
 		makeTokenInstance(parent, model, basic);
 	}
@@ -1498,22 +1498,22 @@ function assignTokenMenu(e) {
 
 function assignToken(e) {
 	hideContextMenu();
-	var assigneecustomer_id = getContextData(e);
+	var assigneeuser_id = getContextData(e);
 	
-	if (assigneecustomer_id != null) {
+	if (assigneeuser_id != null) {
 		if (map.menuTarget.tokenId in map.objects.tokens) {
 			// NOTE(port): the original replaced the owner list. In protocol v2 assignToken adds or
 			// removes one owner, so first remove the previous owners to keep "assign = replace".
-			var previousOwners = map.menuTarget.owners.filter((owner) => owner != assigneecustomer_id);
+			var previousOwners = map.menuTarget.owners.filter((owner) => owner != assigneeuser_id);
 			for (const previousOwner of previousOwners) {
-				sendMessage('update', 'assignToken', { tokenId: map.menuTarget.tokenId, customer_id: previousOwner, owned: false });
+				sendMessage('update', 'assignToken', { tokenId: map.menuTarget.tokenId, user_id: previousOwner, owned: false });
 			}
 
-			map.menuTarget.owners = [assigneecustomer_id];
+			map.menuTarget.owners = [assigneeuser_id];
 
 			var args = {
 				tokenId: map.menuTarget.tokenId,
-				customer_id: assigneecustomer_id,
+				user_id: assigneeuser_id,
 				owned: true
 			};
 
@@ -1679,7 +1679,7 @@ function initPing() {
 			var args = {
 				x: position.x,
 				z: position.z,
-				customer_id: customer_id
+				user_id: user_id
 			};
 
 			sendMessage('update', 'ping', args);
@@ -1695,11 +1695,11 @@ function initPing() {
 function assignDM(e) {
 	hideContextMenu();
 	
-	var assigneecustomer_id = getContextData(e);
+	var assigneeuser_id = getContextData(e);
 	
-	if (assigneecustomer_id != null && assigneecustomer_id != customer_id) {
-		sendMessage('update', 'assignDM', { customer_id: assigneecustomer_id });
-		notify('Host role given to ' + (map.users[assigneecustomer_id] ? map.users[assigneecustomer_id].name : 'that player') + '.');
+	if (assigneeuser_id != null && assigneeuser_id != user_id) {
+		sendMessage('update', 'assignDM', { user_id: assigneeuser_id });
+		notify('Host role given to ' + (map.users[assigneeuser_id] ? map.users[assigneeuser_id].name : 'that player') + '.');
 	}
 }
 
@@ -1840,8 +1840,8 @@ function canvasCheck(event) {
 	}, 0);
 
 	if (clickValid && event.which == 1 && pointerCount < 2) { 	//double click
-		if (customer_id in map.users) {
-			var color = map.users[customer_id].color;
+		if (user_id in map.users) {
+			var color = map.users[user_id].color;
 		}
 		else {
 			var color = 'a83232';
@@ -2302,7 +2302,7 @@ function findParentToken(obj, depth = 3) {
 
 function checkTokenOwner(token, callback = null) {
 	for (var i=0;i<token.owners.length;i++) {
-		if (token.owners[i] == customer_id) {
+		if (token.owners[i] == user_id) {
 			return true;
 		}
 	}
@@ -4423,7 +4423,7 @@ function buildRoom(room) {
 
 	//check if current user is dm
 	if ('dm' in room) {
-		if (String(room.dm) === String(customer_id)) {
+		if (String(room.dm) === String(user_id)) {
 			isDM = true;
 			map.mask.mesh.material.opacity = 0.3;
 		}
@@ -4473,7 +4473,7 @@ function buildRoom(room) {
 			
 			if (user.live) {
 				updateClient.clientConnected({
-					customer_id: userId,
+					user_id: userId,
 					name: user.name,
 					picture: user.picture
 				});
@@ -4921,14 +4921,14 @@ var updateClient = {
 
 		args = validateArguments(args, {
 			tokenId: 'id',
-			customer_id: 'id'
+			user_id: 'id'
 		});
 		
 		if (args !== false && args.tokenId in map.objects.tokens) {
 			var token = map.objects.tokens[args.tokenId];
 
 			// NOTE(port): the server sends the full owner list; the original only knew "one owner".
-			token.owners = owners !== null ? owners : [args.customer_id];
+			token.owners = owners !== null ? owners : [args.user_id];
 
 			if (isDM || checkTokenOwner(token)) {
 				//add
@@ -4946,11 +4946,11 @@ var updateClient = {
 	
 	updateDM: function(args) {
 		args = validateArguments(args, {
-			customer_id: 'id'
+			user_id: 'id'
 		});
 	  
 		if (args !== false) {
-			if (args.customer_id == customer_id) {
+			if (args.user_id == user_id) {
 				if (!isDM) {
 					isDM = true;
 					map.mask.mesh.material.opacity = 0.3;
@@ -4968,8 +4968,8 @@ var updateClient = {
 					notify('You are now a host.');
 				}
 			}
-			else if (args.customer_id in map.users) {
-				notify(map.users[args.customer_id].name + ' is now a host.');
+			else if (args.user_id in map.users) {
+				notify(map.users[args.user_id].name + ' is now a host.');
 			}
 		}
 	},
@@ -5219,13 +5219,13 @@ var updateClient = {
 		var room = typeof args.room === 'string' ? JSON.parse(args.room) : args.room;
 
 		args = validateArguments(args, {
-			customer_id: 'id',
+			user_id: 'id',
 			name: 'text',
 			picture: 'text'
 		});
 
 		if (args !== false) {
-			customer_id = args.customer_id;
+			user_id = args.user_id;
 
 			buildRoom(room);
 
@@ -5239,7 +5239,7 @@ var updateClient = {
 			updateGuiItems(isDM);
 
 			updateClient.clientConnected({
-				customer_id: customer_id,
+				user_id: user_id,
 				name: args.name,
 				picture: args.picture
 			});
@@ -5248,18 +5248,18 @@ var updateClient = {
 		
 	clientConnected: function(args) {
 		args = validateArguments(args, {
-			customer_id: 'id',
+			user_id: 'id',
 			name: 'text',
 			picture: 'text'
 		});
 
 		if (args !== false) {
-			var userContainer = byId('user-' + args.customer_id);
+			var userContainer = byId('user-' + args.user_id);
 
 			if (userContainer == null) {
 				//check if user is in map object and add if missing
-				if (args.customer_id in map.users) {
-					var user = map.users[args.customer_id];
+				if (args.user_id in map.users) {
+					var user = map.users[args.user_id];
 					user.live = true;
 				}
 				else {
@@ -5271,11 +5271,11 @@ var updateClient = {
 						picture: args.picture
 					};
 
-					map.users[args.customer_id] = user;
+					map.users[args.user_id] = user;
 				}
 						
 				userContainer = document.createElement('div');
-				userContainer.id = 'user-' + args.customer_id;
+				userContainer.id = 'user-' + args.user_id;
 				userContainer.classList.add('user-container');
 				userContainer.classList.add('user-section-item');
 				userContainer.classList.add('noselect');
@@ -5310,14 +5310,14 @@ var updateClient = {
 
 	clientDisconnected: function(args) {
 		args = validateArguments(args, {
-			customer_id: 'id'
+			user_id: 'id'
 		});
 
 		if (args !== false) {
-			if (args.customer_id in map.users) {
-				map.users[args.customer_id].live = false;
+			if (args.user_id in map.users) {
+				map.users[args.user_id].live = false;
 
-				var userContainer = byId('user-' + args.customer_id);
+				var userContainer = byId('user-' + args.user_id);
 
 				if (userContainer != null) {
 					userContainer.parentNode.removeChild(userContainer);	
@@ -5330,15 +5330,15 @@ var updateClient = {
 		args = validateArguments(args, {
 			x: 'float',
 			z: 'float',
-			customer_id: 'id'
+			user_id: 'id'
 		});
 		
 		if (args !== false) {
 			var position = { x: args.x, z: args.z };
 			var color = 0x0886c4;
 
-			if (args.customer_id in map.users) {
-				color = '0x' + map.users[args.customer_id].color;					
+			if (args.user_id in map.users) {
+				color = '0x' + map.users[args.user_id].color;					
 			}
 
 			map.ping(null, color, position, false);
@@ -5564,7 +5564,7 @@ var clientRequest = {
 			
 				var image = buildPaneItem(map.panes.tokens, escapeHtml(model.name), 'image', thumbPath);
 				
-				if (model.customerId !== undefined && String(model.customerId) !== '0') {
+				if (model.ownerId !== undefined && String(model.ownerId) !== '0') {
 					image.input.deleteButton.style.display = 'block';
 					(function() {
 						var modelId = model.modelId;
@@ -5718,7 +5718,7 @@ var clientRequest = {
 				
 				var image = buildPaneItem(map.panes.plane_images, name, 'image', thumbPath);
 				
-				if (args.planes[j].customerId !== undefined && String(args.planes[j].customerId) !== '0') {
+				if (args.planes[j].ownerId !== undefined && String(args.planes[j].ownerId) !== '0') {
 					image.input.deleteButton.style.display = 'block';
 					(function() {
 						var puid = planeUploadId;
@@ -6092,7 +6092,7 @@ return {
 			wallGroups: Object.keys(map.wallPointGroups).length,
 			users: Object.keys(map.users).length,
 			isHost: isDM,
-			userId: customer_id,
+			userId: user_id,
 			tokenIds: Object.keys(map.objects.tokens),
 			status: connection.status
 		};

@@ -98,12 +98,12 @@ export function toServer(name: string, a: Args): Translated | null {
         name,
         args: {
           tokenId: str(a.tokenId),
-          userId: str(a.customer_id),
+          userId: str(a.user_id),
           owned: a.owned === undefined ? true : !!a.owned,
         },
       };
     case 'assignDM':
-      return { name: 'assignHost', args: { userId: str(a.customer_id) } };
+      return { name: 'assignHost', args: { userId: str(a.user_id) } };
     case 'removePlane':
       return { name, args: { planeId: str(a.planeId) } };
     case 'updatePlaneTransform':
@@ -231,12 +231,12 @@ export function fromServerUpdate(name: string, a: Args, from?: string): Translat
       ];
     case 'assignToken':
       return [
-        { name, args: { tokenId: str(a.tokenId), customer_id: str(a.userId), owners: a.owners } },
+        { name, args: { tokenId: str(a.tokenId), user_id: str(a.userId), owners: a.owners } },
       ];
     case 'assignHost':
-      return [{ name: 'updateDM', args: { customer_id: str(a.userId) } }];
+      return [{ name: 'updateDM', args: { user_id: str(a.userId) } }];
     case 'ping':
-      return [{ name, args: { x: a.x, z: a.z, customer_id: str(from) } }];
+      return [{ name, args: { x: a.x, z: a.z, user_id: str(from) } }];
     default:
       // removeToken, updateTokenPosition/Scale/Model, removePlane, removeDoor, door transform,
       // wall point removal/update, daylight, moonlight, grid size and host-app events.
