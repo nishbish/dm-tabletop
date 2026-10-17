@@ -1,0 +1,2855 @@
+[
+  {
+    "id": "aboleth",
+    "name": "Aboleth",
+    "ac": 17,
+    "hp": 135,
+    "hitDice": "18d10+36",
+    "dex": 9,
+    "cr": 10
+  },
+  {
+    "id": "acolyte",
+    "name": "Acolyte",
+    "ac": 10,
+    "hp": 9,
+    "hitDice": "2d8",
+    "dex": 10,
+    "cr": 0.25
+  },
+  {
+    "id": "adult-black-dragon",
+    "name": "Adult Black Dragon",
+    "ac": 19,
+    "hp": 195,
+    "hitDice": "17d12+85",
+    "dex": 14,
+    "cr": 14
+  },
+  {
+    "id": "adult-blue-dragon",
+    "name": "Adult Blue Dragon",
+    "ac": 19,
+    "hp": 225,
+    "hitDice": "18d12+108",
+    "dex": 10,
+    "cr": 16
+  },
+  {
+    "id": "adult-brass-dragon",
+    "name": "Adult Brass Dragon",
+    "ac": 18,
+    "hp": 172,
+    "hitDice": "15d12+75",
+    "dex": 10,
+    "cr": 13
+  },
+  {
+    "id": "adult-bronze-dragon",
+    "name": "Adult Bronze Dragon",
+    "ac": 19,
+    "hp": 212,
+    "hitDice": "17d12+102",
+    "dex": 10,
+    "cr": 15
+  },
+  {
+    "id": "adult-copper-dragon",
+    "name": "Adult Copper Dragon",
+    "ac": 18,
+    "hp": 184,
+    "hitDice": "16d12+80",
+    "dex": 12,
+    "cr": 14
+  },
+  {
+    "id": "adult-gold-dragon",
+    "name": "Adult Gold Dragon",
+    "ac": 19,
+    "hp": 256,
+    "hitDice": "19d12+133",
+    "dex": 14,
+    "cr": 17
+  },
+  {
+    "id": "adult-green-dragon",
+    "name": "Adult Green Dragon",
+    "ac": 19,
+    "hp": 207,
+    "hitDice": "18d12+90",
+    "dex": 12,
+    "cr": 15
+  },
+  {
+    "id": "adult-red-dragon",
+    "name": "Adult Red Dragon",
+    "ac": 19,
+    "hp": 256,
+    "hitDice": "19d12+133",
+    "dex": 10,
+    "cr": 17
+  },
+  {
+    "id": "adult-silver-dragon",
+    "name": "Adult Silver Dragon",
+    "ac": 19,
+    "hp": 243,
+    "hitDice": "18d12+126",
+    "dex": 10,
+    "cr": 16
+  },
+  {
+    "id": "adult-white-dragon",
+    "name": "Adult White Dragon",
+    "ac": 18,
+    "hp": 200,
+    "hitDice": "16d12+96",
+    "dex": 10,
+    "cr": 13
+  },
+  {
+    "id": "air-elemental",
+    "name": "Air Elemental",
+    "ac": 15,
+    "hp": 90,
+    "hitDice": "12d10+24",
+    "dex": 20,
+    "cr": 5
+  },
+  {
+    "id": "ancient-black-dragon",
+    "name": "Ancient Black Dragon",
+    "ac": 22,
+    "hp": 367,
+    "hitDice": "21d20+147",
+    "dex": 14,
+    "cr": 21
+  },
+  {
+    "id": "ancient-blue-dragon",
+    "name": "Ancient Blue Dragon",
+    "ac": 22,
+    "hp": 481,
+    "hitDice": "26d20+208",
+    "dex": 10,
+    "cr": 23
+  },
+  {
+    "id": "ancient-brass-dragon",
+    "name": "Ancient Brass Dragon",
+    "ac": 20,
+    "hp": 297,
+    "hitDice": "17d20+119",
+    "dex": 10,
+    "cr": 20
+  },
+  {
+    "id": "ancient-bronze-dragon",
+    "name": "Ancient Bronze Dragon",
+    "ac": 22,
+    "hp": 444,
+    "hitDice": "24d20+192",
+    "dex": 10,
+    "cr": 22
+  },
+  {
+    "id": "ancient-copper-dragon",
+    "name": "Ancient Copper Dragon",
+    "ac": 21,
+    "hp": 350,
+    "hitDice": "20d20+140",
+    "dex": 12,
+    "cr": 21
+  },
+  {
+    "id": "ancient-gold-dragon",
+    "name": "Ancient Gold Dragon",
+    "ac": 22,
+    "hp": 546,
+    "hitDice": "28d20+252",
+    "dex": 14,
+    "cr": 24
+  },
+  {
+    "id": "ancient-green-dragon",
+    "name": "Ancient Green Dragon",
+    "ac": 21,
+    "hp": 385,
+    "hitDice": "22d20+154",
+    "dex": 12,
+    "cr": 22
+  },
+  {
+    "id": "ancient-red-dragon",
+    "name": "Ancient Red Dragon",
+    "ac": 22,
+    "hp": 546,
+    "hitDice": "28d20+252",
+    "dex": 10,
+    "cr": 24
+  },
+  {
+    "id": "ancient-silver-dragon",
+    "name": "Ancient Silver Dragon",
+    "ac": 22,
+    "hp": 487,
+    "hitDice": "25d20+225",
+    "dex": 10,
+    "cr": 23
+  },
+  {
+    "id": "ancient-white-dragon",
+    "name": "Ancient White Dragon",
+    "ac": 20,
+    "hp": 333,
+    "hitDice": "18d20+144",
+    "dex": 10,
+    "cr": 20
+  },
+  {
+    "id": "androsphinx",
+    "name": "Androsphinx",
+    "ac": 17,
+    "hp": 199,
+    "hitDice": "19d10+95",
+    "dex": 10,
+    "cr": 17
+  },
+  {
+    "id": "animated-armor",
+    "name": "Animated Armor",
+    "ac": 18,
+    "hp": 33,
+    "hitDice": "6d8+6",
+    "dex": 11,
+    "cr": 1
+  },
+  {
+    "id": "ankheg",
+    "name": "Ankheg",
+    "ac": 14,
+    "hp": 39,
+    "hitDice": "6d10+6",
+    "dex": 11,
+    "cr": 2
+  },
+  {
+    "id": "ape",
+    "name": "Ape",
+    "ac": 12,
+    "hp": 19,
+    "hitDice": "3d8+6",
+    "dex": 14,
+    "cr": 0.5
+  },
+  {
+    "id": "archmage",
+    "name": "Archmage",
+    "ac": 12,
+    "hp": 99,
+    "hitDice": "18d8+18",
+    "dex": 14,
+    "cr": 12
+  },
+  {
+    "id": "assassin",
+    "name": "Assassin",
+    "ac": 15,
+    "hp": 78,
+    "hitDice": "12d8+24",
+    "dex": 16,
+    "cr": 8
+  },
+  {
+    "id": "awakened-shrub",
+    "name": "Awakened Shrub",
+    "ac": 9,
+    "hp": 10,
+    "hitDice": "3d6",
+    "dex": 8,
+    "cr": 0
+  },
+  {
+    "id": "awakened-tree",
+    "name": "Awakened Tree",
+    "ac": 13,
+    "hp": 59,
+    "hitDice": "7d12+14",
+    "dex": 6,
+    "cr": 2
+  },
+  {
+    "id": "axe-beak",
+    "name": "Axe Beak",
+    "ac": 11,
+    "hp": 19,
+    "hitDice": "3d10+3",
+    "dex": 12,
+    "cr": 0.25
+  },
+  {
+    "id": "azer",
+    "name": "Azer",
+    "ac": 17,
+    "hp": 39,
+    "hitDice": "6d8+12",
+    "dex": 12,
+    "cr": 2
+  },
+  {
+    "id": "baboon",
+    "name": "Baboon",
+    "ac": 12,
+    "hp": 3,
+    "hitDice": "1d6",
+    "dex": 14,
+    "cr": 0
+  },
+  {
+    "id": "badger",
+    "name": "Badger",
+    "ac": 10,
+    "hp": 3,
+    "hitDice": "1d4+1",
+    "dex": 11,
+    "cr": 0
+  },
+  {
+    "id": "balor",
+    "name": "Balor",
+    "ac": 19,
+    "hp": 262,
+    "hitDice": "21d12+126",
+    "dex": 15,
+    "cr": 19
+  },
+  {
+    "id": "bandit",
+    "name": "Bandit",
+    "ac": 12,
+    "hp": 11,
+    "hitDice": "2d8+2",
+    "dex": 12,
+    "cr": 0.125
+  },
+  {
+    "id": "bandit-captain",
+    "name": "Bandit Captain",
+    "ac": 15,
+    "hp": 65,
+    "hitDice": "10d8+20",
+    "dex": 16,
+    "cr": 2
+  },
+  {
+    "id": "barbed-devil",
+    "name": "Barbed Devil",
+    "ac": 15,
+    "hp": 110,
+    "hitDice": "13d8+52",
+    "dex": 17,
+    "cr": 5
+  },
+  {
+    "id": "basilisk",
+    "name": "Basilisk",
+    "ac": 15,
+    "hp": 52,
+    "hitDice": "8d8+16",
+    "dex": 8,
+    "cr": 3
+  },
+  {
+    "id": "bat",
+    "name": "Bat",
+    "ac": 12,
+    "hp": 1,
+    "hitDice": "1d4-1",
+    "dex": 15,
+    "cr": 0
+  },
+  {
+    "id": "bearded-devil",
+    "name": "Bearded Devil",
+    "ac": 13,
+    "hp": 52,
+    "hitDice": "8d8+16",
+    "dex": 15,
+    "cr": 3
+  },
+  {
+    "id": "behir",
+    "name": "Behir",
+    "ac": 17,
+    "hp": 168,
+    "hitDice": "16d12+64",
+    "dex": 16,
+    "cr": 11
+  },
+  {
+    "id": "berserker",
+    "name": "Berserker",
+    "ac": 13,
+    "hp": 67,
+    "hitDice": "9d8+27",
+    "dex": 12,
+    "cr": 2
+  },
+  {
+    "id": "black-bear",
+    "name": "Black Bear",
+    "ac": 11,
+    "hp": 19,
+    "hitDice": "3d8+6",
+    "dex": 10,
+    "cr": 0.5
+  },
+  {
+    "id": "black-dragon-wyrmling",
+    "name": "Black Dragon Wyrmling",
+    "ac": 17,
+    "hp": 33,
+    "hitDice": "6d8+6",
+    "dex": 14,
+    "cr": 2
+  },
+  {
+    "id": "black-pudding",
+    "name": "Black Pudding",
+    "ac": 7,
+    "hp": 85,
+    "hitDice": "10d10+30",
+    "dex": 5,
+    "cr": 4
+  },
+  {
+    "id": "blink-dog",
+    "name": "Blink Dog",
+    "ac": 13,
+    "hp": 22,
+    "hitDice": "4d8+4",
+    "dex": 17,
+    "cr": 0.25
+  },
+  {
+    "id": "blood-hawk",
+    "name": "Blood Hawk",
+    "ac": 12,
+    "hp": 7,
+    "hitDice": "2d6",
+    "dex": 14,
+    "cr": 0.125
+  },
+  {
+    "id": "blue-dragon-wyrmling",
+    "name": "Blue Dragon Wyrmling",
+    "ac": 17,
+    "hp": 52,
+    "hitDice": "8d8+16",
+    "dex": 10,
+    "cr": 3
+  },
+  {
+    "id": "boar",
+    "name": "Boar",
+    "ac": 11,
+    "hp": 11,
+    "hitDice": "2d8+2",
+    "dex": 11,
+    "cr": 0.25
+  },
+  {
+    "id": "bone-devil",
+    "name": "Bone Devil",
+    "ac": 19,
+    "hp": 142,
+    "hitDice": "15d10+60",
+    "dex": 16,
+    "cr": 9
+  },
+  {
+    "id": "brass-dragon-wyrmling",
+    "name": "Brass Dragon Wyrmling",
+    "ac": 16,
+    "hp": 16,
+    "hitDice": "3d8+3",
+    "dex": 10,
+    "cr": 1
+  },
+  {
+    "id": "bronze-dragon-wyrmling",
+    "name": "Bronze Dragon Wyrmling",
+    "ac": 17,
+    "hp": 32,
+    "hitDice": "5d8+10",
+    "dex": 10,
+    "cr": 2
+  },
+  {
+    "id": "brown-bear",
+    "name": "Brown Bear",
+    "ac": 11,
+    "hp": 34,
+    "hitDice": "4d10+12",
+    "dex": 10,
+    "cr": 1
+  },
+  {
+    "id": "bugbear",
+    "name": "Bugbear",
+    "ac": 16,
+    "hp": 27,
+    "hitDice": "5d8+5",
+    "dex": 14,
+    "cr": 1
+  },
+  {
+    "id": "bulette",
+    "name": "Bulette",
+    "ac": 17,
+    "hp": 94,
+    "hitDice": "9d10+45",
+    "dex": 11,
+    "cr": 5
+  },
+  {
+    "id": "camel",
+    "name": "Camel",
+    "ac": 9,
+    "hp": 15,
+    "hitDice": "2d10+4",
+    "dex": 8,
+    "cr": 0.125
+  },
+  {
+    "id": "cat",
+    "name": "Cat",
+    "ac": 12,
+    "hp": 2,
+    "hitDice": "1d4",
+    "dex": 15,
+    "cr": 0
+  },
+  {
+    "id": "centaur",
+    "name": "Centaur",
+    "ac": 12,
+    "hp": 45,
+    "hitDice": "6d10+12",
+    "dex": 14,
+    "cr": 2
+  },
+  {
+    "id": "chain-devil",
+    "name": "Chain Devil",
+    "ac": 16,
+    "hp": 85,
+    "hitDice": "10d8+40",
+    "dex": 15,
+    "cr": 8
+  },
+  {
+    "id": "chimera",
+    "name": "Chimera",
+    "ac": 14,
+    "hp": 114,
+    "hitDice": "12d10+48",
+    "dex": 11,
+    "cr": 6
+  },
+  {
+    "id": "chuul",
+    "name": "Chuul",
+    "ac": 16,
+    "hp": 93,
+    "hitDice": "11d10+33",
+    "dex": 10,
+    "cr": 4
+  },
+  {
+    "id": "clay-golem",
+    "name": "Clay Golem",
+    "ac": 14,
+    "hp": 133,
+    "hitDice": "14d10+56",
+    "dex": 9,
+    "cr": 9
+  },
+  {
+    "id": "cloaker",
+    "name": "Cloaker",
+    "ac": 14,
+    "hp": 78,
+    "hitDice": "12d10+12",
+    "dex": 15,
+    "cr": 8
+  },
+  {
+    "id": "cloud-giant",
+    "name": "Cloud Giant",
+    "ac": 14,
+    "hp": 200,
+    "hitDice": "16d12+96",
+    "dex": 10,
+    "cr": 9
+  },
+  {
+    "id": "cockatrice",
+    "name": "Cockatrice",
+    "ac": 11,
+    "hp": 27,
+    "hitDice": "6d6+6",
+    "dex": 12,
+    "cr": 0.5
+  },
+  {
+    "id": "commoner",
+    "name": "Commoner",
+    "ac": 10,
+    "hp": 4,
+    "hitDice": "1d8",
+    "dex": 10,
+    "cr": 0
+  },
+  {
+    "id": "constrictor-snake",
+    "name": "Constrictor Snake",
+    "ac": 12,
+    "hp": 13,
+    "hitDice": "2d10+2",
+    "dex": 14,
+    "cr": 0.25
+  },
+  {
+    "id": "copper-dragon-wyrmling",
+    "name": "Copper Dragon Wyrmling",
+    "ac": 16,
+    "hp": 22,
+    "hitDice": "4d8+4",
+    "dex": 12,
+    "cr": 1
+  },
+  {
+    "id": "couatl",
+    "name": "Couatl",
+    "ac": 19,
+    "hp": 97,
+    "hitDice": "13d8+39",
+    "dex": 20,
+    "cr": 4
+  },
+  {
+    "id": "crab",
+    "name": "Crab",
+    "ac": 11,
+    "hp": 2,
+    "hitDice": "1d4",
+    "dex": 11,
+    "cr": 0
+  },
+  {
+    "id": "crocodile",
+    "name": "Crocodile",
+    "ac": 12,
+    "hp": 19,
+    "hitDice": "3d10+3",
+    "dex": 10,
+    "cr": 0.5
+  },
+  {
+    "id": "cult-fanatic",
+    "name": "Cult Fanatic",
+    "ac": 13,
+    "hp": 33,
+    "hitDice": "6d8+6",
+    "dex": 14,
+    "cr": 2
+  },
+  {
+    "id": "cultist",
+    "name": "Cultist",
+    "ac": 12,
+    "hp": 9,
+    "hitDice": "2d8",
+    "dex": 12,
+    "cr": 0.125
+  },
+  {
+    "id": "darkmantle",
+    "name": "Darkmantle",
+    "ac": 11,
+    "hp": 22,
+    "hitDice": "5d6+5",
+    "dex": 12,
+    "cr": 0.5
+  },
+  {
+    "id": "death-dog",
+    "name": "Death Dog",
+    "ac": 12,
+    "hp": 39,
+    "hitDice": "6d8+12",
+    "dex": 14,
+    "cr": 1
+  },
+  {
+    "id": "deep-gnome-svirfneblin",
+    "name": "Deep Gnome (Svirfneblin)",
+    "ac": 15,
+    "hp": 16,
+    "hitDice": "3d6+6",
+    "dex": 14,
+    "cr": 0.5
+  },
+  {
+    "id": "deer",
+    "name": "Deer",
+    "ac": 13,
+    "hp": 4,
+    "hitDice": "1d8",
+    "dex": 16,
+    "cr": 0
+  },
+  {
+    "id": "deva",
+    "name": "Deva",
+    "ac": 17,
+    "hp": 136,
+    "hitDice": "16d8+64",
+    "dex": 18,
+    "cr": 10
+  },
+  {
+    "id": "dire-wolf",
+    "name": "Dire Wolf",
+    "ac": 14,
+    "hp": 37,
+    "hitDice": "5d10+10",
+    "dex": 15,
+    "cr": 1
+  },
+  {
+    "id": "djinni",
+    "name": "Djinni",
+    "ac": 17,
+    "hp": 161,
+    "hitDice": "14d10+84",
+    "dex": 15,
+    "cr": 11
+  },
+  {
+    "id": "doppelganger",
+    "name": "Doppelganger",
+    "ac": 14,
+    "hp": 52,
+    "hitDice": "8d8+16",
+    "dex": 18,
+    "cr": 3
+  },
+  {
+    "id": "draft-horse",
+    "name": "Draft Horse",
+    "ac": 10,
+    "hp": 19,
+    "hitDice": "3d10+3",
+    "dex": 10,
+    "cr": 0.25
+  },
+  {
+    "id": "dragon-turtle",
+    "name": "Dragon Turtle",
+    "ac": 20,
+    "hp": 341,
+    "hitDice": "22d20+110",
+    "dex": 10,
+    "cr": 17
+  },
+  {
+    "id": "dretch",
+    "name": "Dretch",
+    "ac": 11,
+    "hp": 18,
+    "hitDice": "4d6+4",
+    "dex": 11,
+    "cr": 0.25
+  },
+  {
+    "id": "drider",
+    "name": "Drider",
+    "ac": 19,
+    "hp": 123,
+    "hitDice": "13d10+52",
+    "dex": 16,
+    "cr": 6
+  },
+  {
+    "id": "drow",
+    "name": "Drow",
+    "ac": 15,
+    "hp": 13,
+    "hitDice": "3d8",
+    "dex": 14,
+    "cr": 0.25
+  },
+  {
+    "id": "druid",
+    "name": "Druid",
+    "ac": 11,
+    "hp": 27,
+    "hitDice": "5d8+5",
+    "dex": 12,
+    "cr": 2
+  },
+  {
+    "id": "dryad",
+    "name": "Dryad",
+    "ac": 11,
+    "hp": 22,
+    "hitDice": "5d8",
+    "dex": 12,
+    "cr": 1
+  },
+  {
+    "id": "duergar",
+    "name": "Duergar",
+    "ac": 16,
+    "hp": 26,
+    "hitDice": "4d8+8",
+    "dex": 11,
+    "cr": 1
+  },
+  {
+    "id": "dust-mephit",
+    "name": "Dust Mephit",
+    "ac": 12,
+    "hp": 17,
+    "hitDice": "5d6",
+    "dex": 14,
+    "cr": 0.5
+  },
+  {
+    "id": "eagle",
+    "name": "Eagle",
+    "ac": 12,
+    "hp": 3,
+    "hitDice": "1d6",
+    "dex": 15,
+    "cr": 0
+  },
+  {
+    "id": "earth-elemental",
+    "name": "Earth Elemental",
+    "ac": 17,
+    "hp": 126,
+    "hitDice": "12d10+60",
+    "dex": 8,
+    "cr": 5
+  },
+  {
+    "id": "efreeti",
+    "name": "Efreeti",
+    "ac": 17,
+    "hp": 200,
+    "hitDice": "16d10+112",
+    "dex": 12,
+    "cr": 11
+  },
+  {
+    "id": "elephant",
+    "name": "Elephant",
+    "ac": 12,
+    "hp": 76,
+    "hitDice": "8d12+24",
+    "dex": 9,
+    "cr": 4
+  },
+  {
+    "id": "elk",
+    "name": "Elk",
+    "ac": 10,
+    "hp": 13,
+    "hitDice": "2d10+2",
+    "dex": 10,
+    "cr": 0.25
+  },
+  {
+    "id": "erinyes",
+    "name": "Erinyes",
+    "ac": 18,
+    "hp": 153,
+    "hitDice": "18d8+72",
+    "dex": 16,
+    "cr": 12
+  },
+  {
+    "id": "ettercap",
+    "name": "Ettercap",
+    "ac": 13,
+    "hp": 44,
+    "hitDice": "8d8+8",
+    "dex": 15,
+    "cr": 2
+  },
+  {
+    "id": "ettin",
+    "name": "Ettin",
+    "ac": 12,
+    "hp": 85,
+    "hitDice": "10d10+30",
+    "dex": 8,
+    "cr": 4
+  },
+  {
+    "id": "fire-elemental",
+    "name": "Fire Elemental",
+    "ac": 13,
+    "hp": 102,
+    "hitDice": "12d10+36",
+    "dex": 17,
+    "cr": 5
+  },
+  {
+    "id": "fire-giant",
+    "name": "Fire Giant",
+    "ac": 18,
+    "hp": 162,
+    "hitDice": "13d12+78",
+    "dex": 9,
+    "cr": 9
+  },
+  {
+    "id": "flesh-golem",
+    "name": "Flesh Golem",
+    "ac": 9,
+    "hp": 93,
+    "hitDice": "11d8+44",
+    "dex": 9,
+    "cr": 5
+  },
+  {
+    "id": "flying-snake",
+    "name": "Flying Snake",
+    "ac": 14,
+    "hp": 5,
+    "hitDice": "2d4",
+    "dex": 18,
+    "cr": 0.125
+  },
+  {
+    "id": "flying-sword",
+    "name": "Flying Sword",
+    "ac": 17,
+    "hp": 17,
+    "hitDice": "5d6",
+    "dex": 15,
+    "cr": 0.25
+  },
+  {
+    "id": "frog",
+    "name": "Frog",
+    "ac": 11,
+    "hp": 1,
+    "hitDice": "1d4-1",
+    "dex": 13,
+    "cr": 0
+  },
+  {
+    "id": "frost-giant",
+    "name": "Frost Giant",
+    "ac": 15,
+    "hp": 138,
+    "hitDice": "12d12+60",
+    "dex": 9,
+    "cr": 8
+  },
+  {
+    "id": "gargoyle",
+    "name": "Gargoyle",
+    "ac": 15,
+    "hp": 52,
+    "hitDice": "7d8+21",
+    "dex": 11,
+    "cr": 2
+  },
+  {
+    "id": "gelatinous-cube",
+    "name": "Gelatinous Cube",
+    "ac": 6,
+    "hp": 84,
+    "hitDice": "8d10+40",
+    "dex": 3,
+    "cr": 2
+  },
+  {
+    "id": "ghast",
+    "name": "Ghast",
+    "ac": 13,
+    "hp": 36,
+    "hitDice": "8d8",
+    "dex": 17,
+    "cr": 2
+  },
+  {
+    "id": "ghost",
+    "name": "Ghost",
+    "ac": 11,
+    "hp": 45,
+    "hitDice": "10d8",
+    "dex": 13,
+    "cr": 4
+  },
+  {
+    "id": "ghoul",
+    "name": "Ghoul",
+    "ac": 12,
+    "hp": 22,
+    "hitDice": "5d8",
+    "dex": 15,
+    "cr": 1
+  },
+  {
+    "id": "giant-ape",
+    "name": "Giant Ape",
+    "ac": 12,
+    "hp": 157,
+    "hitDice": "15d12+60",
+    "dex": 14,
+    "cr": 7
+  },
+  {
+    "id": "giant-badger",
+    "name": "Giant Badger",
+    "ac": 10,
+    "hp": 13,
+    "hitDice": "2d8+4",
+    "dex": 10,
+    "cr": 0.25
+  },
+  {
+    "id": "giant-bat",
+    "name": "Giant Bat",
+    "ac": 13,
+    "hp": 22,
+    "hitDice": "4d10",
+    "dex": 16,
+    "cr": 0.25
+  },
+  {
+    "id": "giant-boar",
+    "name": "Giant Boar",
+    "ac": 12,
+    "hp": 42,
+    "hitDice": "5d10+15",
+    "dex": 10,
+    "cr": 2
+  },
+  {
+    "id": "giant-centipede",
+    "name": "Giant Centipede",
+    "ac": 13,
+    "hp": 4,
+    "hitDice": "1d6+1",
+    "dex": 14,
+    "cr": 0.25
+  },
+  {
+    "id": "giant-constrictor-snake",
+    "name": "Giant Constrictor Snake",
+    "ac": 12,
+    "hp": 60,
+    "hitDice": "8d12+8",
+    "dex": 14,
+    "cr": 2
+  },
+  {
+    "id": "giant-crab",
+    "name": "Giant Crab",
+    "ac": 15,
+    "hp": 13,
+    "hitDice": "3d8",
+    "dex": 15,
+    "cr": 0.125
+  },
+  {
+    "id": "giant-crocodile",
+    "name": "Giant Crocodile",
+    "ac": 14,
+    "hp": 85,
+    "hitDice": "9d12+27",
+    "dex": 9,
+    "cr": 5
+  },
+  {
+    "id": "giant-eagle",
+    "name": "Giant Eagle",
+    "ac": 13,
+    "hp": 26,
+    "hitDice": "4d10+4",
+    "dex": 17,
+    "cr": 1
+  },
+  {
+    "id": "giant-elk",
+    "name": "Giant Elk",
+    "ac": 14,
+    "hp": 42,
+    "hitDice": "5d12+10",
+    "dex": 16,
+    "cr": 2
+  },
+  {
+    "id": "giant-fire-beetle",
+    "name": "Giant Fire Beetle",
+    "ac": 13,
+    "hp": 4,
+    "hitDice": "1d6+1",
+    "dex": 10,
+    "cr": 0
+  },
+  {
+    "id": "giant-frog",
+    "name": "Giant Frog",
+    "ac": 11,
+    "hp": 18,
+    "hitDice": "4d8",
+    "dex": 13,
+    "cr": 0.25
+  },
+  {
+    "id": "giant-goat",
+    "name": "Giant Goat",
+    "ac": 11,
+    "hp": 19,
+    "hitDice": "3d10+3",
+    "dex": 11,
+    "cr": 0.5
+  },
+  {
+    "id": "giant-hyena",
+    "name": "Giant Hyena",
+    "ac": 12,
+    "hp": 45,
+    "hitDice": "6d10+12",
+    "dex": 14,
+    "cr": 1
+  },
+  {
+    "id": "giant-lizard",
+    "name": "Giant Lizard",
+    "ac": 12,
+    "hp": 19,
+    "hitDice": "3d10+3",
+    "dex": 12,
+    "cr": 0.25
+  },
+  {
+    "id": "giant-octopus",
+    "name": "Giant Octopus",
+    "ac": 11,
+    "hp": 52,
+    "hitDice": "8d10+8",
+    "dex": 13,
+    "cr": 1
+  },
+  {
+    "id": "giant-owl",
+    "name": "Giant Owl",
+    "ac": 12,
+    "hp": 19,
+    "hitDice": "3d10+3",
+    "dex": 15,
+    "cr": 0.25
+  },
+  {
+    "id": "giant-poisonous-snake",
+    "name": "Giant Poisonous Snake",
+    "ac": 14,
+    "hp": 11,
+    "hitDice": "2d8+2",
+    "dex": 18,
+    "cr": 0.25
+  },
+  {
+    "id": "giant-rat",
+    "name": "Giant Rat",
+    "ac": 12,
+    "hp": 7,
+    "hitDice": "2d6",
+    "dex": 15,
+    "cr": 0.125
+  },
+  {
+    "id": "giant-scorpion",
+    "name": "Giant Scorpion",
+    "ac": 15,
+    "hp": 52,
+    "hitDice": "7d10+14",
+    "dex": 13,
+    "cr": 3
+  },
+  {
+    "id": "giant-sea-horse",
+    "name": "Giant Sea Horse",
+    "ac": 13,
+    "hp": 16,
+    "hitDice": "3d10",
+    "dex": 15,
+    "cr": 0.5
+  },
+  {
+    "id": "giant-shark",
+    "name": "Giant Shark",
+    "ac": 13,
+    "hp": 126,
+    "hitDice": "11d12+55",
+    "dex": 11,
+    "cr": 5
+  },
+  {
+    "id": "giant-spider",
+    "name": "Giant Spider",
+    "ac": 14,
+    "hp": 26,
+    "hitDice": "4d10+4",
+    "dex": 16,
+    "cr": 1
+  },
+  {
+    "id": "giant-toad",
+    "name": "Giant Toad",
+    "ac": 11,
+    "hp": 39,
+    "hitDice": "6d10+6",
+    "dex": 13,
+    "cr": 1
+  },
+  {
+    "id": "giant-vulture",
+    "name": "Giant Vulture",
+    "ac": 10,
+    "hp": 22,
+    "hitDice": "3d10+6",
+    "dex": 10,
+    "cr": 1
+  },
+  {
+    "id": "giant-wasp",
+    "name": "Giant Wasp",
+    "ac": 12,
+    "hp": 13,
+    "hitDice": "3d8",
+    "dex": 14,
+    "cr": 0.5
+  },
+  {
+    "id": "giant-weasel",
+    "name": "Giant Weasel",
+    "ac": 13,
+    "hp": 9,
+    "hitDice": "2d8",
+    "dex": 16,
+    "cr": 0.125
+  },
+  {
+    "id": "giant-wolf-spider",
+    "name": "Giant Wolf Spider",
+    "ac": 13,
+    "hp": 11,
+    "hitDice": "2d8+2",
+    "dex": 16,
+    "cr": 0.25
+  },
+  {
+    "id": "gibbering-mouther",
+    "name": "Gibbering Mouther",
+    "ac": 9,
+    "hp": 67,
+    "hitDice": "9d8+27",
+    "dex": 8,
+    "cr": 2
+  },
+  {
+    "id": "glabrezu",
+    "name": "Glabrezu",
+    "ac": 17,
+    "hp": 157,
+    "hitDice": "15d10+75",
+    "dex": 15,
+    "cr": 9
+  },
+  {
+    "id": "gladiator",
+    "name": "Gladiator",
+    "ac": 16,
+    "hp": 112,
+    "hitDice": "15d8+45",
+    "dex": 15,
+    "cr": 5
+  },
+  {
+    "id": "gnoll",
+    "name": "Gnoll",
+    "ac": 15,
+    "hp": 22,
+    "hitDice": "5d8",
+    "dex": 12,
+    "cr": 0.5
+  },
+  {
+    "id": "goat",
+    "name": "Goat",
+    "ac": 10,
+    "hp": 4,
+    "hitDice": "1d8",
+    "dex": 10,
+    "cr": 0
+  },
+  {
+    "id": "goblin",
+    "name": "Goblin",
+    "ac": 15,
+    "hp": 7,
+    "hitDice": "2d6",
+    "dex": 14,
+    "cr": 0.25
+  },
+  {
+    "id": "gold-dragon-wyrmling",
+    "name": "Gold Dragon Wyrmling",
+    "ac": 17,
+    "hp": 60,
+    "hitDice": "8d8+24",
+    "dex": 14,
+    "cr": 3
+  },
+  {
+    "id": "gorgon",
+    "name": "Gorgon",
+    "ac": 19,
+    "hp": 114,
+    "hitDice": "12d10+48",
+    "dex": 11,
+    "cr": 5
+  },
+  {
+    "id": "gray-ooze",
+    "name": "Gray Ooze",
+    "ac": 8,
+    "hp": 22,
+    "hitDice": "3d8+9",
+    "dex": 6,
+    "cr": 0.5
+  },
+  {
+    "id": "green-dragon-wyrmling",
+    "name": "Green Dragon Wyrmling",
+    "ac": 17,
+    "hp": 38,
+    "hitDice": "7d8+7",
+    "dex": 12,
+    "cr": 2
+  },
+  {
+    "id": "green-hag",
+    "name": "Green Hag",
+    "ac": 17,
+    "hp": 82,
+    "hitDice": "11d8+33",
+    "dex": 12,
+    "cr": 3
+  },
+  {
+    "id": "grick",
+    "name": "Grick",
+    "ac": 14,
+    "hp": 27,
+    "hitDice": "6d8",
+    "dex": 14,
+    "cr": 2
+  },
+  {
+    "id": "griffon",
+    "name": "Griffon",
+    "ac": 12,
+    "hp": 59,
+    "hitDice": "7d10+21",
+    "dex": 15,
+    "cr": 2
+  },
+  {
+    "id": "grimlock",
+    "name": "Grimlock",
+    "ac": 11,
+    "hp": 11,
+    "hitDice": "2d8+2",
+    "dex": 12,
+    "cr": 0.25
+  },
+  {
+    "id": "guard",
+    "name": "Guard",
+    "ac": 16,
+    "hp": 11,
+    "hitDice": "2d8+2",
+    "dex": 12,
+    "cr": 0.125
+  },
+  {
+    "id": "guardian-naga",
+    "name": "Guardian Naga",
+    "ac": 18,
+    "hp": 127,
+    "hitDice": "15d10+45",
+    "dex": 18,
+    "cr": 10
+  },
+  {
+    "id": "gynosphinx",
+    "name": "Gynosphinx",
+    "ac": 17,
+    "hp": 136,
+    "hitDice": "16d10+48",
+    "dex": 15,
+    "cr": 11
+  },
+  {
+    "id": "half-red-dragon-veteran",
+    "name": "Half-Red Dragon Veteran",
+    "ac": 18,
+    "hp": 65,
+    "hitDice": "10d8+20",
+    "dex": 13,
+    "cr": 5
+  },
+  {
+    "id": "harpy",
+    "name": "Harpy",
+    "ac": 11,
+    "hp": 38,
+    "hitDice": "7d8+7",
+    "dex": 13,
+    "cr": 1
+  },
+  {
+    "id": "hawk",
+    "name": "Hawk",
+    "ac": 13,
+    "hp": 1,
+    "hitDice": "1d4-1",
+    "dex": 16,
+    "cr": 0
+  },
+  {
+    "id": "hell-hound",
+    "name": "Hell Hound",
+    "ac": 15,
+    "hp": 45,
+    "hitDice": "7d8+14",
+    "dex": 12,
+    "cr": 3
+  },
+  {
+    "id": "hezrou",
+    "name": "Hezrou",
+    "ac": 16,
+    "hp": 136,
+    "hitDice": "13d10+65",
+    "dex": 17,
+    "cr": 8
+  },
+  {
+    "id": "hill-giant",
+    "name": "Hill Giant",
+    "ac": 13,
+    "hp": 105,
+    "hitDice": "10d12+40",
+    "dex": 8,
+    "cr": 5
+  },
+  {
+    "id": "hippogriff",
+    "name": "Hippogriff",
+    "ac": 11,
+    "hp": 19,
+    "hitDice": "3d10+3",
+    "dex": 13,
+    "cr": 1
+  },
+  {
+    "id": "hobgoblin",
+    "name": "Hobgoblin",
+    "ac": 18,
+    "hp": 11,
+    "hitDice": "2d8+2",
+    "dex": 12,
+    "cr": 0.5
+  },
+  {
+    "id": "homunculus",
+    "name": "Homunculus",
+    "ac": 13,
+    "hp": 5,
+    "hitDice": "2d4",
+    "dex": 15,
+    "cr": 0
+  },
+  {
+    "id": "horned-devil",
+    "name": "Horned Devil",
+    "ac": 18,
+    "hp": 178,
+    "hitDice": "17d10+85",
+    "dex": 17,
+    "cr": 11
+  },
+  {
+    "id": "hunter-shark",
+    "name": "Hunter Shark",
+    "ac": 12,
+    "hp": 45,
+    "hitDice": "6d10+12",
+    "dex": 13,
+    "cr": 2
+  },
+  {
+    "id": "hydra",
+    "name": "Hydra",
+    "ac": 15,
+    "hp": 172,
+    "hitDice": "15d12+75",
+    "dex": 12,
+    "cr": 8
+  },
+  {
+    "id": "hyena",
+    "name": "Hyena",
+    "ac": 11,
+    "hp": 5,
+    "hitDice": "1d8+1",
+    "dex": 13,
+    "cr": 0
+  },
+  {
+    "id": "ice-devil",
+    "name": "Ice Devil",
+    "ac": 18,
+    "hp": 180,
+    "hitDice": "19d10+76",
+    "dex": 14,
+    "cr": 14
+  },
+  {
+    "id": "ice-mephit",
+    "name": "Ice Mephit",
+    "ac": 11,
+    "hp": 21,
+    "hitDice": "6d6",
+    "dex": 13,
+    "cr": 0.5
+  },
+  {
+    "id": "imp",
+    "name": "Imp",
+    "ac": 13,
+    "hp": 10,
+    "hitDice": "3d4+3",
+    "dex": 17,
+    "cr": 1
+  },
+  {
+    "id": "invisible-stalker",
+    "name": "Invisible Stalker",
+    "ac": 14,
+    "hp": 104,
+    "hitDice": "16d8+32",
+    "dex": 19,
+    "cr": 6
+  },
+  {
+    "id": "iron-golem",
+    "name": "Iron Golem",
+    "ac": 20,
+    "hp": 210,
+    "hitDice": "20d10+100",
+    "dex": 9,
+    "cr": 16
+  },
+  {
+    "id": "jackal",
+    "name": "Jackal",
+    "ac": 12,
+    "hp": 3,
+    "hitDice": "1d6",
+    "dex": 15,
+    "cr": 0
+  },
+  {
+    "id": "killer-whale",
+    "name": "Killer Whale",
+    "ac": 12,
+    "hp": 90,
+    "hitDice": "12d12+12",
+    "dex": 10,
+    "cr": 3
+  },
+  {
+    "id": "knight",
+    "name": "Knight",
+    "ac": 18,
+    "hp": 52,
+    "hitDice": "8d8+16",
+    "dex": 11,
+    "cr": 3
+  },
+  {
+    "id": "kobold",
+    "name": "Kobold",
+    "ac": 12,
+    "hp": 5,
+    "hitDice": "2d6-2",
+    "dex": 15,
+    "cr": 0.125
+  },
+  {
+    "id": "kraken",
+    "name": "Kraken",
+    "ac": 18,
+    "hp": 472,
+    "hitDice": "27d20+189",
+    "dex": 11,
+    "cr": 23
+  },
+  {
+    "id": "lamia",
+    "name": "Lamia",
+    "ac": 13,
+    "hp": 97,
+    "hitDice": "13d10+26",
+    "dex": 13,
+    "cr": 4
+  },
+  {
+    "id": "lemure",
+    "name": "Lemure",
+    "ac": 7,
+    "hp": 13,
+    "hitDice": "3d8",
+    "dex": 5,
+    "cr": 0
+  },
+  {
+    "id": "lich",
+    "name": "Lich",
+    "ac": 17,
+    "hp": 135,
+    "hitDice": "18d8+54",
+    "dex": 16,
+    "cr": 21
+  },
+  {
+    "id": "lion",
+    "name": "Lion",
+    "ac": 12,
+    "hp": 26,
+    "hitDice": "4d10+4",
+    "dex": 15,
+    "cr": 1
+  },
+  {
+    "id": "lizard",
+    "name": "Lizard",
+    "ac": 10,
+    "hp": 2,
+    "hitDice": "1d4",
+    "dex": 11,
+    "cr": 0
+  },
+  {
+    "id": "lizardfolk",
+    "name": "Lizardfolk",
+    "ac": 15,
+    "hp": 22,
+    "hitDice": "4d8+4",
+    "dex": 10,
+    "cr": 0.5
+  },
+  {
+    "id": "mage",
+    "name": "Mage",
+    "ac": 12,
+    "hp": 40,
+    "hitDice": "9d8",
+    "dex": 14,
+    "cr": 6
+  },
+  {
+    "id": "magma-mephit",
+    "name": "Magma Mephit",
+    "ac": 11,
+    "hp": 22,
+    "hitDice": "5d6+5",
+    "dex": 12,
+    "cr": 0.5
+  },
+  {
+    "id": "magmin",
+    "name": "Magmin",
+    "ac": 14,
+    "hp": 9,
+    "hitDice": "2d6+2",
+    "dex": 15,
+    "cr": 0.5
+  },
+  {
+    "id": "mammoth",
+    "name": "Mammoth",
+    "ac": 13,
+    "hp": 126,
+    "hitDice": "11d12+55",
+    "dex": 9,
+    "cr": 6
+  },
+  {
+    "id": "manticore",
+    "name": "Manticore",
+    "ac": 14,
+    "hp": 68,
+    "hitDice": "8d10+24",
+    "dex": 16,
+    "cr": 3
+  },
+  {
+    "id": "marilith",
+    "name": "Marilith",
+    "ac": 18,
+    "hp": 189,
+    "hitDice": "18d10+90",
+    "dex": 20,
+    "cr": 16
+  },
+  {
+    "id": "mastiff",
+    "name": "Mastiff",
+    "ac": 12,
+    "hp": 5,
+    "hitDice": "1d8+1",
+    "dex": 14,
+    "cr": 0.125
+  },
+  {
+    "id": "medusa",
+    "name": "Medusa",
+    "ac": 15,
+    "hp": 127,
+    "hitDice": "17d8+51",
+    "dex": 15,
+    "cr": 6
+  },
+  {
+    "id": "merfolk",
+    "name": "Merfolk",
+    "ac": 11,
+    "hp": 11,
+    "hitDice": "2d8+2",
+    "dex": 13,
+    "cr": 0.125
+  },
+  {
+    "id": "merrow",
+    "name": "Merrow",
+    "ac": 13,
+    "hp": 45,
+    "hitDice": "6d10+12",
+    "dex": 10,
+    "cr": 2
+  },
+  {
+    "id": "mimic",
+    "name": "Mimic",
+    "ac": 12,
+    "hp": 58,
+    "hitDice": "9d8+18",
+    "dex": 12,
+    "cr": 2
+  },
+  {
+    "id": "minotaur",
+    "name": "Minotaur",
+    "ac": 14,
+    "hp": 76,
+    "hitDice": "9d10+27",
+    "dex": 11,
+    "cr": 3
+  },
+  {
+    "id": "minotaur-skeleton",
+    "name": "Minotaur Skeleton",
+    "ac": 12,
+    "hp": 67,
+    "hitDice": "9d10+18",
+    "dex": 11,
+    "cr": 2
+  },
+  {
+    "id": "mule",
+    "name": "Mule",
+    "ac": 10,
+    "hp": 11,
+    "hitDice": "2d8+2",
+    "dex": 10,
+    "cr": 0.125
+  },
+  {
+    "id": "mummy",
+    "name": "Mummy",
+    "ac": 11,
+    "hp": 58,
+    "hitDice": "9d8+18",
+    "dex": 8,
+    "cr": 3
+  },
+  {
+    "id": "mummy-lord",
+    "name": "Mummy Lord",
+    "ac": 17,
+    "hp": 97,
+    "hitDice": "13d8+39",
+    "dex": 10,
+    "cr": 15
+  },
+  {
+    "id": "nalfeshnee",
+    "name": "Nalfeshnee",
+    "ac": 18,
+    "hp": 184,
+    "hitDice": "16d10+96",
+    "dex": 10,
+    "cr": 13
+  },
+  {
+    "id": "night-hag",
+    "name": "Night Hag",
+    "ac": 17,
+    "hp": 112,
+    "hitDice": "15d8+45",
+    "dex": 15,
+    "cr": 5
+  },
+  {
+    "id": "nightmare",
+    "name": "Nightmare",
+    "ac": 13,
+    "hp": 68,
+    "hitDice": "8d10+24",
+    "dex": 15,
+    "cr": 3
+  },
+  {
+    "id": "noble",
+    "name": "Noble",
+    "ac": 15,
+    "hp": 9,
+    "hitDice": "2d8",
+    "dex": 12,
+    "cr": 0.125
+  },
+  {
+    "id": "ochre-jelly",
+    "name": "Ochre Jelly",
+    "ac": 8,
+    "hp": 45,
+    "hitDice": "6d10+12",
+    "dex": 6,
+    "cr": 2
+  },
+  {
+    "id": "octopus",
+    "name": "Octopus",
+    "ac": 12,
+    "hp": 3,
+    "hitDice": "1d6",
+    "dex": 15,
+    "cr": 0
+  },
+  {
+    "id": "ogre",
+    "name": "Ogre",
+    "ac": 11,
+    "hp": 59,
+    "hitDice": "7d10+21",
+    "dex": 8,
+    "cr": 2
+  },
+  {
+    "id": "ogre-zombie",
+    "name": "Ogre Zombie",
+    "ac": 8,
+    "hp": 85,
+    "hitDice": "9d10+36",
+    "dex": 6,
+    "cr": 2
+  },
+  {
+    "id": "oni",
+    "name": "Oni",
+    "ac": 16,
+    "hp": 110,
+    "hitDice": "13d10+39",
+    "dex": 11,
+    "cr": 7
+  },
+  {
+    "id": "orc",
+    "name": "Orc",
+    "ac": 13,
+    "hp": 15,
+    "hitDice": "2d8+6",
+    "dex": 12,
+    "cr": 0.5
+  },
+  {
+    "id": "otyugh",
+    "name": "Otyugh",
+    "ac": 14,
+    "hp": 114,
+    "hitDice": "12d10+48",
+    "dex": 11,
+    "cr": 5
+  },
+  {
+    "id": "owl",
+    "name": "Owl",
+    "ac": 11,
+    "hp": 1,
+    "hitDice": "1d4-1",
+    "dex": 13,
+    "cr": 0
+  },
+  {
+    "id": "owlbear",
+    "name": "Owlbear",
+    "ac": 13,
+    "hp": 59,
+    "hitDice": "7d10+21",
+    "dex": 12,
+    "cr": 3
+  },
+  {
+    "id": "panther",
+    "name": "Panther",
+    "ac": 12,
+    "hp": 13,
+    "hitDice": "3d8",
+    "dex": 15,
+    "cr": 0.25
+  },
+  {
+    "id": "pegasus",
+    "name": "Pegasus",
+    "ac": 12,
+    "hp": 59,
+    "hitDice": "7d10+21",
+    "dex": 15,
+    "cr": 2
+  },
+  {
+    "id": "phase-spider",
+    "name": "Phase Spider",
+    "ac": 13,
+    "hp": 32,
+    "hitDice": "5d10+5",
+    "dex": 15,
+    "cr": 3
+  },
+  {
+    "id": "pit-fiend",
+    "name": "Pit Fiend",
+    "ac": 19,
+    "hp": 300,
+    "hitDice": "24d10+168",
+    "dex": 14,
+    "cr": 20
+  },
+  {
+    "id": "planetar",
+    "name": "Planetar",
+    "ac": 19,
+    "hp": 200,
+    "hitDice": "16d10+112",
+    "dex": 20,
+    "cr": 16
+  },
+  {
+    "id": "plesiosaurus",
+    "name": "Plesiosaurus",
+    "ac": 13,
+    "hp": 68,
+    "hitDice": "8d10+24",
+    "dex": 15,
+    "cr": 2
+  },
+  {
+    "id": "poisonous-snake",
+    "name": "Poisonous Snake",
+    "ac": 13,
+    "hp": 2,
+    "hitDice": "1d4",
+    "dex": 16,
+    "cr": 0.125
+  },
+  {
+    "id": "polar-bear",
+    "name": "Polar Bear",
+    "ac": 12,
+    "hp": 42,
+    "hitDice": "5d10+15",
+    "dex": 10,
+    "cr": 2
+  },
+  {
+    "id": "pony",
+    "name": "Pony",
+    "ac": 10,
+    "hp": 11,
+    "hitDice": "2d8+2",
+    "dex": 10,
+    "cr": 0.125
+  },
+  {
+    "id": "priest",
+    "name": "Priest",
+    "ac": 13,
+    "hp": 27,
+    "hitDice": "5d8+5",
+    "dex": 10,
+    "cr": 2
+  },
+  {
+    "id": "pseudodragon",
+    "name": "Pseudodragon",
+    "ac": 13,
+    "hp": 7,
+    "hitDice": "2d4+2",
+    "dex": 15,
+    "cr": 0.25
+  },
+  {
+    "id": "purple-worm",
+    "name": "Purple Worm",
+    "ac": 18,
+    "hp": 247,
+    "hitDice": "15d20+90",
+    "dex": 7,
+    "cr": 15
+  },
+  {
+    "id": "quasit",
+    "name": "Quasit",
+    "ac": 13,
+    "hp": 7,
+    "hitDice": "3d4",
+    "dex": 17,
+    "cr": 1
+  },
+  {
+    "id": "quipper",
+    "name": "Quipper",
+    "ac": 13,
+    "hp": 1,
+    "hitDice": "1d4-1",
+    "dex": 16,
+    "cr": 0
+  },
+  {
+    "id": "rakshasa",
+    "name": "Rakshasa",
+    "ac": 16,
+    "hp": 110,
+    "hitDice": "13d8+52",
+    "dex": 17,
+    "cr": 13
+  },
+  {
+    "id": "rat",
+    "name": "Rat",
+    "ac": 10,
+    "hp": 1,
+    "hitDice": "1d4-1",
+    "dex": 11,
+    "cr": 0
+  },
+  {
+    "id": "raven",
+    "name": "Raven",
+    "ac": 12,
+    "hp": 1,
+    "hitDice": "1d4-1",
+    "dex": 14,
+    "cr": 0
+  },
+  {
+    "id": "red-dragon-wyrmling",
+    "name": "Red Dragon Wyrmling",
+    "ac": 17,
+    "hp": 75,
+    "hitDice": "10d8+30",
+    "dex": 10,
+    "cr": 4
+  },
+  {
+    "id": "reef-shark",
+    "name": "Reef Shark",
+    "ac": 12,
+    "hp": 22,
+    "hitDice": "4d8+4",
+    "dex": 13,
+    "cr": 0.5
+  },
+  {
+    "id": "remorhaz",
+    "name": "Remorhaz",
+    "ac": 17,
+    "hp": 195,
+    "hitDice": "17d12+85",
+    "dex": 13,
+    "cr": 11
+  },
+  {
+    "id": "rhinoceros",
+    "name": "Rhinoceros",
+    "ac": 11,
+    "hp": 45,
+    "hitDice": "6d10+12",
+    "dex": 8,
+    "cr": 2
+  },
+  {
+    "id": "riding-horse",
+    "name": "Riding Horse",
+    "ac": 10,
+    "hp": 13,
+    "hitDice": "2d10+2",
+    "dex": 10,
+    "cr": 0.25
+  },
+  {
+    "id": "roc",
+    "name": "Roc",
+    "ac": 15,
+    "hp": 248,
+    "hitDice": "16d20+80",
+    "dex": 10,
+    "cr": 11
+  },
+  {
+    "id": "roper",
+    "name": "Roper",
+    "ac": 20,
+    "hp": 93,
+    "hitDice": "11d10+33",
+    "dex": 8,
+    "cr": 5
+  },
+  {
+    "id": "rug-of-smothering",
+    "name": "Rug of Smothering",
+    "ac": 12,
+    "hp": 33,
+    "hitDice": "6d10",
+    "dex": 14,
+    "cr": 2
+  },
+  {
+    "id": "rust-monster",
+    "name": "Rust Monster",
+    "ac": 14,
+    "hp": 27,
+    "hitDice": "5d8+5",
+    "dex": 12,
+    "cr": 0.5
+  },
+  {
+    "id": "saber-toothed-tiger",
+    "name": "Saber-Toothed Tiger",
+    "ac": 12,
+    "hp": 52,
+    "hitDice": "7d10+14",
+    "dex": 14,
+    "cr": 2
+  },
+  {
+    "id": "sahuagin",
+    "name": "Sahuagin",
+    "ac": 12,
+    "hp": 22,
+    "hitDice": "4d8+4",
+    "dex": 11,
+    "cr": 0.5
+  },
+  {
+    "id": "salamander",
+    "name": "Salamander",
+    "ac": 15,
+    "hp": 90,
+    "hitDice": "12d10+24",
+    "dex": 14,
+    "cr": 5
+  },
+  {
+    "id": "satyr",
+    "name": "Satyr",
+    "ac": 14,
+    "hp": 31,
+    "hitDice": "7d8",
+    "dex": 16,
+    "cr": 0.5
+  },
+  {
+    "id": "scorpion",
+    "name": "Scorpion",
+    "ac": 11,
+    "hp": 1,
+    "hitDice": "1d4-1",
+    "dex": 11,
+    "cr": 0
+  },
+  {
+    "id": "scout",
+    "name": "Scout",
+    "ac": 13,
+    "hp": 16,
+    "hitDice": "3d8+3",
+    "dex": 14,
+    "cr": 0.5
+  },
+  {
+    "id": "sea-hag",
+    "name": "Sea Hag",
+    "ac": 14,
+    "hp": 52,
+    "hitDice": "7d8+21",
+    "dex": 13,
+    "cr": 2
+  },
+  {
+    "id": "sea-horse",
+    "name": "Sea Horse",
+    "ac": 11,
+    "hp": 1,
+    "hitDice": "1d4-1",
+    "dex": 12,
+    "cr": 0
+  },
+  {
+    "id": "shadow",
+    "name": "Shadow",
+    "ac": 12,
+    "hp": 16,
+    "hitDice": "3d8+3",
+    "dex": 14,
+    "cr": 0.5
+  },
+  {
+    "id": "shambling-mound",
+    "name": "Shambling Mound",
+    "ac": 15,
+    "hp": 136,
+    "hitDice": "16d10+48",
+    "dex": 8,
+    "cr": 5
+  },
+  {
+    "id": "shield-guardian",
+    "name": "Shield Guardian",
+    "ac": 17,
+    "hp": 142,
+    "hitDice": "15d10+60",
+    "dex": 8,
+    "cr": 7
+  },
+  {
+    "id": "shrieker",
+    "name": "Shrieker",
+    "ac": 5,
+    "hp": 13,
+    "hitDice": "3d8",
+    "dex": 1,
+    "cr": 0
+  },
+  {
+    "id": "silver-dragon-wyrmling",
+    "name": "Silver Dragon Wyrmling",
+    "ac": 17,
+    "hp": 45,
+    "hitDice": "6d8+18",
+    "dex": 10,
+    "cr": 2
+  },
+  {
+    "id": "skeleton",
+    "name": "Skeleton",
+    "ac": 13,
+    "hp": 13,
+    "hitDice": "2d8+4",
+    "dex": 14,
+    "cr": 0.25
+  },
+  {
+    "id": "solar",
+    "name": "Solar",
+    "ac": 21,
+    "hp": 243,
+    "hitDice": "18d10+144",
+    "dex": 22,
+    "cr": 21
+  },
+  {
+    "id": "specter",
+    "name": "Specter",
+    "ac": 12,
+    "hp": 22,
+    "hitDice": "5d8",
+    "dex": 14,
+    "cr": 1
+  },
+  {
+    "id": "spider",
+    "name": "Spider",
+    "ac": 12,
+    "hp": 1,
+    "hitDice": "1d4-1",
+    "dex": 14,
+    "cr": 0
+  },
+  {
+    "id": "spirit-naga",
+    "name": "Spirit Naga",
+    "ac": 15,
+    "hp": 75,
+    "hitDice": "10d10+20",
+    "dex": 17,
+    "cr": 8
+  },
+  {
+    "id": "sprite",
+    "name": "Sprite",
+    "ac": 15,
+    "hp": 2,
+    "hitDice": "1d4",
+    "dex": 18,
+    "cr": 0.25
+  },
+  {
+    "id": "spy",
+    "name": "Spy",
+    "ac": 12,
+    "hp": 27,
+    "hitDice": "6d8",
+    "dex": 15,
+    "cr": 1
+  },
+  {
+    "id": "steam-mephit",
+    "name": "Steam Mephit",
+    "ac": 10,
+    "hp": 21,
+    "hitDice": "6d6",
+    "dex": 11,
+    "cr": 0.25
+  },
+  {
+    "id": "stirge",
+    "name": "Stirge",
+    "ac": 14,
+    "hp": 2,
+    "hitDice": "1d4",
+    "dex": 16,
+    "cr": 0.125
+  },
+  {
+    "id": "stone-giant",
+    "name": "Stone Giant",
+    "ac": 17,
+    "hp": 126,
+    "hitDice": "11d12+55",
+    "dex": 15,
+    "cr": 7
+  },
+  {
+    "id": "stone-golem",
+    "name": "Stone Golem",
+    "ac": 17,
+    "hp": 178,
+    "hitDice": "17d10+85",
+    "dex": 9,
+    "cr": 10
+  },
+  {
+    "id": "storm-giant",
+    "name": "Storm Giant",
+    "ac": 16,
+    "hp": 230,
+    "hitDice": "20d12+100",
+    "dex": 14,
+    "cr": 13
+  },
+  {
+    "id": "succubus-incubus",
+    "name": "Succubus/Incubus",
+    "ac": 15,
+    "hp": 66,
+    "hitDice": "12d8+12",
+    "dex": 17,
+    "cr": 4
+  },
+  {
+    "id": "swarm-of-bats",
+    "name": "Swarm of Bats",
+    "ac": 12,
+    "hp": 22,
+    "hitDice": "5d8",
+    "dex": 15,
+    "cr": 0.25
+  },
+  {
+    "id": "swarm-of-insects",
+    "name": "Swarm of Insects",
+    "ac": 12,
+    "hp": 22,
+    "hitDice": "5d8",
+    "dex": 13,
+    "cr": 0.5
+  },
+  {
+    "id": "swarm-of-poisonous-snakes",
+    "name": "Swarm of Poisonous Snakes",
+    "ac": 14,
+    "hp": 36,
+    "hitDice": "8d8",
+    "dex": 18,
+    "cr": 2
+  },
+  {
+    "id": "swarm-of-quippers",
+    "name": "Swarm of Quippers",
+    "ac": 13,
+    "hp": 28,
+    "hitDice": "8d8-8",
+    "dex": 16,
+    "cr": 1
+  },
+  {
+    "id": "swarm-of-rats",
+    "name": "Swarm of Rats",
+    "ac": 10,
+    "hp": 24,
+    "hitDice": "7d8-7",
+    "dex": 11,
+    "cr": 0.25
+  },
+  {
+    "id": "swarm-of-ravens",
+    "name": "Swarm of Ravens",
+    "ac": 12,
+    "hp": 24,
+    "hitDice": "7d8-7",
+    "dex": 14,
+    "cr": 0.25
+  },
+  {
+    "id": "tarrasque",
+    "name": "Tarrasque",
+    "ac": 25,
+    "hp": 676,
+    "hitDice": "33d20+330",
+    "dex": 11,
+    "cr": 30
+  },
+  {
+    "id": "thug",
+    "name": "Thug",
+    "ac": 11,
+    "hp": 32,
+    "hitDice": "5d8+10",
+    "dex": 11,
+    "cr": 0.5
+  },
+  {
+    "id": "tiger",
+    "name": "Tiger",
+    "ac": 12,
+    "hp": 37,
+    "hitDice": "5d10+10",
+    "dex": 15,
+    "cr": 1
+  },
+  {
+    "id": "treant",
+    "name": "Treant",
+    "ac": 16,
+    "hp": 138,
+    "hitDice": "12d12+60",
+    "dex": 8,
+    "cr": 9
+  },
+  {
+    "id": "tribal-warrior",
+    "name": "Tribal Warrior",
+    "ac": 12,
+    "hp": 11,
+    "hitDice": "2d8+2",
+    "dex": 11,
+    "cr": 0.125
+  },
+  {
+    "id": "triceratops",
+    "name": "Triceratops",
+    "ac": 13,
+    "hp": 95,
+    "hitDice": "10d12+30",
+    "dex": 9,
+    "cr": 5
+  },
+  {
+    "id": "troll",
+    "name": "Troll",
+    "ac": 15,
+    "hp": 84,
+    "hitDice": "8d10+40",
+    "dex": 13,
+    "cr": 5
+  },
+  {
+    "id": "tyrannosaurus-rex",
+    "name": "Tyrannosaurus Rex",
+    "ac": 13,
+    "hp": 136,
+    "hitDice": "13d12+52",
+    "dex": 10,
+    "cr": 8
+  },
+  {
+    "id": "unicorn",
+    "name": "Unicorn",
+    "ac": 12,
+    "hp": 67,
+    "hitDice": "9d10+18",
+    "dex": 14,
+    "cr": 5
+  },
+  {
+    "id": "vampire",
+    "name": "Vampire",
+    "ac": 16,
+    "hp": 144,
+    "hitDice": "17d8+68",
+    "dex": 18,
+    "cr": 13
+  },
+  {
+    "id": "vampire-spawn",
+    "name": "Vampire Spawn",
+    "ac": 15,
+    "hp": 82,
+    "hitDice": "11d8+33",
+    "dex": 16,
+    "cr": 5
+  },
+  {
+    "id": "veteran",
+    "name": "Veteran",
+    "ac": 17,
+    "hp": 58,
+    "hitDice": "9d8+18",
+    "dex": 13,
+    "cr": 3
+  },
+  {
+    "id": "violet-fungus",
+    "name": "Violet Fungus",
+    "ac": 5,
+    "hp": 18,
+    "hitDice": "4d8",
+    "dex": 1,
+    "cr": 0.25
+  },
+  {
+    "id": "vrock",
+    "name": "Vrock",
+    "ac": 15,
+    "hp": 104,
+    "hitDice": "11d10+44",
+    "dex": 15,
+    "cr": 6
+  },
+  {
+    "id": "vulture",
+    "name": "Vulture",
+    "ac": 10,
+    "hp": 5,
+    "hitDice": "1d8+1",
+    "dex": 10,
+    "cr": 0
+  },
+  {
+    "id": "warhorse",
+    "name": "Warhorse",
+    "ac": 11,
+    "hp": 19,
+    "hitDice": "3d10+3",
+    "dex": 12,
+    "cr": 0.5
+  },
+  {
+    "id": "warhorse-skeleton",
+    "name": "Warhorse Skeleton",
+    "ac": 13,
+    "hp": 22,
+    "hitDice": "3d10+6",
+    "dex": 12,
+    "cr": 0.5
+  },
+  {
+    "id": "water-elemental",
+    "name": "Water Elemental",
+    "ac": 14,
+    "hp": 114,
+    "hitDice": "12d10+48",
+    "dex": 14,
+    "cr": 5
+  },
+  {
+    "id": "weasel",
+    "name": "Weasel",
+    "ac": 13,
+    "hp": 1,
+    "hitDice": "1d4-1",
+    "dex": 16,
+    "cr": 0
+  },
+  {
+    "id": "werebear",
+    "name": "Werebear",
+    "ac": 10,
+    "hp": 135,
+    "hitDice": "18d8+54",
+    "dex": 10,
+    "cr": 5
+  },
+  {
+    "id": "wereboar",
+    "name": "Wereboar",
+    "ac": 10,
+    "hp": 78,
+    "hitDice": "12d8+24",
+    "dex": 10,
+    "cr": 4
+  },
+  {
+    "id": "wererat",
+    "name": "Wererat",
+    "ac": 12,
+    "hp": 33,
+    "hitDice": "6d8+6",
+    "dex": 15,
+    "cr": 2
+  },
+  {
+    "id": "weretiger",
+    "name": "Weretiger",
+    "ac": 12,
+    "hp": 120,
+    "hitDice": "16d8+48",
+    "dex": 15,
+    "cr": 4
+  },
+  {
+    "id": "werewolf",
+    "name": "Werewolf",
+    "ac": 11,
+    "hp": 58,
+    "hitDice": "9d8+18",
+    "dex": 13,
+    "cr": 3
+  },
+  {
+    "id": "white-dragon-wyrmling",
+    "name": "White Dragon Wyrmling",
+    "ac": 16,
+    "hp": 32,
+    "hitDice": "5d8+10",
+    "dex": 10,
+    "cr": 2
+  },
+  {
+    "id": "wight",
+    "name": "Wight",
+    "ac": 14,
+    "hp": 45,
+    "hitDice": "6d8+18",
+    "dex": 14,
+    "cr": 3
+  },
+  {
+    "id": "will-o-wisp",
+    "name": "Will-o'-Wisp",
+    "ac": 19,
+    "hp": 22,
+    "hitDice": "9d4",
+    "dex": 28,
+    "cr": 2
+  },
+  {
+    "id": "winter-wolf",
+    "name": "Winter Wolf",
+    "ac": 13,
+    "hp": 75,
+    "hitDice": "10d10+20",
+    "dex": 13,
+    "cr": 3
+  },
+  {
+    "id": "wolf",
+    "name": "Wolf",
+    "ac": 13,
+    "hp": 11,
+    "hitDice": "2d8+2",
+    "dex": 15,
+    "cr": 0.25
+  },
+  {
+    "id": "worg",
+    "name": "Worg",
+    "ac": 13,
+    "hp": 26,
+    "hitDice": "4d10+4",
+    "dex": 13,
+    "cr": 0.5
+  },
+  {
+    "id": "wraith",
+    "name": "Wraith",
+    "ac": 13,
+    "hp": 67,
+    "hitDice": "9d8+27",
+    "dex": 16,
+    "cr": 5
+  },
+  {
+    "id": "wyvern",
+    "name": "Wyvern",
+    "ac": 13,
+    "hp": 110,
+    "hitDice": "13d10+39",
+    "dex": 10,
+    "cr": 6
+  },
+  {
+    "id": "xorn",
+    "name": "Xorn",
+    "ac": 19,
+    "hp": 73,
+    "hitDice": "7d8+42",
+    "dex": 10,
+    "cr": 5
+  },
+  {
+    "id": "young-black-dragon",
+    "name": "Young Black Dragon",
+    "ac": 18,
+    "hp": 127,
+    "hitDice": "15d10+45",
+    "dex": 14,
+    "cr": 7
+  },
+  {
+    "id": "young-blue-dragon",
+    "name": "Young Blue Dragon",
+    "ac": 18,
+    "hp": 152,
+    "hitDice": "16d10+64",
+    "dex": 10,
+    "cr": 9
+  },
+  {
+    "id": "young-brass-dragon",
+    "name": "Young Brass Dragon",
+    "ac": 17,
+    "hp": 110,
+    "hitDice": "13d10+39",
+    "dex": 10,
+    "cr": 6
+  },
+  {
+    "id": "young-bronze-dragon",
+    "name": "Young Bronze Dragon",
+    "ac": 18,
+    "hp": 142,
+    "hitDice": "15d10+60",
+    "dex": 10,
+    "cr": 8
+  },
+  {
+    "id": "young-copper-dragon",
+    "name": "Young Copper Dragon",
+    "ac": 17,
+    "hp": 119,
+    "hitDice": "14d10+42",
+    "dex": 12,
+    "cr": 7
+  },
+  {
+    "id": "young-gold-dragon",
+    "name": "Young Gold Dragon",
+    "ac": 18,
+    "hp": 178,
+    "hitDice": "17d10+85",
+    "dex": 14,
+    "cr": 10
+  },
+  {
+    "id": "young-green-dragon",
+    "name": "Young Green Dragon",
+    "ac": 18,
+    "hp": 136,
+    "hitDice": "16d10+48",
+    "dex": 12,
+    "cr": 8
+  },
+  {
+    "id": "young-red-dragon",
+    "name": "Young Red Dragon",
+    "ac": 18,
+    "hp": 178,
+    "hitDice": "17d10+85",
+    "dex": 10,
+    "cr": 10
+  },
+  {
+    "id": "young-silver-dragon",
+    "name": "Young Silver Dragon",
+    "ac": 18,
+    "hp": 168,
+    "hitDice": "16d10+80",
+    "dex": 10,
+    "cr": 9
+  },
+  {
+    "id": "young-white-dragon",
+    "name": "Young White Dragon",
+    "ac": 17,
+    "hp": 133,
+    "hitDice": "14d10+56",
+    "dex": 10,
+    "cr": 6
+  },
+  {
+    "id": "zombie",
+    "name": "Zombie",
+    "ac": 8,
+    "hp": 22,
+    "hitDice": "3d8+9",
+    "dex": 6,
+    "cr": 0.25
+  }
+]
