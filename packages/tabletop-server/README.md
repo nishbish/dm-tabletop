@@ -240,7 +240,7 @@ createTabletopServer({
 ```
 
 The context gives you `kind`, `name`, `args` (untrusted: validate them), `user` (`userId`, `name`, `role`, `socket`), `room` (`room.id`, `room.state`,
-`room.connections`, `room.hosts`), `server` (the running server, see below), `reply(args)`, `broadcast(args, { includeSelf?, name? })`
+`room.connections`, `room.hosts`), `server` (the running server, see below), `reply(args, { name? })` (`name` answers under another request name, e.g. an `addRoom` handler replying with the new `getRooms` list), `broadcast(args, { includeSelf?, name? })`
 and `markDirty()` (call it after changing `room.state` so the room is saved).
 Throw `HandlerError` to send a message back to the sender as an error; any other exception is logged and reported as `internal error`.
 A handler with the same name as a built-in replaces it. Handlers from one connection may run concurrently if they are async.
@@ -282,6 +282,7 @@ and ignored, and `stop()` waits for those still running. They are not called for
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sendToUsers(userIds, message, filter?)` | Sends a JSON object to every connection of those users in any loaded room; returns how many. `filter(conn, room)` narrows it                                                                                                                                                                                                    |
 | `broadcastAllRooms(message, predicate?)` | Same for every connection in every loaded room that passes `predicate`                                                                                                                                                                                                                                                          |
+| `markDirty(roomId)`                      | Schedules a save for a loaded room whose `state` you changed from a handler of another room (`ctx.markDirty()` only covers the room of the message)                                                                                                                                                                             |
 | `discardRoom(roomId, closeCode = 4404)`  | Drops a loaded room from memory **without saving it**, closes its connections with `closeCode`, resolves `true` if it was loaded. Waits for a save that is already running, so you can delete the stored copy right afterwards. Someone joining that id later loads whatever storage has (for a deleted room: a new empty room) |
 
 `message` is sent as it is, so use the wire shape: `{ type: 'update', name: 'focusCamera', args, from }`.

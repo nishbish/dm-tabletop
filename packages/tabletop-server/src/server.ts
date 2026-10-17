@@ -71,6 +71,9 @@ export interface TabletopServer {
   // that is already running, so afterwards the host app can safely delete the stored copy.
   // Resolves false when the room was not loaded.
   discardRoom(roomId: string, closeCode?: number): Promise<boolean>;
+  // Schedules a save for a loaded room whose `state` a handler changed from outside that room
+  // (ctx.markDirty only covers the room the message came from). False if it is not loaded.
+  markDirty(roomId: string): boolean;
 }
 
 const MAX_MESSAGE_BYTES = 64 * 1024;
@@ -535,7 +538,8 @@ export function createTabletopServer(options: TabletopServerOptions): TabletopSe
       user: conn,
       room,
       server: api,
-      reply: (args) => send(socket, { type: 'response', name, args, ...idField }),
+      reply: (args, opts) =>
+        send(socket, { type: 'response', name: (opts && opts.name) || name, args, ...idField }),
       broadcast: (args, opts) => {
         const options2 = opts || {};
         broadcast(
@@ -671,6 +675,12 @@ export function createTabletopServer(options: TabletopServerOptions): TabletopSe
     sendToUsers,
     broadcastAllRooms,
     discardRoom,
+    markDirty(roomId: string): boolean {
+      const room = rooms.get(roomId);
+      if (!room) return false;
+      markDirty(room);
+      return true;
+    },
   };
   return api;
 }

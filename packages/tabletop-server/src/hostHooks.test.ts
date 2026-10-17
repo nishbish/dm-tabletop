@@ -244,6 +244,34 @@ class SpyStorage implements RoomStorage {
   }
 }
 
+describe('reply name and markDirty', () => {
+  it('reply can answer under another name and keeps the requestId', async () => {
+    const { port } = await setup({
+      handlers: { addThing: (ctx: any) => ctx.reply({ things: [1] }, { name: 'getThings' }) },
+    });
+    const { client } = await TestClient.join(port, 'a', 'r1');
+    client.send({ type: 'request', name: 'addThing', args: {}, requestId: 'q1' });
+    const answer = await client.next((m) => m.type === 'response');
+    expect(answer).toEqual({
+      type: 'response',
+      name: 'getThings',
+      args: { things: [1] },
+      requestId: 'q1',
+    });
+  });
+
+  it('server.markDirty saves a loaded room changed from outside', async () => {
+    const storage = new SpyStorage();
+    const { port, server } = await setup({ storage, saveDebounceMs: 20 });
+    await TestClient.join(port, 'a', 'r1');
+    server.rooms.get('r1')!.state.daylight = 7;
+    expect(server.markDirty('r1')).toBe(true);
+    expect(server.markDirty('nope')).toBe(false);
+    await sleep(150);
+    expect((await storage.loadRoom('r1'))!.daylight).toBe(7);
+  });
+});
+
 describe('discardRoom', () => {
   it('drops the room without saving and closes its connections', async () => {
     const storage = new SpyStorage();

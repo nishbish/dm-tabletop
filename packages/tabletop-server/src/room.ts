@@ -35,8 +35,9 @@ export interface HandlerContext {
   // The running server: lets a handler reach members connected to other rooms (sendToUsers,
   // broadcastAllRooms), look at the loaded rooms, or discard one.
   server: TabletopServer;
-  // Reply to the sender only (use from requests).
-  reply(args: object): void;
+  // Reply to the sender only (use from requests). `name` answers as a different request, e.g. an
+  // "addRoom" handler replying with the updated "getRooms" list; the requestId is kept.
+  reply(args: object, options?: { name?: string }): void;
   // Send {type:"update", name, args, from} to the other members (and the sender if includeSelf).
   // `name` defaults to the event being handled.
   broadcast(args: object, options?: { includeSelf?: boolean; name?: string }): void;
