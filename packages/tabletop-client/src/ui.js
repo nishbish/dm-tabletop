@@ -58,7 +58,11 @@ export function createBanner(root) {
 
       if (status.state === 'reconnecting') {
         var seconds = status.delayMs ? Math.ceil(status.delayMs / 1000) : 0;
-        text = 'Connection lost. Reconnecting' + (seconds ? ' in ' + seconds + ' s' : '') + '…';
+        text =
+          (status.message || 'Connection lost') +
+          '. Reconnecting' +
+          (seconds ? ' in ' + seconds + ' s' : '') +
+          '…';
       } else if (status.state === 'connecting') {
         text = 'Connecting…';
       } else if (status.state === 'failed') {

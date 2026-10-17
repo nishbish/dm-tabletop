@@ -631,6 +631,108 @@ describe('reconnect', () => {
   });
 });
 
+describe('token providers', () => {
+  it('calls the function before every attempt, including reconnects', async () => {
+    let n = 0;
+    const provider = vi.fn(async () => 'token-' + ++n);
+    const s = setup({ token: provider });
+    expect(FakeSocket.instances.length).toBe(0); // waits for the token
+    await flush();
+    expect(FakeSocket.instances.length).toBe(1);
+    s.socket().open();
+    expect(s.socket().sent[0]).toEqual({ type: 'join', token: 'token-1', roomId: 'r1' });
+    await join(s);
+
+    s.socket().drop();
+    vi.advanceTimersByTime(1000);
+    await flush();
+    expect(provider).toHaveBeenCalledTimes(2);
+    s.socket().open();
+    expect(s.socket().sent[0]).toEqual({ type: 'join', token: 'token-2', roomId: 'r1' });
+
+    s.connection.switchRoom('r2'); // a room switch is a new attempt too
+    await flush();
+    expect(provider).toHaveBeenCalledTimes(3);
+  });
+
+  it('accepts a plain synchronous function', async () => {
+    const s = setup({ token: () => 'sync-token' });
+    await flush();
+    s.socket().open();
+    expect(s.socket().sent[0].token).toBe('sync-token');
+  });
+
+  it('treats a failing provider as a failed attempt: banner message, normal backoff, then success', async () => {
+    let fail = 2;
+    const provider = vi.fn(async () => {
+      if (fail-- > 0) throw new Error('network down');
+      return 'good';
+    });
+    const s = setup({ token: provider });
+    await flush();
+    expect(FakeSocket.instances.length).toBe(0);
+    const status = () => s.calls.filter((c) => c.kind === 'status').pop()!.args;
+    expect(status()).toMatchObject({
+      state: 'reconnecting',
+      delayMs: 1000,
+      message: 'Could not get a login token',
+    });
+    vi.advanceTimersByTime(1000);
+    await flush();
+    expect(provider).toHaveBeenCalledTimes(2);
+    expect(status().delayMs).toBe(2000);
+    vi.advanceTimersByTime(2000);
+    await flush();
+    expect(provider).toHaveBeenCalledTimes(3);
+    expect(FakeSocket.instances.length).toBe(1);
+    s.socket().open();
+    expect(s.socket().sent[0].token).toBe('good');
+  });
+
+  it('stops retrying when the provider throws a fatal error', async () => {
+    const err = Object.assign(new Error('You are not a member of this campaign.'), { fatal: true });
+    const s = setup({ token: () => Promise.reject(err) });
+    await flush();
+    expect(s.connection.status).toBe('failed');
+    expect(s.calls.filter((c) => c.kind === 'status').pop()!.args.message).toBe(err.message);
+    vi.advanceTimersByTime(60000);
+    await flush();
+    expect(FakeSocket.instances.length).toBe(0);
+  });
+
+  it('counts a provider that never answers as a failed attempt', async () => {
+    const s = setup({ token: () => new Promise<string>(() => undefined) });
+    await flush();
+    vi.advanceTimersByTime(15000);
+    await flush();
+    expect(s.calls.filter((c) => c.kind === 'status').pop()!.args).toMatchObject({
+      state: 'reconnecting',
+      message: 'Could not get a login token',
+    });
+  });
+
+  it('ignores a token that arrives after close()', async () => {
+    let resolve: (t: string) => void = () => undefined;
+    const s = setup({ token: () => new Promise<string>((r) => (resolve = r)) });
+    s.connection.close();
+    resolve('late');
+    await flush();
+    expect(FakeSocket.instances.length).toBe(0);
+  });
+
+  it('shows the room-deleted close code as final', async () => {
+    const s = setup();
+    s.socket().open();
+    s.socket().drop(4404);
+    vi.advanceTimersByTime(60000);
+    expect(FakeSocket.instances.length).toBe(1);
+    expect(s.connection.status).toBe('failed');
+    expect(s.calls.filter((c) => c.kind === 'status').pop()!.args.message).toBe(
+      'This room no longer exists.',
+    );
+  });
+});
+
 describe('demo mode', () => {
   it('needs no socket and answers requests itself', async () => {
     const s = setup({ demo: true });
