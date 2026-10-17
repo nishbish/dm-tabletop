@@ -15,7 +15,7 @@ A separate, PRIVATE repo ("platform") handles accounts, Stripe billing and subsc
 ```
 packages/
   initiative-tracker/   standalone tracker, no knowledge of accounts or billing
-  tabletop-client/      Three.js client
+  tabletop-client/      Three.js viewer (Vite build, talks protocol v2 to the server)
   tabletop-server/      Node websocket server: rooms, world state, persistence
 ```
 
@@ -39,7 +39,7 @@ npm workspaces at the root. One shared `tsconfig.base.json`.
 
 ## Code style
 
-- TypeScript files, `"strict": false`. Run with `tsx` in development. Do not spend effort making types fancy: plain interfaces, no clever generics.
+- TypeScript files, `"strict": false`. Exception: the ported viewer code in `packages/tabletop-client` is plain JS kept close to the original (see its README). Run with `tsx` in development. Do not spend effort making types fancy: plain interfaces, no clever generics.
 - Keep code simple and readable. Small files, clear names, comments explaining *why*.
 - Use `import`/`export` syntax, compiled to CommonJS-compatible output unless there is a good reason otherwise.
 - Prefer boring, well-known libraries (`ws` or Socket.IO, `express` or `fastify`). Ask before adding a new dependency.
@@ -49,6 +49,7 @@ npm workspaces at the root. One shared `tsconfig.base.json`.
 - Install: `npm install`
 - Dev: `npx tsx <file>`; tabletop-server: `npm run dev -w @dm-tabletop/tabletop-server` (reads `.env.example` variables from the environment)
 - Test: `npm test` (vitest, all workspaces)
+- Tabletop demo: `npm run demo` (server + viewer dev page); client build: `npm run build -w @dm-tabletop/tabletop-client`; browser test: `npm run e2e` (Playwright, needs `npx playwright install chromium` once)
 - Typecheck: `npm run typecheck`
 - Lint: `npm run lint` (eslint, flat config)
 - Format: `npm run format` (write) / `npm run format:check` (check only), prettier

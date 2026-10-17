@@ -4,6 +4,31 @@ Third-party assets (3D models, textures, maps, fonts, icons) must have a licence
 redistribution. Record each asset's source and licence here when it is added. If a licence is
 unclear, do not add the asset; ask the maintainer first.
 
-| Asset | Source | Licence | Added by |
-| ----- | ------ | ------- | -------- |
-|       |        |         |          |
+| Asset                                                                                                                     | Source                                                            | Licence    | Added by |
+| ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------- | -------- |
+| three (npm, bundled into the tabletop-client build; includes the examples/jsm controls, post-processing and loaders used) | https://github.com/mrdoob/three.js                                | MIT        | step 4   |
+| material-icons (npm): the `material-icons.woff2` icon font, bundled into the tabletop-client build                        | https://github.com/marella/material-icons (Google Material Icons) | Apache-2.0 | step 4   |
+| vite (npm, dev dependency, build tool only)                                                                               | https://github.com/vitejs/vite                                    | MIT        | step 4   |
+| @playwright/test (npm, dev dependency, end-to-end test only; downloads Chromium separately)                               | https://github.com/microsoft/playwright                           | Apache-2.0 | step 4   |
+
+No images, textures, skyboxes, 3D models or fonts other than the icon font are included. The tabletop-client sky is a
+gradient drawn in code, walls are generated geometry, tokens without a picture are drawn cylinders, and the
+text font is the system font stack.
+
+## Not included (pending licence clearance)
+
+These were part of the original viewer and are deliberately **not** in this repository. A hosting app may supply its own
+(see `assetBaseUrl` and `skybox` in the tabletop-client README).
+
+- Skyboxes: the `miramar` (day, `.tga`) and `night` (`.png`) six-face skybox images.
+- Wall models: the `wall*` model files.
+- The `Pacifico-Regular.ttf` font.
+- All images, textures and demo map pictures from the original uploads and library.
+- The original loading animation stylesheet (`loader.css`; replaced by a simple spinner) and the
+  Material Components Web stylesheet (not used by the viewer, dropped).
+
+Not yet verified: the origin of the original `context-menu.css` / `context-menu.js` (the menu). They are the maintainer's
+own ported files according to the task, but their provenance is not recorded anywhere; please confirm.
+
+Dropped dependencies of the original client: camera-controls, uuid, lodash, slim-select, material-components-web
+and Font Awesome were listed in its package file but not used by the viewer code, so they were not added.

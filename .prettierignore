@@ -5,3 +5,13 @@ package-lock.json
 LICENSE
 CLAUDE.md
 CONTRIBUTING.md
+# Ported original viewer code: kept in its original formatting so it can be compared with the
+# source it came from (see packages/tabletop-client/README.md)
+packages/tabletop-client/src/tabletop.js
+packages/tabletop-client/src/TranslateControls.js
+packages/tabletop-client/src/RotationControls.js
+packages/tabletop-client/src/ScaleControls.js
+packages/tabletop-client/src/MouseHover.js
+packages/tabletop-client/src/context-menu.js
+packages/tabletop-client/src/context-menu.css
+packages/tabletop-client/src/style.css
