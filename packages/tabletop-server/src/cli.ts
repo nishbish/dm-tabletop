@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { createLogger } from './logger';
 import { createTabletopServer, TabletopServer } from './server';
 import { FileStorage } from './storage/file';
