@@ -17,7 +17,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "demo": "npm run demo -w @dm-tabletop/tabletop-client",
-    "e2e": "npm run e2e -w @dm-tabletop/tabletop-client && npm run e2e -w @dm-tabletop/initiative-tracker"
+    "e2e": "npm run e2e -w @dm-tabletop/tabletop-client && npm run e2e -w @dm-tabletop/initiative-tracker",
+    "check:pack": "node scripts/check-pack.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
