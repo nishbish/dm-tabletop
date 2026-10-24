@@ -25,6 +25,7 @@ import { createConnection } from './connection';
 import { swatchUrl } from './models';
 import { createDemoRoom } from './demo';
 import { createSkyboxMaterials } from './skybox';
+import { addWallUvs, createWallMaterial, wallTileSize } from './wall-texture';
 import { showToast, createBanner, escapeHtml, hasWebGL } from './ui';
 
 // NOTE(port): three.js >= r152 changed colour management and r155 changed light units. The
@@ -2692,9 +2693,13 @@ function updateWallGroup(wallGroup) {
 		var geometry = ProfiledContourGeometry(profileShape, points2d, false, false);
 		geometry.rotateX(Math.PI * .5);
 
+		if (options.wallTexture) {
+			geometry = addWallUvs(geometry, wallTileSize(options));
+		}
+
 		if (!wallGroup.mesh) {
 			//wall mesh
-			var material = new THREE.MeshPhongMaterial({ color: 0x868f8c });
+			var material = createWallMaterial(options);
 			var mesh = new THREE.Mesh(geometry, material);
 			mesh.name = 'wall mesh';
 			mesh.position.y = (height / 2) + 0.5;

@@ -527,7 +527,9 @@ export function createConnection(options: ResolvedOptions, sink: Sink): Connecti
   return {
     connect() {
       if (options.demo) {
-        const room = createDemoRoom();
+        const room = options.demoRoom
+          ? JSON.parse(JSON.stringify(options.demoRoom))
+          : createDemoRoom();
         const modelIds = new Set<string>(
           Object.values<Args>(room.tokens).map((t) => String(t.modelId)),
         );
