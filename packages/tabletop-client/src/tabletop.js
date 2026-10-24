@@ -28,6 +28,8 @@ import { createSkyboxMaterials } from './skybox';
 import { createFog } from './fog';
 import { addWallUvs, createWallMaterial, wallTileSize } from './wall-texture';
 import { showToast, createBanner, escapeHtml, hasWebGL } from './ui';
+import * as walls from './walls';
+import { DOOR_SIZE, getDoorParts } from './doors.js';
 
 // NOTE(port): three.js >= r152 changed colour management and r155 changed light units. The
 // original was written for r131, where colours were used as-is and light intensity was not
@@ -170,6 +172,12 @@ const map = {
 	loadItemCount: null,		
 	wallPointGroupActive: false,
 	wallPointGroups: {},	
+	// wall mode tool: 'points' (click to place), 'room' or 'corridor' (drag out)
+	wallTool: 'points',
+	wallDrag: null,
+	// true while a full room state is loading: walls are built once at the end, not per point
+	deferWalls: false,
+	ghost: null,
 	toggleMode: 'token',
 	selectModeActive: false,
 	models: {},
@@ -316,6 +324,7 @@ function init() {
 	map.canvas.addEventListener("pointerdown", canvasCheck, false);
 	map.canvas.addEventListener("pointermove", canvasMove, false);
 	map.canvas.addEventListener("pointerup", canvasClick, false);
+	map.canvas.addEventListener("pointerleave", function() { ghostPointer = null; scheduleGhosts(); }, false);
 
 	root.appendChild(map.canvas);
 
@@ -386,6 +395,19 @@ function init() {
 	var shiftPressed = false;
 
 	listen(document, 'keydown', function(e) {
+	  if (isBuildMode() && !isTyping(e)) {
+	  	if (e.key === 'Escape' && map.toggleMode == 'wallPoint') {
+	  		map.wallDrag = null;
+	  		finishWall();
+	  	}
+
+	  	if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+	  		e.preventDefault();
+	  		undo();
+	  		return;
+	  	}
+	  }
+
 	  if (e.ctrlKey) {
 	    ctrlPressed = true;
 	  }
@@ -549,6 +571,9 @@ function init() {
 	map.translateControls.door.translatestart = function(e) {
 		if (map.toggleMode == 'door') {
 			map.orbitControls.enablePan = false;
+			//walls do not change while a door is dragged, so find them once
+			map.dragWallSegments = allWallSegments();
+			map.dragUndo = doorTransforms(map.translateControls.door.translateGroupObjects);
 		}
 	}
 	
@@ -559,6 +584,7 @@ function init() {
 		
 		if (map.toggleMode == 'door') {
 			map.outlinePass.selectedObjects = [];
+			var moved = false;
 
 			for (var h=0;h<map.translateControls.door.translateGroupObjects.length;h++) {
 				var door = map.translateControls.door.translateGroupObjects[h];
@@ -572,19 +598,30 @@ function init() {
 					Math.round(door.position.y * 2) / 2,
 					Math.round(door.position.z * 2) / 2
 				);
+
+				//a single door slides along the wall it is dragged next to
+				if (map.translateControls.door.translateGroupObjects.length == 1) {
+					var snap = walls.snapDoorToWalls(door.position.x, door.position.z, map.dragWallSegments || [], door.size.width, door.rotation.y);
+
+					if (snap) {
+						pos.x = snap.x;
+						pos.z = snap.z;
+						door.rotation.y = snap.rotation;
+					}
+				}
 				
-				var prevPos = new THREE.Vector3(
-					Math.round(door.prevPos.x * 2) / 2,
-					Math.round(door.prevPos.y * 2) / 2,
-					Math.round(door.prevPos.z * 2) / 2
-				);
+				var prevPos = door.prevPos.clone();
 				
 				door.position.copy(pos);			
 
 				if (!pos.equals(prevPos)) {
 					door.prevPos = pos;
+					moved = true;
 				}
 			}
+
+			//only walls whose opening changed are rebuilt
+			if (moved) { rebuildWalls(); }
 
 			map.rotationControls.door.updatePosition();
 		}
@@ -599,17 +636,12 @@ function init() {
 			map.orbitControls.enablePan = true;
 
 			for (var h=0;h<map.translateControls.door.translateGroupObjects.length;h++) {
-				var door = map.translateControls.door.translateGroupObjects[h];
-
-				var args = {
-					doorId: door.doorId,
-					x: door.position.x,
-					z: door.position.z,
-					rotation: door.rotation.y
-				};
-				
-				sendMessage('update', 'updateDoorTransform', args);
+				sendDoorTransform(map.translateControls.door.translateGroupObjects[h]);
 			}
+
+			pushTransformUndo(map.dragUndo);
+			map.dragUndo = null;
+			map.dragWallSegments = null;
 		}
 	}
 	
@@ -632,6 +664,7 @@ function init() {
 		if (map.toggleMode == 'door') {
 			map.orbitControls.enablePan = false;
 			map.translateControls.door.enabled = false;
+			map.dragUndo = doorTransforms([map.rotationControls.door.object]);
 		}
 	}
 
@@ -650,17 +683,12 @@ function init() {
 			clearGroupSelection();
 
 			if (door.doorId in map.objects.doors) {
-				var args = {
-					doorId: door.doorId,
-					x: door.position.x,
-					z: door.position.z,
-					rotation: door.rotation.y
-				};
-
-				console.log('args', args);
-
-				sendMessage('update', 'updateDoorTransform', args);			
+				rebuildWalls();
+				sendDoorTransform(door);
+				pushTransformUndo(map.dragUndo);
 			}
+
+			map.dragUndo = null;
 		}
 	}
 
@@ -673,7 +701,9 @@ function init() {
 	//wall point translatestart
 	map.translateControls.wallPoint.translatestart = function(e) {
 		if (map.toggleMode == 'wallPoint') {
-			map.orbitControls.enablePan = false;		
+			map.orbitControls.enablePan = false;
+			addJoinedWallPoints(map.translateControls.wallPoint);
+			map.dragUndo = wallPointPositions(map.translateControls.wallPoint.translateGroupObjects);
 		}
 	}
 	
@@ -685,6 +715,8 @@ function init() {
 
 		if (map.toggleMode == 'wallPoint') {
 			map.outlinePass.selectedObjects = [];
+			//each wall is rebuilt once per move, and only when a point crossed to a new spot
+			var movedGroups = new Set();
 
 			for (var h=0;h<map.translateControls.wallPoint.translateGroupObjects.length;h++) {
 				var wallPoint = map.translateControls.wallPoint.translateGroupObjects[h];
@@ -708,14 +740,19 @@ function init() {
 						);
 						
 						wallPoint.position.copy(pos);
-						
-						updateWallGroup(map.wallPointGroups[wallPoint.wallPointGroupId]);
 
 						if (!pos.equals(prevPos)) {
 							wallPoint.prevPos = pos;
+							movedGroups.add(map.wallPointGroups[wallPoint.wallPointGroupId]);
 						}
 					}
 				}
+			}
+
+			if (movedGroups.size > 0) {
+				var doors = doorSpans();
+				var joints = wallJoints();
+				movedGroups.forEach(function(group) { updateWallGroup(group, doors, joints); });
 			}
 		}
 	}
@@ -726,6 +763,7 @@ function init() {
 	map.translateControls.wallPoint.translateend = function(e) {
 		
 		if (map.toggleMode == 'wallPoint') {
+			rebuildWalls(true);		//corners may have joined or come apart
 			updateVisionMeshes();
 			updateTokenVision();
 
@@ -743,6 +781,9 @@ function init() {
 				
 				sendMessage('update', 'updateWallPoint', args);
 			}
+
+			pushTransformUndo(map.dragUndo);
+			map.dragUndo = null;
 		}
 	}
 	
@@ -1784,6 +1825,8 @@ function canvasCheck(event) {
 
 	pointerCount++;
 
+	startWallDrag(event);
+
 	sceneTouchDown.x = event.clientX;
 	sceneTouchDown.y = event.clientY;
 
@@ -1841,6 +1884,8 @@ function canvasCheck(event) {
 function canvasMove(event) {
 	event = event || window.event;	
 
+	trackBuildPointer(event);
+
 	if (pointerCount > 1) {
 		clearTimeout(contextTimer);
 	}
@@ -1887,6 +1932,11 @@ function canvasClick(event) {
 	event = event || window.event;	
 	
 	pointerCount--;
+
+	if (map.wallDrag) {
+		endWallDrag(event);
+		return;
+	}
 
 	//box select
 	if (map.selectModeActive) {
@@ -1986,20 +2036,30 @@ function checkSceneClick(e, clickType) {
 		var wallPointCheck = getClicked3DPoint(e, allPoints, true);
 
 		if (typeof(wallPointCheck) != "undefined") {
-			for (var i=0;i<wallPointCheck.length;i++) {
-				if (clickType == 'right') {
-					map.menuTarget = wallPointCheck[i];
-					openContextMenu(e, map.menus.wallPoint);
-				}
-				
-				return;
+			if (clickType == 'right') {
+				map.menuTarget = wallPointCheck[0];
+				openContextMenu(e, map.menus.wallPoint);
 			}
+			else if (map.wallTool == 'points') {
+				clickWallPoint(wallPointCheck[0].object);
+			}
+
+			return;
 		}
 	}
 	
 	//wall mode click
-	if (map.toggleMode == 'wallPoint' && clickType == 'left') {
-		addWallPoint(e);
+	if (map.toggleMode == 'wallPoint' && isDM && map.wallTool == 'points') {
+		if (clickType == 'left') {
+			addWallPoint(e);
+			return;
+		}
+
+		//right-click while drawing finishes the wall instead of opening the menu
+		if (clickType == 'right' && lastActiveWallPoint()) {
+			finishWall();
+			return;
+		}
 	}
 
 	//door click	
@@ -2283,19 +2343,16 @@ function doorClick(door, local = true) {
 		}
 		else {
 			//toggle door
-			var rotationOffset = (door.size.width - (door.size.frameThickness * 1.5)) / 2;
-			var rot = Math.PI * 0.7;
 			var duration = 250; //ms
 			var frames = (duration / 1000) * 60;
-			var rotFr = rot / frames;
+			var rotFr = DOOR_SWING / frames;
+			var opening = !door.open;
 
 			updateVisionMeshes();
 
 			for (var i=0;i<frames;i++) {
 				setTimeout(function() {
-					door.panel.translateX(rotationOffset);
-					door.panel.rotation.y += (door.open ? rotFr : -rotFr);
-					door.panel.translateX(-rotationOffset);
+					swingDoorPanel(door, opening ? -rotFr : rotFr);
 
 					if (map.settings.lightingQuality > 1) {
 						updateTokenVision();
@@ -2345,66 +2402,48 @@ function addDoor(e, doorId = false, position = false, rotation = 0, open = 0, lo
 		if (typeof(planeCheck) != "undefined") {
 			position = planeCheck[0].point;
 		}
+
+		//dropped next to a wall: put it in the wall, lined up with it
+		var snap = walls.snapDoorToWalls(position.x, position.z, allWallSegments(), DOOR_SIZE.width, rotation);
+
+		if (snap) {
+			position = new THREE.Vector3(snap.x, 0, snap.z);
+			rotation = snap.rotation;
+		}
+		else {
+			position.x = Math.round(position.x * 2) / 2;
+			position.z = Math.round(position.z * 2) / 2;
+		}
 	}
-	
-	position.x = Math.round(position.x * 2) / 2;
-	position.z = Math.round(position.z * 2) / 2;
+
+	var parts = getDoorParts();
 
 	var door = new THREE.Group();
 	door.name = 'door';
 	door.toggleMode = 'door';
 	door.doorId = doorId;
-	door.prevPos = door.position.clone();
 	door.rotation.y = rotation;
-	door.size = {
-		width: 1,
-		height: 2,
-		frameThickness: 0.1,
-		frameDepth: 0.2,
-		thresholdDepth: 0.01
-	}
+	door.size = DOOR_SIZE;
 	door.defaultYPos = (door.size.height/2) - 0.5;
 	door.position.set(position.x, door.defaultYPos, position.z);
+	door.prevPos = door.position.clone();
 
-	//frame
-	var shape = new THREE.Shape()
-		.moveTo( 0, 0 )
-		.lineTo( 0, door.size.height )
-		.lineTo( door.size.width, door.size.height )
-		.lineTo( door.size.width, 0 )
-		.lineTo( 0, 0 );
-
-	const holePath = new THREE.Path()
-		.moveTo( door.size.frameThickness, door.size.thresholdDepth )
-		.lineTo( door.size.frameThickness, door.size.height - door.size.frameThickness )
-		.lineTo( door.size.width - door.size.frameThickness, door.size.height - door.size.frameThickness )
-		.lineTo( door.size.width - door.size.frameThickness, door.size.thresholdDepth )
-		.lineTo( door.size.frameThickness, door.size.thresholdDepth );
-
-	shape.holes.push( holePath );
-
-	const extrudeSettings = {
-		steps: 1,
-		depth: door.size.frameDepth,
-		bevelEnabled: false
-	};
-
-	var geometry = new THREE.ExtrudeGeometry( shape, extrudeSettings );
-	var material = new THREE.MeshLambertMaterial( { color: 0x535856, side: THREE.DoubleSide } );
-
-	var frame = new THREE.Mesh( geometry, material );
+	var frame = new THREE.Mesh(parts.frameGeometry, parts.frameMaterial);
 	frame.name = 'frame';
-	frame.position.set(-(door.size.width/2), -(door.size.height/2), -(door.size.frameDepth/2));
 	frame.hoverTarget = door;
 	frame.dmSelectable = door;
 
-	//panel
-	var material = new THREE.MeshLambertMaterial( { color: 0x56472E } );
-	var geometry = new THREE.BoxGeometry( door.size.width - (door.size.frameThickness * 2), door.size.height - door.size.frameThickness, 0.1 );
-	var panel = new THREE.Mesh( geometry, material );
-	panel.hoverTarget = door;
+	var panel = new THREE.Mesh(parts.panelGeometry, parts.panelMaterial);
 	panel.name = 'panel';
+	panel.hoverTarget = door;
 	panel.dmSelectable = door;
+
+	//child of the panel so it swings with it; not a vision blocker (too small to matter)
+	var handle = new THREE.Mesh(parts.handleGeometry, parts.handleMaterial);
+	handle.name = 'handle';
+	handle.hoverTarget = door;
+	handle.dmSelectable = door;
+	panel.add(handle);
 
 	door.frame = frame;
 	door.panel = panel;
@@ -2418,6 +2457,12 @@ function addDoor(e, doorId = false, position = false, rotation = 0, open = 0, lo
 	map.objects.doors[doorId] = door;
 	map.scene.add(door);
 
+	if (open) {
+		swingDoorPanel(door, -DOOR_SWING);
+		door.open = true;
+	}
+
+	rebuildWalls();
 	updateVisionMeshes();
 	updateTokenVision();
 
@@ -2430,7 +2475,34 @@ function addDoor(e, doorId = false, position = false, rotation = 0, open = 0, lo
 		}
 
 		sendMessage('update', 'addDoor', args);
+
+		//the server adds doors unrotated
+		if (rotation !== 0) {
+			sendDoorTransform(door);
+		}
+
+		pushUndo({ kind: 'addDoor', door: door });
 	}
+}
+
+// How far an open door swings (radians).
+var DOOR_SWING = Math.PI * 0.7;
+
+// Turns the panel about its hinge side.
+function swingDoorPanel(door, angle) {
+	var hingeOffset = (door.size.width - (door.size.frameThickness * 1.5)) / 2;
+	door.panel.translateX(hingeOffset);
+	door.panel.rotation.y += angle;
+	door.panel.translateX(-hingeOffset);
+}
+
+function sendDoorTransform(door) {
+	sendMessage('update', 'updateDoorTransform', {
+		doorId: door.doorId,
+		x: door.position.x,
+		z: door.position.z,
+		rotation: door.rotation.y
+	});
 }
 
 function addWallPoint(e, wallPointId = false, wallPointGroupId = map.wallPointGroupActive, position = false, local = true) {
@@ -2442,8 +2514,54 @@ function addWallPoint(e, wallPointId = false, wallPointGroupId = map.wallPointGr
 		}
 	}
 
+	if (!position) { return false; }
+
+	var wallPoint = createWallPoint(wallPointId, wallPointGroupId, position);
+	finishWallChange(local ? [wallPoint] : []);
+	return wallPoint;
+}
+
+// Adds several points to one wall with a single rebuild (rooms and corridors), and one undo step.
+function addWallPoints(wallPointGroupId, positions) {
+	var created = [];
+
+	for (const position of positions) {
+		created.push(createWallPoint(false, wallPointGroupId, new THREE.Vector3(position.x, 0, position.z)));
+	}
+
+	finishWallChange(created);
+}
+
+// Rebuilds the walls after points were added and tells the server about the local ones.
+function finishWallChange(localPoints) {
+	rebuildWalls(true);
+	updateVisionMeshes();
+	updateTokenVision();
+
+	if (localPoints.length > 0) {
+		for (const wallPoint of localPoints) {
+			sendMessage('update', 'addWallPoint', {
+				tempWallPointId: wallPoint.wallPointId,
+				wallPointGroupId: wallPoint.wallPointGroupId,
+				x: wallPoint.position.x,
+				z: wallPoint.position.z
+			});
+		}
+
+		pushUndo({ kind: 'addPoints', points: localPoints });
+	}
+}
+
+var wallPointGeometry = null;
+var wallPointMaterial = null;
+
+// The round handle of one wall point (only visible to the host in wall mode).
+function createWallPoint(wallPointId, wallPointGroupId, position) {
 	if (!(wallPointGroupId in map.wallPointGroups)) {
+		//a point from the server must not take over the wall the host is drawing
+		var active = map.wallPointGroupActive;
 		addWallGroup(wallPointGroupId);
+		if (active) { map.wallPointGroupActive = active; }
 	}	
 	
 	position.x = Math.round(position.x * 2) / 2;
@@ -2454,11 +2572,15 @@ function addWallPoint(e, wallPointId = false, wallPointGroupId = map.wallPointGr
 	}
 
 	var height = 0.05;
-	
-	var geometry = new THREE.CylinderGeometry( 0.4, 0.4, height, 16 );
-	var material = new THREE.MeshLambertMaterial( { color: 0x49504e } );
 
-	var wallPoint = new THREE.Mesh( geometry, material );
+	if (!wallPointGeometry) {
+		wallPointGeometry = new THREE.CylinderGeometry( 0.4, 0.4, height, 16 );
+		wallPointGeometry.userData.shared = true;
+		wallPointMaterial = new THREE.MeshLambertMaterial( { color: 0x49504e } );
+		wallPointMaterial.userData.shared = true;
+	}
+
+	var wallPoint = new THREE.Mesh( wallPointGeometry, wallPointMaterial );
 	wallPoint.name = 'wallPoint';
 	wallPoint.toggleMode = 'wallPoint';
 	wallPoint.dmSelectable = wallPoint;
@@ -2471,149 +2593,10 @@ function addWallPoint(e, wallPointId = false, wallPointGroupId = map.wallPointGr
 	map.translateControls.wallPoint.translateObjects.push(wallPoint);
 	map.hover.targets.push(wallPoint);
 
-	if (wallPointGroupId in map.wallPointGroups) {
-		map.wallPointGroups[wallPointGroupId].points[wallPointId] = wallPoint;
-		map.scene.add(wallPoint);
+	map.wallPointGroups[wallPointGroupId].points[wallPointId] = wallPoint;
+	map.scene.add(wallPoint);
 
-		updateWallGroup(map.wallPointGroups[wallPointGroupId]);
-		updateVisionMeshes();
-		updateTokenVision();
-	}
-	
-	//send to server
-	if (local) {
-		var args = {
-			tempWallPointId: wallPointId,
-			wallPointGroupId: wallPointGroupId,
-			x: position.x,
-			z: position.z
-		}
-
-		sendMessage('update', 'addWallPoint', args);
-	}
-}
-
-function ProfiledContourGeometry(profileShape, contour, contourClosed, openEnded) {
-    
-  contourClosed = contourClosed !== undefined ? contourClosed : true;
-  openEnded = openEnded !== undefined ? openEnded : false;
-  openEnded = contourClosed === true ? false : openEnded;
-	
-  let profileGeometry = new THREE.ShapeGeometry(profileShape);
-  let flipProfileGeometry = flipShapeGeometry(profileGeometry);
-  profileGeometry.rotateX(Math.PI * 0.5);
-  let profile = profileGeometry.attributes.position;
-	
-  let addEnds = openEnded === false ? 2 : 0;
-  let profilePoints = new Float32Array(profile.count * (contour.length + addEnds) * 3);
-	
-  let endProfiles = [];
-  
-  for (let i = 0; i < contour.length; i++) {
-    let v1 = new THREE.Vector2().subVectors(contour[i - 1 < 0 ? contour.length - 1 : i - 1], contour[i]);
-    let v2 = new THREE.Vector2().subVectors(contour[i + 1 == contour.length ? 0 : i + 1], contour[i]);
-    let angle = v2.angle() - v1.angle();
-    let halfAngle = angle * 0.5;
-		
-    let hA = halfAngle;
-    let tA = v2.angle() + Math.PI * 0.5;
-    if (!contourClosed){
-    	if (i == 0 || i == contour.length - 1) {hA = Math.PI * 0.5;}
-      if (i == contour.length - 1) {tA = v1.angle() - Math.PI * 0.5;}
-    }
-    
-    let shift = Math.tan(hA - Math.PI * 0.5);
-    let shiftMatrix = new THREE.Matrix4().set(
-           1, 0, 0, 0, 
-      -shift, 1, 0, 0,
-           0, 0, 1, 0,
-           0, 0, 0, 1
-    );
-		
-    
-    let tempAngle = tA;
-    let rotationMatrix = new THREE.Matrix4().set(
-      Math.cos(tempAngle), -Math.sin(tempAngle), 0, 0,
-      Math.sin(tempAngle),  Math.cos(tempAngle), 0, 0,
-                        0,                    0, 1, 0,
-                        0,                    0, 0, 1
-    );
-
-    let translationMatrix = new THREE.Matrix4().set(
-      1, 0, 0, contour[i].x,
-      0, 1, 0, contour[i].y,
-      0, 0, 1, 0,
-      0, 0, 0, 1,
-    );
-
-    let cloneProfile = profile.clone();
-    cloneProfile.applyMatrix4(shiftMatrix);
-    cloneProfile.applyMatrix4(rotationMatrix);
-    cloneProfile.applyMatrix4(translationMatrix);
-
-    profilePoints.set(cloneProfile.array, cloneProfile.count * i * 3);
-    if (openEnded === false && (i === 0 || i === contour.length - 1)){
-    	endProfiles.push(cloneProfile);
-    }
-  }
-  
-  endProfiles.forEach((ep, idx) => {
-  	profilePoints.set(ep.array, ep.count * (contour.length + idx) * 3)
-  });
-
-  let fullProfileGeometry = new THREE.BufferGeometry();
-  fullProfileGeometry.setAttribute("position", new THREE.BufferAttribute(profilePoints, 3));
-  let index = [];
-	
-  let lastCorner = contourClosed == false ? contour.length - 1: contour.length;
-  for (let i = 0; i < lastCorner; i++) {
-    for (let j = 0; j < profile.count; j++) {
-      let currCorner = i;
-      let nextCorner = i + 1 == contour.length ? 0 : i + 1;
-      let currPoint = j;
-      let nextPoint = j + 1 == profile.count ? 0 : j + 1;
-
-      let a = nextPoint + profile.count * currCorner;
-      let b = currPoint + profile.count * currCorner;
-      let c = currPoint + profile.count * nextCorner;
-      let d = nextPoint + profile.count * nextCorner;
-
-
-      index.push(a, b, d);
-      index.push(b, c, d);
-    }
-  }
-  
-  if (openEnded === false){
-  	// add indices from profile geometries
-    flipProfileGeometry.index.array.forEach(i => {index.push(i +  profile.count * (contour.length))});
-    profileGeometry.index.array.forEach(i =>{index.push(i + profile.count * (contour.length + 1))});
-    
-  }
-
-  fullProfileGeometry.setIndex(index);
-  fullProfileGeometry.computeVertexNormals();
-
-  return fullProfileGeometry;
-}
-
-function flipShapeGeometry(shapeGeometry) {
-  let flipGeom = shapeGeometry.clone();
-  for (let i = 0; i < flipGeom.attributes.position.count; i++) {
-    flipGeom.attributes.position.array[i * 3] *= -1;
-  }
-  flipGeom.attributes.position.needsUpdate = true;
-
-  var index = flipGeom.index.array;
-  for (let i = 0; i < index.length; i += 3) {
-    let v2 = index[i + 1];
-    let tmp = v2;
-    let v3 = index[i + 2];
-    index[i + 1] = index[i + 2];
-    index[i + 2] = tmp;
-  }
-  flipGeom.computeVertexNormals();
-  return flipGeom;
+	return wallPoint;
 }
 
 function addWallGroup(wallPointGroupId = false) {
@@ -2630,54 +2613,120 @@ function addWallGroup(wallPointGroupId = false) {
 	map.wallPointGroupActive = wallPointGroupId;
 }
 
-function updateWallGroup(wallGroup) {
+// One wall material for the whole map (a wall texture is then loaded once, not once per wall).
+var wallMaterial = null;
+
+function sharedWallMaterial() {
+	if (!wallMaterial) {
+		wallMaterial = createWallMaterial(options);
+		wallMaterial.userData.shared = true;
+	}
+
+	return wallMaterial;
+}
+
+function wallGroupPoints(wallGroup) {
+	var points = [];
+
+	for (const point of Object.values(wallGroup.points)) {
+		points.push({ x: point.position.x, z: point.position.z });
+	}
+
+	return points;
+}
+
+function doorSpans() {
+	var spans = [];
+
+	for (const door of Object.values(map.objects.doors)) {
+		spans.push({ x: door.position.x, z: door.position.z, rotation: door.rotation.y, width: door.size.width });
+	}
+
+	return spans;
+}
+
+// Positions where two or more wall points meet; wall ends there are stretched to fill the corner.
+function wallJoints() {
+	var seen = new Set();
+	var joints = new Set();
+
+	for (const wallGroup of Object.values(map.wallPointGroups)) {
+		for (const point of Object.values(wallGroup.points)) {
+			var key = walls.pointKey({ x: point.position.x, z: point.position.z });
+
+			if (seen.has(key)) { joints.add(key); }
+			seen.add(key);
+		}
+	}
+
+	return joints;
+}
+
+function allWallSegments() {
+	var segments = [];
+
+	for (const wallGroup of Object.values(map.wallPointGroups)) {
+		segments.push(...walls.wallSegments(wallGroupPoints(wallGroup)));
+	}
+
+	return segments;
+}
+
+// Rebuilds wall geometry. Without `force` only groups whose door openings changed are rebuilt,
+// which keeps dragging a door along a wall cheap on big maps.
+function rebuildWalls(force = false) {
+	if (map.deferWalls) { return; }
+
+	var doors = doorSpans();
+	var joints = force ? wallJoints() : null;
+
+	for (const wallGroup of Object.values(map.wallPointGroups)) {
+		if (force) {
+			updateWallGroup(wallGroup, doors, joints);
+		}
+		else if (walls.doorCutKey(wallGroupPoints(wallGroup), doors) !== wallGroup.cutKey) {
+			updateWallGroup(wallGroup, doors, joints || (joints = wallJoints()));
+		}
+	}
+}
+
+function updateWallGroup(wallGroup, doors = null, joints = null) {
+	if (map.deferWalls) { return; }
+
 	var pointLength = Object.keys(wallGroup.points).length;
 
 	if (pointLength > 0) {
-		var points = [];
-		var hLine = false;
+		var points = wallGroupPoints(wallGroup);
+		doors = doors || doorSpans();
 
-		for (const [pointId, point] of Object.entries(wallGroup.points)) {
-			points.push(point.position);
-		}
-		
-		var height = 2, thickness = 0.2;
-
-		var profileShape = new THREE.Shape();
-		profileShape.moveTo(-(thickness / 2), 0);
-		profileShape.lineTo(-(thickness / 2), height);
-		profileShape.lineTo((thickness / 2), height);
-		profileShape.lineTo((thickness / 2), 0);
-		profileShape.lineTo(-(thickness / 2), 0);
-
-		var points2d = [];
-		for (var i=0;i<points.length;i++) {
-			points2d[i] = new THREE.Vector2(points[i].x, points[i].z);
-		}
-
-		var geometry = ProfiledContourGeometry(profileShape, points2d, false, false);
-		geometry.rotateX(Math.PI * .5);
+		var arrays = walls.buildWallArrays(points, doors, joints || wallJoints());
+		var geometry = new THREE.BufferGeometry();
+		geometry.setAttribute('position', new THREE.BufferAttribute(arrays.positions, 3));
+		geometry.setAttribute('normal', new THREE.BufferAttribute(arrays.normals, 3));
+		geometry.setIndex(new THREE.BufferAttribute(arrays.indices, 1));
+		wallGroup.cutKey = walls.doorCutKey(points, doors);
 
 		if (options.wallTexture) {
 			geometry = addWallUvs(geometry, wallTileSize(options));
 		}
 
 		if (!wallGroup.mesh) {
-			//wall mesh
-			var material = createWallMaterial(options);
-			var mesh = new THREE.Mesh(geometry, material);
+			var mesh = new THREE.Mesh(geometry, sharedWallMaterial());
 			mesh.name = 'wall mesh';
-			mesh.position.y = (height / 2) + 0.5;
 			wallGroup.mesh = mesh;
 			map.scene.add(mesh);
 		}
 		else {
+			wallGroup.mesh.geometry.dispose();
 			wallGroup.mesh.geometry = geometry;
 		}
 	}
 	else {
 		//remove wall group
-		map.scene.remove(wallGroup.mesh);
+		if (wallGroup.mesh) {
+			map.scene.remove(wallGroup.mesh);
+			wallGroup.mesh.geometry.dispose();
+		}
 		delete map.wallPointGroups[wallGroup.wallPointGroupId];
 	}
 }
@@ -2691,10 +2740,19 @@ function removeDoor(doorId = false, local = true) {
 	}
 
 	if (doorId in map.objects.doors) {
-		map.scene.remove(map.objects.doors[doorId]);
+		var removed = map.objects.doors[doorId];
+		map.scene.remove(removed);
 		map.rotationControls.door.detach();
 		delete map.objects.doors[doorId];
+		removeFromList(map.translateControls.door.translateObjects, removed);
+		removeFromList(map.hover.targets, removed.frame);
+		removeFromList(map.hover.targets, removed.panel);
+
+		if (local) {
+			pushUndo({ kind: 'removeDoor', x: removed.position.x, z: removed.position.z, rotation: removed.rotation.y });
+		}
 		
+		rebuildWalls();
 		updateVisionMeshes();
 		updateTokenVision();
 	}
@@ -2709,6 +2767,11 @@ function removeDoor(doorId = false, local = true) {
 	}
 }
 
+function removeFromList(list, item) {
+	var index = list.indexOf(item);
+	if (index !== -1) { list.splice(index, 1); }
+}
+
 function removeWallPoint(wallPointGroupId = false, wallPointId = false, local = true) {
 	hideContextMenu();
 
@@ -2719,10 +2782,13 @@ function removeWallPoint(wallPointGroupId = false, wallPointId = false, local = 
 	}
 	
 	if (wallPointGroupId in map.wallPointGroups && wallPointId in map.wallPointGroups[wallPointGroupId].points) {
-		map.scene.remove( map.wallPointGroups[wallPointGroupId].points[wallPointId]);
+		var removed = map.wallPointGroups[wallPointGroupId].points[wallPointId];
+		map.scene.remove(removed);
 		delete map.wallPointGroups[wallPointGroupId].points[wallPointId];
+		removeFromList(map.translateControls.wallPoint.translateObjects, removed);
+		removeFromList(map.hover.targets, removed);
 		
-		updateWallGroup(map.wallPointGroups[wallPointGroupId]);
+		rebuildWalls(true);
 		updateVisionMeshes();
 		updateTokenVision();
 
@@ -2735,6 +2801,476 @@ function removeWallPoint(wallPointGroupId = false, wallPointId = false, local = 
 			sendMessage('update', 'removeWallPoint', args);
 		}
 	}
+}
+
+// ---- map building: undo, joining walls, room / corridor tools, previews ----
+
+var CORRIDOR_WIDTH = 2;		//squares
+var undoStack = [];
+var undoing = false;		//undo itself must not add undo steps
+
+function pushUndo(entry) {
+	if (undoing) { return; }
+
+	undoStack.push(entry);
+
+	if (undoStack.length > 50) { undoStack.shift(); }
+}
+
+function doorTransforms(doors) {
+	return doors.filter(Boolean).map(function(door) {
+		return { door: door, x: door.position.x, z: door.position.z, rotation: door.rotation.y };
+	});
+}
+
+function wallPointPositions(points) {
+	return points.map(function(point) {
+		return { point: point, x: point.position.x, z: point.position.z };
+	});
+}
+
+// Records a drag or turn as one undo step, if anything actually moved.
+function pushTransformUndo(items) {
+	if (!items) { return; }
+
+	var changed = items.filter(function(item) {
+		var object = item.door || item.point;
+		return object.position.x !== item.x || object.position.z !== item.z || (item.door && object.rotation.y !== item.rotation);
+	});
+
+	if (changed.length > 0) {
+		pushUndo({ kind: 'transform', items: changed });
+	}
+}
+
+function undo() {
+	var entry = undoStack.pop();
+
+	if (!entry) {
+		notify('Nothing to undo');
+		return;
+	}
+
+	undoing = true;
+
+	try {
+		if (entry.kind == 'addPoints') {
+			for (const point of entry.points.slice().reverse()) {
+				removeWallPoint(point.wallPointGroupId, point.wallPointId);
+			}
+		}
+		else if (entry.kind == 'addDoor') {
+			if (map.objects.doors[entry.door.doorId] === entry.door) {
+				removeDoor(entry.door.doorId);
+			}
+		}
+		else if (entry.kind == 'removeDoor') {
+			addDoor(false, false, new THREE.Vector3(entry.x, 0, entry.z), entry.rotation);
+		}
+		else if (entry.kind == 'transform') {
+			map.rotationControls.door.detach();
+
+			for (const item of entry.items) {
+				if (item.door) {
+					if (map.objects.doors[item.door.doorId] !== item.door) { continue; }
+
+					item.door.position.x = item.x;
+					item.door.position.z = item.z;
+					item.door.rotation.y = item.rotation;
+					item.door.prevPos = item.door.position.clone();
+					sendDoorTransform(item.door);
+				}
+				else {
+					var group = map.wallPointGroups[item.point.wallPointGroupId];
+					if (!group || group.points[item.point.wallPointId] !== item.point) { continue; }
+
+					item.point.position.x = item.x;
+					item.point.position.z = item.z;
+					item.point.prevPos = item.point.position.clone();
+					sendMessage('update', 'updateWallPoint', {
+						wallPointGroupId: item.point.wallPointGroupId,
+						wallPointId: item.point.wallPointId,
+						x: item.x,
+						z: item.z
+					});
+				}
+			}
+
+			rebuildWalls(true);
+			updateVisionMeshes();
+			updateTokenVision();
+		}
+	}
+	finally {
+		undoing = false;
+	}
+
+	scheduleGhosts();
+}
+
+// Points of other walls sitting on the dragged point move with it, so joined walls stay joined.
+function addJoinedWallPoints(controls) {
+	var dragged = controls.translateGroupObjects;
+	var extra = [];
+
+	for (const point of dragged) {
+		for (const wallGroup of Object.values(map.wallPointGroups)) {
+			for (const other of Object.values(wallGroup.points)) {
+				if (other === point || dragged.includes(other) || extra.includes(other)) { continue; }
+
+				if (other.position.x === point.position.x && other.position.z === point.position.z) {
+					other.translateControls = {
+						offsetPos: point.translateControls.offsetPos.clone(),
+						originalPos: other.position.clone()
+					};
+					extra.push(other);
+				}
+			}
+		}
+	}
+
+	dragged.push(...extra);
+}
+
+function allWallPoints() {
+	var points = [];
+
+	for (const wallGroup of Object.values(map.wallPointGroups)) {
+		points.push(...Object.values(wallGroup.points));
+	}
+
+	return points;
+}
+
+function lastActiveWallPoint() {
+	var group = map.wallPointGroups[map.wallPointGroupActive];
+	if (!group) { return null; }
+
+	var points = Object.values(group.points);
+	return points.length > 0 ? points[points.length - 1] : null;
+}
+
+// Ends the wall being drawn; the next click starts a new one.
+function finishWall() {
+	if (lastActiveWallPoint()) {
+		addWallGroup();
+	}
+
+	scheduleGhosts();
+}
+
+// Clicking an existing point: on the end of the wall being drawn it finishes the wall, anywhere
+// else it adds a point exactly there (closing a room or joining another wall) and finishes.
+// With nothing drawn yet it starts a new wall from that point.
+function clickWallPoint(hit) {
+	var last = lastActiveWallPoint();
+
+	if (last && last.position.x === hit.position.x && last.position.z === hit.position.z) {
+		finishWall();
+		return;
+	}
+
+	addWallPoint(false, false, map.wallPointGroupActive, new THREE.Vector3(hit.position.x, 0, hit.position.z));
+
+	if (last) {
+		finishWall();
+	}
+}
+
+// Adds whole walls (rooms, corridors) in one go: one rebuild and one undo step.
+function addWallPolylines(polylines) {
+	var created = [];
+
+	for (const polyline of polylines) {
+		var wallPointGroupId = newLocalId();
+
+		for (const position of polyline) {
+			created.push(createWallPoint(false, wallPointGroupId, new THREE.Vector3(position.x, 0, position.z)));
+		}
+	}
+
+	finishWallChange(created);
+}
+
+function dragOutlines(drag) {
+	if (map.wallTool == 'room') {
+		var outline = walls.roomOutline(drag.start, drag.end);
+		return outline ? [outline] : [];
+	}
+
+	var corridor = walls.corridorWalls(drag.start, drag.end, CORRIDOR_WIDTH);
+	return corridor ? corridor : [];
+}
+
+var buildRaycaster = new THREE.Raycaster();
+var buildPointer = new THREE.Vector2();
+
+function groundPoint(clientX, clientY) {
+	buildPointer.set(ndcX(clientX), ndcY(clientY));
+	buildRaycaster.setFromCamera(buildPointer, map.objects.camera);
+
+	var hit = buildRaycaster.intersectObject(map.objects.plane, false);
+	return hit.length > 0 ? hit[0].point : null;
+}
+
+function isBuildMode() {
+	return isDM && (map.toggleMode == 'wallPoint' || map.toggleMode == 'door');
+}
+
+// Room / corridor tools: a left drag on the ground draws instead of panning.
+function startWallDrag(event) {
+	if (!isDM || map.toggleMode != 'wallPoint' || map.wallTool == 'points' || event.button !== 0 || pointerCount > 1) { return; }
+	if (getClicked3DPoint(event, allWallPoints(), false)) { return; }	//dragging a point instead
+
+	var p = groundPoint(event.clientX, event.clientY);
+
+	if (p) {
+		map.wallDrag = { start: { x: p.x, z: p.z }, end: { x: p.x, z: p.z } };
+		scheduleGhosts();
+	}
+}
+
+function endWallDrag(event) {
+	var drag = map.wallDrag;
+	map.wallDrag = null;
+
+	var p = groundPoint(event.clientX, event.clientY);
+	if (p) { drag.end = { x: p.x, z: p.z }; }
+
+	var outlines = dragOutlines(drag);
+
+	if (outlines.length > 0) {
+		addWallPolylines(outlines);
+	}
+
+	scheduleGhosts();
+}
+
+function buildGhosts() {
+	if (map.ghost) { return map.ghost; }
+
+	var parts = getDoorParts();
+	var ghost = {};
+
+	var segmentGeometry = new THREE.BoxGeometry(1, walls.WALL_HEIGHT, walls.WALL_THICKNESS);
+	segmentGeometry.translate(0, walls.FLOOR_Y + (walls.WALL_HEIGHT / 2), 0);
+	ghost.segment = new THREE.Mesh(segmentGeometry, parts.ghostMaterial);
+
+	ghost.marker = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.06, 16), parts.ghostMaterial);
+	ghost.marker.position.y = walls.FLOOR_Y + 0.03;
+
+	ghost.walls = new THREE.Mesh(new THREE.BufferGeometry(), parts.ghostMaterial);
+	ghost.wallsKey = '';
+
+	ghost.door = new THREE.Group();
+	ghost.door.add(new THREE.Mesh(parts.frameGeometry, parts.ghostMaterial));
+	ghost.door.add(new THREE.Mesh(parts.panelGeometry, parts.ghostMaterial));
+	ghost.door.position.y = (DOOR_SIZE.height / 2) - 0.5;
+
+	for (const object of [ghost.segment, ghost.marker, ghost.walls, ghost.door]) {
+		object.visible = false;
+		object.renderOrder = 10;
+		map.scene.add(object);
+	}
+
+	map.ghost = ghost;
+	return ghost;
+}
+
+// One merged geometry for several wall outlines (the preview of a corridor is two walls).
+function wallPreviewGeometry(outlines) {
+	var list = outlines.map(function(outline) { return walls.buildWallArrays(outline, [], new Set()); });
+	var vertexCount = 0, indexCount = 0;
+
+	for (const arrays of list) {
+		vertexCount += arrays.positions.length;
+		indexCount += arrays.indices.length;
+	}
+
+	var positions = new Float32Array(vertexCount);
+	var normals = new Float32Array(vertexCount);
+	var indices = new Uint32Array(indexCount);
+	var v = 0, i = 0;
+
+	for (const arrays of list) {
+		positions.set(arrays.positions, v);
+		normals.set(arrays.normals, v);
+
+		for (var j = 0; j < arrays.indices.length; j++) {
+			indices[i + j] = arrays.indices[j] + (v / 3);
+		}
+
+		v += arrays.positions.length;
+		i += arrays.indices.length;
+	}
+
+	var geometry = new THREE.BufferGeometry();
+	geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+	geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+	geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+	return geometry;
+}
+
+var ghostPointer = null;
+var ghostFrame = 0;
+
+function trackBuildPointer(event) {
+	if (!isBuildMode()) { return; }
+
+	ghostPointer = { x: event.clientX, y: event.clientY };
+	scheduleGhosts();
+}
+
+// Previews are updated at most once per frame, however fast the pointer moves.
+function scheduleGhosts() {
+	if (!ghostFrame && map.ghost) {
+		ghostFrame = requestAnimationFrame(updateGhosts);
+	}
+}
+
+function updateGhosts() {
+	ghostFrame = 0;
+	var ghost = map.ghost;
+
+	if (destroyed || !ghost) { return; }
+
+	ghost.segment.visible = false;
+	ghost.marker.visible = false;
+	ghost.walls.visible = false;
+	ghost.door.visible = false;
+
+	if (!isBuildMode() || ghostPointer === null) { return; }
+
+	var p = groundPoint(ghostPointer.x, ghostPointer.y);
+	if (!p) { return; }
+
+	if (map.toggleMode == 'wallPoint') {
+		if (map.wallDrag) {
+			map.wallDrag.end = { x: p.x, z: p.z };
+			var outlines = dragOutlines(map.wallDrag);
+			var key = JSON.stringify(outlines);
+
+			//rebuilt only when the snapped outline changes, not on every pointer move
+			if (key !== ghost.wallsKey) {
+				ghost.wallsKey = key;
+				ghost.walls.geometry.dispose();
+				ghost.walls.geometry = wallPreviewGeometry(outlines);
+			}
+
+			ghost.walls.visible = outlines.length > 0;
+		}
+		else if (map.wallTool == 'points') {
+			var hits = getClicked3DPointAt(ghostPointer, allWallPoints());
+			var target = hits ? hits[0].object.position : { x: walls.snapHalf(p.x), z: walls.snapHalf(p.z) };
+			ghost.marker.position.x = target.x;
+			ghost.marker.position.z = target.z;
+			ghost.marker.visible = true;
+
+			var last = lastActiveWallPoint();
+
+			if (last) {
+				var dx = target.x - last.position.x;
+				var dz = target.z - last.position.z;
+				var length = Math.hypot(dx, dz);
+
+				if (length > 0) {
+					ghost.segment.position.set((last.position.x + target.x) / 2, 0, (last.position.z + target.z) / 2);
+					ghost.segment.rotation.y = walls.rotationAlong(dx / length, dz / length);
+					ghost.segment.scale.x = length;
+					ghost.segment.visible = true;
+				}
+			}
+		}
+	}
+	else if (map.toggleMode == 'door') {
+		//no preview while moving a door, or over one (a click there selects it)
+		if (map.translateControls.door.isTranslating || getClicked3DPointAt(ghostPointer, Object.values(map.objects.doors), true)) { return; }
+
+		var snap = walls.snapDoorToWalls(p.x, p.z, allWallSegments(), DOOR_SIZE.width, 0);
+		ghost.door.position.x = snap ? snap.x : walls.snapHalf(p.x);
+		ghost.door.position.z = snap ? snap.z : walls.snapHalf(p.z);
+		ghost.door.rotation.y = snap ? snap.rotation : 0;
+		ghost.door.visible = true;
+	}
+}
+
+function getClicked3DPointAt(pointer, objects, recursive = false) {
+	return getClicked3DPoint({ clientX: pointer.x, clientY: pointer.y }, objects, recursive);
+}
+
+var BUILD_HINTS = {
+	points: 'Click to place wall points. Click the first point to close a room. Right-click or Esc to finish a wall.',
+	room: 'Drag on the floor to draw a room. Right-drag turns the camera, arrow keys move it.',
+	corridor: 'Drag on the floor to draw a corridor ' + CORRIDOR_WIDTH + ' squares wide. Right-drag turns the camera.',
+	door: 'Click a wall to put a door in it, or drag a door along a wall. Click a door to turn it.'
+};
+
+function buildToolbar() {
+	var toolbar = byId('build-toolbar');
+	if (toolbar) { return toolbar; }
+
+	toolbar = document.createElement('div');
+	toolbar.id = 'build-toolbar';
+	toolbar.className = 'noselect';
+	toolbar.innerHTML =
+		'<div class="build-tools">' +
+			'<button type="button" data-tool="points" title="Draw walls point by point"><span class="material-icons">timeline</span><span>Walls</span></button>' +
+			'<button type="button" data-tool="room" title="Drag out a closed room"><span class="material-icons">crop_square</span><span>Room</span></button>' +
+			'<button type="button" data-tool="corridor" title="Drag out a corridor"><span class="material-icons">drag_handle</span><span>Corridor</span></button>' +
+			'<button type="button" data-action="undo" title="Undo (Ctrl+Z / ⌘Z)"><span class="material-icons">undo</span><span>Undo</span></button>' +
+		'</div>' +
+		'<div class="build-hint"></div>';
+	root.appendChild(toolbar);
+
+	toolbar.addEventListener('click', function(e) {
+		var button = e.target.closest('button');
+		if (!button) { return; }
+
+		if (button.dataset.action == 'undo') {
+			undo();
+		}
+		else if (button.dataset.tool) {
+			finishWall();
+			map.wallTool = button.dataset.tool;
+			syncBuildMode();
+		}
+	});
+
+	return toolbar;
+}
+
+// Brings the toolbar, camera buttons and previews in line with the current mode and tool.
+function syncBuildMode() {
+	var dragTool = isDM && map.toggleMode == 'wallPoint' && map.wallTool != 'points';
+	map.orbitControls.mouseButtons.LEFT = dragTool ? null : THREE.MOUSE.PAN;
+	map.orbitControls.touches.ONE = dragTool ? null : THREE.TOUCH.PAN;
+
+	var toolbar = buildToolbar();
+	var building = isBuildMode();
+	toolbar.style.display = building ? 'flex' : 'none';
+
+	if (!building) {
+		map.wallDrag = null;
+		ghostPointer = null;
+	}
+	else {
+		var walling = map.toggleMode == 'wallPoint';
+
+		for (const button of toolbar.querySelectorAll('[data-tool]')) {
+			button.style.display = walling ? '' : 'none';
+			button.classList.toggle('active', walling && button.dataset.tool == map.wallTool);
+		}
+
+		toolbar.querySelector('.build-hint').textContent = BUILD_HINTS[walling ? map.wallTool : 'door'];
+	}
+
+	buildGhosts();
+	scheduleGhosts();
+}
+
+function isTyping(e) {
+	var target = e.target;
+	return target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 }
 
 function resizeToken(e, size) {
@@ -4036,6 +4572,7 @@ function buildGui() {
 
 		clearGroupSelection();
 		doorModeButton.element.classList.toggle('active');
+		syncBuildMode();
 	}, false);
 
 	//walls button
@@ -4062,6 +4599,8 @@ function buildGui() {
 				wallPoint.visible = map.toggleMode == 'wallPoint';
 			}
 		}
+
+		syncBuildMode();
 	}, false);
 
 	//plane mode button
@@ -4087,6 +4626,7 @@ function buildGui() {
 
 		clearGroupSelection();
 		planeModeButton.element.classList.toggle('active');
+		syncBuildMode();
 	}, false);
 
 	//select mode button
@@ -4299,12 +4839,13 @@ function updateGuiItems(dm) {
 // Frees GPU memory held by an object and its children.
 function disposeObject(object) {
 	object.traverse(function(child) {
-		if (child.geometry) { child.geometry.dispose(); }
+		if (child.geometry && !child.geometry.userData.shared) { child.geometry.dispose(); }
 
 		if (child.material) {
 			var materials = Array.isArray(child.material) ? child.material : [child.material];
 
 			for (const material of materials) {
+				if (material.userData.shared) { continue; }	//used by every door / wall
 				if (material.map) { material.map.dispose(); }
 				material.dispose();
 			}
@@ -4461,6 +5002,9 @@ function buildRoom(room) {
 		}
 	}
 
+	//build all walls once at the end instead of once per point (big maps load much faster)
+	map.deferWalls = true;
+
 	//add doors
 	if ('doors' in room) {
 		for (const [doorId, door] of Object.entries(room.doors)) {
@@ -4491,6 +5035,9 @@ function buildRoom(room) {
 			updateClient.addWallPoint(args);			
 		}
 	}	
+
+	map.deferWalls = false;
+	rebuildWalls(true);
 	
 	//place planes
 	if ('planes' in room) {
@@ -5098,6 +5645,7 @@ var updateClient = {
 				map.objects.doors[args.doorId].position.z = args.z;
 				map.objects.doors[args.doorId].rotation.y = args.rotation;
 
+				rebuildWalls();
 				updateTokenVision();				
 			}
 		}
@@ -6049,6 +6597,10 @@ return {
 		resetRoom();
 		map.composer.dispose();
 		map.mask.fog.dispose();
+		if (wallMaterial) {
+			if (wallMaterial.map) { wallMaterial.map.dispose(); }
+			wallMaterial.dispose();
+		}
 		map.renderer.dispose();
 		root.remove();
 	},

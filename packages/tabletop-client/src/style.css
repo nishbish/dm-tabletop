@@ -897,3 +897,69 @@ input:checked + .slider:before {
 	padding: 24px;
 	text-align: center;
 }
+
+/*-- map building toolbar (wall and door modes) --*/
+#build-toolbar {
+	position: absolute;
+	top: 12px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 1000;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	max-width: calc(100% - 32px);
+	pointer-events: none;
+}
+
+#build-toolbar .build-tools {
+	display: flex;
+	gap: 4px;
+	padding: 4px;
+	background: rgba(255, 255, 255, 0.95);
+	border-radius: 8px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	pointer-events: auto;
+}
+
+#build-toolbar button {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 6px 10px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: #3a3a3a;
+	font: inherit;
+	cursor: pointer;
+}
+
+#build-toolbar button .material-icons {
+	font-size: 20px;
+}
+
+#build-toolbar button:hover {
+	background: #eef3fa;
+}
+
+#build-toolbar button.active {
+	background: #b5d2f5;
+	color: #1f1f1f;
+}
+
+#build-toolbar .build-hint {
+	padding: 4px 10px;
+	border-radius: 6px;
+	background: rgba(30, 30, 30, 0.8);
+	color: #ffffff;
+	font-size: 13px;
+	text-align: center;
+}
+
+@media (max-width: 560px) {
+	#build-toolbar button span:not(.material-icons) {
+		display: none;
+	}
+}
