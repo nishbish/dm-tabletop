@@ -182,7 +182,8 @@ rectangle on grid lines), **Corridor** (drag out two parallel walls, 2 squares a
 (Ctrl+Z / ⌘Z, for adds, moves, turns and door removals made in this session). Points of different walls on
 the same spot move together. In door mode a door dropped near a wall snaps into it, lined up and on a whole
 square, and the wall gets an opening; dragging a door slides it along the wall. A preview shows what a click
-or drag will build.
+or drag will build. While wall or door mode is on, the viewer's root element has the class `dmt-building`, so
+a host page can move or hide its own overlays (the toolbar sits at the top middle).
 
 Performance: each wall is one merged geometry (one draw call), rebuilt only when its own points or door
 openings change; a loading room builds its walls once at the end instead of once per point; all doors share
