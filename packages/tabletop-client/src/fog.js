@@ -70,7 +70,7 @@ var fragmentShader = [
   '}',
   'void main() {',
   '	float visible = mix(texture2D(uPrevious, vUv).r, texture2D(uVisible, vUv).r, smoothstep(0.0, 1.0, uMix));',
-  '	// the memory of explored ground only shows when the fog is translucent (the host\'s view):',
+  "	// the memory of explored ground only shows when the fog is translucent (the host's view):",
   '	// at full strength a player sees nothing outside what the token sees now',
   '	float explored = smoothstep(0.0, 1.0, max(texture2D(uExplored, vUv).r, visible)) * (1.0 - smoothstep(0.9, 1.0, uStrength));',
   '	// two layers of noise drifting in different directions',
