@@ -31,7 +31,56 @@ await tracker.ready; // the last session has been restored
 ```
 
 The widget injects one stylesheet (every class starts with `it-`, scoped under `.it-root`) and
-follows `prefers-color-scheme`. It fills the width of its container.
+follows `prefers-color-scheme` unless you set the theme variables (see Theming). It fills the width of its container.
+
+### Theming
+
+Every colour, the font, the corner radii, the shadow and the control height are CSS custom
+properties named `--it-*`. Set them on `:root`, on a wrapper element or on `.it-root`; anything
+you leave unset keeps the built-in value. The built-in set is a light and a dark palette
+(a deep green and cream "battle mat" look); the dark one follows `prefers-color-scheme`.
+The widget never reads variables of the host page, so mapping your own design tokens is one
+small rule:
+
+```css
+:root {
+  --it-bg: var(--my-card);
+  --it-fg: var(--my-text);
+  --it-accent: var(--my-brand);
+  --it-radius: 6px;
+}
+```
+
+| Variable              | Light default                                              | Dark default                     | Used for                                            |
+| --------------------- | ---------------------------------------------------------- | -------------------------------- | --------------------------------------------------- |
+| `--it-bg`             | `#f4f1e4`                                                  | `#0e2a24`                        | Background of the whole widget                      |
+| `--it-fg`             | `#16261f`                                                  | `#eef0e2`                        | Main text                                           |
+| `--it-muted`          | `#4d5b52`                                                  | `#b6c4b9`                        | Secondary text and labels                           |
+| `--it-border`         | `#c9cdb8`                                                  | `#2f544a`                        | Row and section dividers                            |
+| `--it-border-strong`  | `#6e7c70`                                                  | `#7f9d90`                        | Borders of fields and buttons                       |
+| `--it-surface`        | `#e7e5d2`                                                  | `#17382f`                        | Buttons and raised parts                            |
+| `--it-row-bg`         | `#ffffff`                                                  | `#14352c`                        | Fill of a creature row                              |
+| `--it-input-bg`       | `#ffffff`                                                  | `#0a211c`                        | Fill of text fields                                 |
+| `--it-head-bg`        | `#1d4a3b`                                                  | `#23524a`                        | Background of the column heading bar                |
+| `--it-head-fg`        | `#f4f1e4`                                                  | same                             | Text on the heading bar                             |
+| `--it-accent`         | `#1d6a4c`                                                  | `#9be3b4`                        | Primary buttons and markers                         |
+| `--it-accent-fg`      | `#ffffff`                                                  | `#07241a`                        | Text and icons on the accent colour                 |
+| `--it-active-bg`      | `#dcefdc`                                                  | `#1f5a43`                        | Fill of the row whose turn it is                    |
+| `--it-badge-bg`       | `#1d4a3b`                                                  | `#9be3b4`                        | The round counter circle                            |
+| `--it-badge-fg`       | `#f4f1e4`                                                  | `#07241a`                        | Number inside the round counter                     |
+| `--it-focus`          | `#a35200`                                                  | `#ffc566`                        | Keyboard focus ring                                 |
+| `--it-danger`         | `#a4161a`                                                  | `#ff9a9d`                        | Down creatures, Clear and Delete                    |
+| `--it-radius`         | `8px`                                                      | same                             | Corners of fields, buttons and rows                 |
+| `--it-radius-lg`      | `14px`                                                     | same                             | Corners of the whole widget                         |
+| `--it-font`           | `system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | same                             | Font family                                         |
+| `--it-weight`         | `500`                                                      | same                             | Normal font weight                                  |
+| `--it-weight-strong`  | `700`                                                      | same                             | Bold font weight (buttons, names, round counter)    |
+| `--it-shadow`         | `0 2px 10px rgba(0, 0, 0, 0.12)`                           | `0 2px 12px rgba(0, 0, 0, 0.45)` | Shadow of the widget and the suggestion list        |
+| `--it-control-height` | `44px`                                                     | same                             | Minimum height of buttons and fields (touch target) |
+| `--it-pad`            | `14px`                                                     | same                             | Padding inside the widget                           |
+
+The same list is exported as `themeVariables` (name, defaults, description). Layout classes all
+start with `it-`; they are not a stable API, the variables are.
 
 ### Options
 
