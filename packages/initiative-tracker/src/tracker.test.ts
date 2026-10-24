@@ -34,7 +34,7 @@ function type(input: HTMLInputElement, value: string, event = 'input') {
   input.value = value;
   input.dispatchEvent(new Event(event, { bubbles: true }));
 }
-const rows = () => $$('tbody tr');
+const rows = () => $$('.it-row');
 const field = (row: Element, name: string) =>
   row.querySelector(`[data-field="${name}"]`) as HTMLInputElement;
 const wait = (ms = 30) => new Promise((r) => setTimeout(r, ms));
@@ -114,19 +114,65 @@ describe('rendering and actions', () => {
     expect(action('clear').textContent).toBe('Clear');
   });
 
-  it('removes and reorders rows with the buttons', async () => {
+  it('removes rows, and reorders them from the keyboard on the handle', async () => {
     await make().ready;
     ['A', 'B', 'C'].forEach((n) => {
       click(action('add'));
       type(field(rows()[rows().length - 1], 'name'), n);
     });
-    click(rows()[2].querySelector('[data-action="up"]'));
+    const grip = (i: number) => rows()[i].querySelector('[data-grip]') as HTMLElement;
+    grip(2).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
     expect(tracker.getState().rows.map((r) => r.name)).toEqual(['A', 'C', 'B']);
-    expect((rows()[0].querySelector('[data-action="up"]') as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    // at the top, up does nothing
+    grip(0).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    expect(tracker.getState().rows.map((r) => r.name)).toEqual(['A', 'C', 'B']);
     click(rows()[0].querySelector('[data-action="remove"]'));
     expect(tracker.getState().rows.map((r) => r.name)).toEqual(['C', 'B']);
+  });
+
+  it('has no actions column: the roll button lives in the initiative cell', async () => {
+    await make().ready;
+    click(action('add'));
+    const row = rows()[0];
+    expect(row.querySelector('.it-actions')).toBeNull();
+    expect(row.querySelector('.it-c-init [data-action="roll"]')).toBeTruthy();
+    expect(row.querySelector('[data-action="up"]')).toBeNull();
+    expect(row.querySelectorAll('[role="cell"]')).toHaveLength(6);
+  });
+
+  it('drags a row: it follows the pointer, the others shift, and the order changes on release', async () => {
+    await make().ready;
+    ['A', 'B', 'C'].forEach((n) => {
+      click(action('add'));
+      type(field(rows()[rows().length - 1], 'name'), n);
+    });
+    // happy-dom has no layout: give the rows a fixed 50px pitch
+    rows().forEach((r, i) => {
+      r.getBoundingClientRect = () =>
+        ({
+          top: i * 50,
+          height: 48,
+          bottom: i * 50 + 48,
+          left: 0,
+          right: 100,
+          width: 100,
+        }) as DOMRect;
+    });
+    const grip = rows()[0].querySelector('[data-grip]') as HTMLElement;
+    const fire = (type: string, y: number) =>
+      grip.dispatchEvent(
+        Object.assign(new Event(type, { bubbles: true }), { clientY: y, pointerId: 1, button: 0 }),
+      );
+    fire('pointerdown', 10);
+    expect(rows()[0].classList.contains('it-row--dragging')).toBe(true);
+    fire('pointermove', 70); // 60px down: past B (one place)... and onto C's slot (50px pitch)
+    expect(rows()[0].style.transform).toBe('translateY(60px)');
+    expect(rows()[1].style.transform).toBe('translateY(-50px)');
+    expect(rows()[2].style.transform).toBe('');
+    fire('pointerup', 70);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(tracker.getState().rows.map((r) => r.name)).toEqual(['B', 'A', 'C']);
+    expect(rows().every((r) => !r.classList.contains('it-row--dragging'))).toBe(true);
   });
 
   it('renames the encounter', async () => {

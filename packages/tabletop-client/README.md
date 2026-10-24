@@ -68,10 +68,13 @@ names are not prefixed), so it is best used on a page of its own or in an iframe
 | `trackerUrl`   | none: tracker pane hidden                                      | URL of an initiative tracker to embed in an iframe                                                                                                                                                                                           |
 | `resolveModel` | built-in cylinder tokens                                       | `async (modelId) => {id, name, src, baseColor, ...} \| null`, see "Tokens and models"                                                                                                                                                        |
 | `skybox`       | plain gradient sky                                             | `{day: {path, extension}, night: {...}}`: six face images `<assetBaseUrl>/<path>_<ft\|bk\|up\|dn\|rt\|lf><extension>` (`.tga` works too)                                                                                                     |
+| `wallTexture`  | plain grey walls                                               | `{src, tileSize?}`: a picture repeated on the walls, one tile per `tileSize` world units (default 2). `src` is relative to `assetBaseUrl` unless absolute or a `data:` URI                                                                   |
+| `demoRoom`     | the built-in two-room building                                 | Offline demo only: the room object to show instead (same shape as `src/demo.ts` returns: `name`, `dm`, `daylight`, `grid`, `clients`, `tokens`, `planes`, `doors`, `wallPoints`, `models`). It is copied, never changed                      |
 | `debug`        | `false`                                                        | Exposes `tabletop.debug.map`, the internal state object                                                                                                                                                                                      |
 
 `createTabletop` returns `{ destroy(), getSceneStats(), getTokenPosition(id), getTokenScreenPosition(id), debug }`.
-The last three exist mainly for tests.
+The last three exist mainly for tests. `getTokenScreenPosition` returns `null` for a token the previewed player cannot see
+(outside the vision of the selected token), so a page that draws its own name tags never shows one in the fog.
 
 Upload hooks receive a `FormData` (`file`, `name`, and for tokens the form fields) and return one of:
 `{ error: 'message' }`, `{ limit: { title, description } }` (shows a notice), or for tokens
@@ -197,6 +200,15 @@ Set up once with `npx playwright install chromium` (set `E2E_CHANNEL=chrome` to 
 instead). Headless Chromium has no GPU, so the test launches it with
 `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist`, which selects
 Chromium's bundled software WebGL.
+
+## Fog of war
+
+What a token cannot see is hidden by soft, animated fog (`src/fog.js`), not by a flat black box. The vision code is
+unchanged: it works out the polygon a token sees; the fog draws that polygon (blurred) and the shader shows deep,
+drifting fog over what was never seen (fully opaque for players), a thin dim veil over what was seen earlier in this visit (only in the host's translucent view: players see nothing outside what their token sees now) (kept in the browser
+only: the server's fog data is not touched or extended), nothing over what is visible, wisps that curl into the edge,
+and a 0.4 s fade whenever the view changes. The strength is the fog mesh's `material.opacity` (1 for players, 0.6 for the
+host's translucent view, 0 for the clear view). One transparent plane and a three-octave noise: it runs on software WebGL.
 
 ## Assets
 

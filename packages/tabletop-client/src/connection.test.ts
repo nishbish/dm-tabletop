@@ -746,4 +746,25 @@ describe('demo mode', () => {
     expect(s.calls.find((c) => c.kind === 'request' && c.name === 'getModels')).toBeTruthy();
     s.connection.send('update', 'updateTokenPosition', { tokenId: '1', x: 1, y: 0, z: 1 }); // ignored
   });
+
+  it('shows the room the host gives instead of the built-in one, without changing it', async () => {
+    const room = {
+      name: 'Mine',
+      dm: 'demo-user',
+      grid: { width: 10, height: 10 },
+      clients: { 'demo-user': { name: 'You', live: true, connections: [] } },
+      tokens: { '1': { modelId: 'default-red', position: { x: 1, y: 0, z: 1 }, owners: [] } },
+      planes: {},
+      doors: {},
+      wallPoints: {},
+      models: [],
+    };
+    const s = setup({ demo: true, demoRoom: room } as any);
+    await flush();
+    const joined = s.calls.find((c) => c.name === 'userJoined')!;
+    expect(joined.args.room.name).toBe('Mine');
+    expect(Object.keys(joined.args.room.tokens)).toEqual(['1']);
+    expect(joined.args.room.models.length).toBe(1);
+    expect(room.models).toEqual([]);
+  });
 });

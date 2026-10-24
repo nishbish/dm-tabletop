@@ -31,7 +31,55 @@ await tracker.ready; // the last session has been restored
 ```
 
 The widget injects one stylesheet (every class starts with `it-`, scoped under `.it-root`) and
-follows `prefers-color-scheme`. It fills the width of its container.
+follows `prefers-color-scheme` unless you set the theme variables (see Theming). It fills the width of its container.
+
+### Theming
+
+Every colour, the font, the corner cut, the shadow and the control height are CSS custom
+properties named `--it-*`. Set them on `:root`, on a wrapper element or on `.it-root`; anything
+you leave unset keeps the built-in value. The built-in set is a light and a dark palette
+(dark green rows on a cream panel, as on the first DM Tools tracker); the dark one follows `prefers-color-scheme`.
+The widget never reads variables of the host page, so mapping your own design tokens is one
+small rule:
+
+```css
+:root {
+  --it-bg: var(--my-card);
+  --it-fg: var(--my-text);
+  --it-accent: var(--my-brand);
+  --it-cut: 8px; /* chamfered corners, like the edge of a die */
+}
+```
+
+| Variable              | Light default                                              | Dark default                     | Used for                                                                           |
+| --------------------- | ---------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------- |
+| `--it-bg`             | `#f4f1e4`                                                  | `#0e2a24`                        | Background of the whole widget                                                     |
+| `--it-fg`             | `#16261f`                                                  | `#eef0e2`                        | Main text on the background                                                        |
+| `--it-muted`          | `#4d5b52`                                                  | `#b6c4b9`                        | Secondary text and labels                                                          |
+| `--it-border-strong`  | `#5f6f63`                                                  | `#8fae9f`                        | Borders of fields and buttons                                                      |
+| `--it-surface`        | `#e7e5d2`                                                  | `#17382f`                        | Buttons and raised parts                                                           |
+| `--it-input-bg`       | `#ffffff`                                                  | `#0a211c`                        | Fill of text fields                                                                |
+| `--it-rule`           | `#c9c9ad`                                                  | `#dbdbc7`                        | The panel behind the creature list: shows between the cells and under the headings |
+| `--it-head-bg`        | `#244e44`                                                  | `#2b5a4e`                        | Background of the column headings                                                  |
+| `--it-head-fg`        | `#f4f1e4`                                                  | same                             | Text of the column headings                                                        |
+| `--it-row-bg`         | `#244e44`                                                  | `#1c4137`                        | Fill of a creature row                                                             |
+| `--it-row-fg`         | `#f4f1e4`                                                  | `#eef0e2`                        | Text in a creature row                                                             |
+| `--it-active-bg`      | `#2f7a5e`                                                  | same                             | Fill of the row whose turn it is                                                   |
+| `--it-down-bg`        | `#7a3535`                                                  | `#773636`                        | Fill of a row whose creature is down (0 hit points)                                |
+| `--it-accent`         | `#1d6a4c`                                                  | `#9be3b4`                        | Primary buttons and markers                                                        |
+| `--it-accent-fg`      | `#ffffff`                                                  | `#07241a`                        | Text and icons on the accent colour                                                |
+| `--it-focus`          | `#a35200`                                                  | `#ffc566`                        | Keyboard focus ring                                                                |
+| `--it-danger`         | `#a4161a`                                                  | `#ff9a9d`                        | Clear and Delete buttons                                                           |
+| `--it-cut`            | `0px`                                                      | same                             | Size of the cut corners of buttons, fields and rows (0 = square corners)           |
+| `--it-font`           | `system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | same                             | Font family                                                                        |
+| `--it-weight`         | `500`                                                      | same                             | Normal font weight                                                                 |
+| `--it-weight-strong`  | `700`                                                      | same                             | Bold font weight (buttons, headings, the round number)                             |
+| `--it-shadow`         | `0 2px 10px rgba(0, 0, 0, 0.12)`                           | `0 2px 12px rgba(0, 0, 0, 0.45)` | Shadow of the suggestion list and of a row being dragged                           |
+| `--it-control-height` | `44px`                                                     | same                             | Minimum height of buttons and fields (touch target)                                |
+| `--it-pad`            | `14px`                                                     | same                             | Padding inside the widget                                                          |
+
+The same list is exported as `themeVariables` (name, defaults, description). Layout classes all
+start with `it-`; they are not a stable API, the variables are.
 
 ### Options
 
@@ -74,11 +122,12 @@ functions the UI uses (`sortByInitiative`, `nextTurn`, `resetRound`, `rollInitia
 
 - Press **Add creature**, type a name. Suggestions come from the creature list; picking one fills
   AC, HP and the initiative bonus. Any other name is fine, fill the numbers in by hand.
-- **Roll** rolls d20 + bonus for one row, **Roll all** for everyone, **Sort** orders by initiative
+- The d20 button in the initiative column rolls d20 + bonus for one row, **Roll all** for everyone, **Sort** orders by initiative
   (ties: higher bonus, then the order they were in). **Next** moves the turn on; after the last
   creature the round counter goes up. **Reset round** goes back to round 1.
 - In the HP field type a number to set it, or `-5` / `+3` to change it. Max HP is the next field.
-- Reorder by dragging the handle, or with the up/down buttons.
+- Reorder by dragging the handle (the row follows the pointer while the others slide aside), or
+  focus the handle and press the up and down arrow keys.
 - **Clear** and **Delete** ask for a second press.
 
 ### Storage
@@ -119,7 +168,7 @@ node packages/initiative-tracker/scripts/build-creatures.mjs path/to/SRD_CC_v5.1
 Every input has a label, every button an `aria-label`, and focus is always visible. The current
 turn is marked with the text "Turn" and a bar, not only a colour, and announced in a polite live
 region ("Round 2, turn: Goblin"); messages like "Saved" use another. Rows can be reordered with
-buttons as well as dragging, and the name field is an ARIA combobox (arrow keys, Enter, Escape).
+the arrow keys on their handle as well as dragging, and the name field is an ARIA combobox (arrow keys, Enter, Escape).
 
 ## Attribution
 

@@ -25,6 +25,8 @@ import { createConnection } from './connection';
 import { swatchUrl } from './models';
 import { createDemoRoom } from './demo';
 import { createSkyboxMaterials } from './skybox';
+import { createFog } from './fog';
+import { addWallUvs, createWallMaterial, wallTileSize } from './wall-texture';
 import { showToast, createBanner, escapeHtml, hasWebGL } from './ui';
 import * as walls from './walls';
 import { DOOR_SIZE, getDoorParts } from './doors.js';
@@ -46,6 +48,9 @@ function installIconFont() {
 		'.material-icons { font-family: "Material Icons"; font-weight: normal; font-style: normal; font-size: 24px; line-height: 1; letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap; word-wrap: normal; direction: ltr; -webkit-font-smoothing: antialiased; font-feature-settings: "liga"; }';
 	document.head.appendChild(style);
 }
+
+// How strong the fog is in the host's translucent view (players always see it at full strength).
+const DM_FOG_OPACITY = 0.6;
 
 export function createTabletop(container, userOptions) {
 const options = resolveOptions(userOptions);
@@ -1117,37 +1122,10 @@ function init() {
 
 	map.translateControls.token.addEventListener('translateend', map.translateControls.token.translateend, false);
 
-	//3d shape
-	map.mask = {};
-
-	var offset = -0.5;
-	map.mask.shape = new THREE.Shape();
-	map.mask.shape.moveTo(offset, offset);
-	map.mask.shape.lineTo(map.settings.gridWidth + offset, offset);
-	map.mask.shape.lineTo(map.settings.gridWidth + offset, map.settings.gridHeight + offset);
-	map.mask.shape.lineTo(offset, map.settings.gridHeight + offset);
-	map.mask.shape.lineTo(offset, offset);
-
-	map.mask.extrudeSettings = { depth: 2.02, bevelEnabled: false, bevelSegments: 2, steps: 2, bevelSize: 1, bevelThickness: 1 };
-
-	var geometry = new THREE.ExtrudeGeometry( map.mask.shape, map.mask.extrudeSettings );
-	var material = new THREE.MeshPhongMaterial({
-		side: THREE.DoubleSide,
-		color: 0x000000,
-		transparent: true,
-		opacity: 1
-	});
-
-	if (isDM) {
-		material.opacity = 0.3;
-	}
-
-	map.mask.mesh = new THREE.Mesh( geometry,  material);
-
-	map.mask.mesh.rotation.x = Math.PI * 0.5;
-	map.mask.mesh.rotation.z = Math.PI * 2;
-	map.mask.mesh.renderOrder = 100;
-	map.mask.mesh.position.y = 1.51;
+	//fog of war: a soft shader plane (fog.js); material.opacity is the strength, as it was for the box
+	map.mask = { fog: createFog(map.settings.gridWidth, map.settings.gridHeight) };
+	map.mask.mesh = map.mask.fog.mesh;
+	map.mask.mesh.material.opacity = isDM ? DM_FOG_OPACITY : 1;
 	map.scene.add(map.mask.mesh);
 
 	if (demo) {
@@ -1769,16 +1747,7 @@ function updateGridSize(local = true) {
 
 	//update mask size
 	if ('mask' in map) {
-		var offset = -0.5;
-		map.mask.shape = new THREE.Shape();
-		map.mask.shape.moveTo(offset, offset);
-		map.mask.shape.lineTo(map.settings.gridWidth + offset, offset);
-		map.mask.shape.lineTo(map.settings.gridWidth + offset, map.settings.gridHeight + offset);
-		map.mask.shape.lineTo(offset, map.settings.gridHeight + offset);
-		map.mask.shape.lineTo(offset, offset);
-
-		var geometry = new THREE.ExtrudeGeometry( map.mask.shape, map.mask.extrudeSettings );
-		map.mask.mesh.geometry = geometry;
+		map.mask.fog.setGrid(map.settings.gridWidth, map.settings.gridHeight);
 	}
 
 	if (local) {
@@ -2256,7 +2225,7 @@ function updateTokenVision() {
 
 	var firstPoint = false;
 
-	map.mask.hole = new THREE.Path();
+	var holePoints = [];
 
 	if (!isDM || (isDM && map.local.dmLight === 0)) {
 		for (const [tokenId, sToken] of Object.entries(map.objects.tokens)) {
@@ -2299,10 +2268,10 @@ function updateTokenVision() {
 					if (!firstPoint) {
 						firstPoint = true;
 
-						map.mask.hole.moveTo(targetPoint.x, targetPoint.z);
+						holePoints.push({ x: targetPoint.x, z: targetPoint.z });
 					}
 					else {
-						map.mask.hole.lineTo(targetPoint.x, targetPoint.z);
+						holePoints.push({ x: targetPoint.x, z: targetPoint.z });
 					}
 
 					validIntersect = true;
@@ -2328,10 +2297,10 @@ function updateTokenVision() {
 
 			if (!firstPoint) {
 				firstPoint = true;
-				map.mask.hole.moveTo(targetPoint.x, targetPoint.z);
+				holePoints.push({ x: targetPoint.x, z: targetPoint.z });
 			}
 			else {
-				map.mask.hole.lineTo(targetPoint.x, targetPoint.z);
+				holePoints.push({ x: targetPoint.x, z: targetPoint.z });
 			}
 		}
 
@@ -2342,11 +2311,7 @@ function updateTokenVision() {
 		}
 	}
 
-	map.mask.shape.holes = [ map.mask.hole ];
-	map.mask.mesh.geometry.dispose();		//rebuilt on every vision update: free the old one
-	map.mask.mesh.geometry = new THREE.ExtrudeGeometry( map.mask.shape, map.mask.extrudeSettings );
-
-	map.mask.mesh.needsUpdate = true;
+	map.mask.fog.setVision(holePoints);
 }
 
 function findParentToken(obj, depth = 3) {
@@ -2648,6 +2613,18 @@ function addWallGroup(wallPointGroupId = false) {
 	map.wallPointGroupActive = wallPointGroupId;
 }
 
+// One wall material for the whole map (a wall texture is then loaded once, not once per wall).
+var wallMaterial = null;
+
+function sharedWallMaterial() {
+	if (!wallMaterial) {
+		wallMaterial = createWallMaterial(options);
+		wallMaterial.userData.shared = true;
+	}
+
+	return wallMaterial;
+}
+
 function wallGroupPoints(wallGroup) {
 	var points = [];
 
@@ -2729,8 +2706,12 @@ function updateWallGroup(wallGroup, doors = null, joints = null) {
 		geometry.setIndex(new THREE.BufferAttribute(arrays.indices, 1));
 		wallGroup.cutKey = walls.doorCutKey(points, doors);
 
+		if (options.wallTexture) {
+			geometry = addWallUvs(geometry, wallTileSize(options));
+		}
+
 		if (!wallGroup.mesh) {
-			var mesh = new THREE.Mesh(geometry, getDoorParts().wallMaterial);
+			var mesh = new THREE.Mesh(geometry, sharedWallMaterial());
 			mesh.name = 'wall mesh';
 			wallGroup.mesh = mesh;
 			map.scene.add(mesh);
@@ -4739,7 +4720,7 @@ function buildGui() {
 				map.mask.mesh.material.opacity = 1;
 				break;
 			case 1:
-				map.mask.mesh.material.opacity = 0.3;
+				map.mask.mesh.material.opacity = DM_FOG_OPACITY;
 				break;
 			case 2:
 				map.mask.mesh.material.opacity = 0;
@@ -4934,13 +4915,11 @@ function resetRoom() {
 	}
 
 	//fog of war back to "nothing revealed"
-	map.mask.shape.holes = [];
-	map.mask.mesh.geometry.dispose();
-	map.mask.mesh.geometry = new THREE.ExtrudeGeometry( map.mask.shape, map.mask.extrudeSettings );
+	map.mask.fog.reset();
 
 	//the role is decided again by the state we are about to receive
 	isDM = demo ? true : false;
-	map.mask.mesh.material.opacity = isDM ? 0.3 : 1;
+	map.mask.mesh.material.opacity = isDM ? DM_FOG_OPACITY : 1;
 	map.local.dmLight = isDM ? 1 : 0;
 }
 
@@ -4959,7 +4938,7 @@ function buildRoom(room) {
 	if ('dm' in room) {
 		if (String(room.dm) === String(user_id)) {
 			isDM = true;
-			map.mask.mesh.material.opacity = 0.3;
+			map.mask.mesh.material.opacity = DM_FOG_OPACITY;
 		}
 	}
 
@@ -5493,7 +5472,7 @@ var updateClient = {
 			if (args.user_id == user_id) {
 				if (!isDM) {
 					isDM = true;
-					map.mask.mesh.material.opacity = 0.3;
+					map.mask.mesh.material.opacity = DM_FOG_OPACITY;
 					map.local.dmLight = 1;
 
 					for (const [tokenId, token] of Object.entries(map.objects.tokens)) {
@@ -6516,6 +6495,7 @@ function animate() {
 	}
 	
 	map.orbitControls.update();
+	map.mask.fog.update(performance.now());
 	
 	if (map.settings.lookAtCam) {
 		for (const [tokenId, token] of Object.entries(map.objects.tokens)) {
@@ -6616,6 +6596,11 @@ return {
 		map.selectionHelper.dispose();
 		resetRoom();
 		map.composer.dispose();
+		map.mask.fog.dispose();
+		if (wallMaterial) {
+			if (wallMaterial.map) { wallMaterial.map.dispose(); }
+			wallMaterial.dispose();
+		}
 		map.renderer.dispose();
 		root.remove();
 	},
@@ -6647,7 +6632,8 @@ return {
 	// Where a token's base is on screen, in page coordinates (used by tests to drag it).
 	getTokenScreenPosition: function(tokenId) {
 		var token = map.objects.tokens[tokenId];
-		if (!token) { return null; }
+		// a token the player cannot see (outside the vision of the selected token) has no position
+		if (!token || !token.visible) { return null; }
 
 		var point = new THREE.Vector3(token.position.x, token.position.y - 0.45, token.position.z).project(map.objects.camera);
 		var rect = map.canvas.getBoundingClientRect();

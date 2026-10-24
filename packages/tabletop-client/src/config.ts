@@ -49,6 +49,13 @@ export interface TabletopOptions {
     modelId: string,
   ) => ModelInfo | null | undefined | Promise<ModelInfo | null | undefined>;
   skybox?: SkyboxOptions;
+  // A picture for the walls (see wall-texture.js): `src` is relative to `assetBaseUrl` unless it is
+  // an absolute URL or data URI; one tile covers `tileSize` world units (default 2).
+  wallTexture?: { src: string; tileSize?: number };
+  // Offline demo only: the room to show instead of the built-in two-room building. Same shape as
+  // the object createDemoRoom() returns (see demo.ts): name, dm, daylight, grid, clients, tokens,
+  // planes, doors, wallPoints, models. It is copied, never modified.
+  demoRoom?: Record<string, unknown>;
   focus?: object;
   debug?: boolean;
   // Test hooks.

@@ -1,6 +1,6 @@
-// Look of doors and walls. Every door shares the same geometries, materials and texture, so a map
-// with fifty doors costs the GPU no more memory than a map with one. Shared objects are flagged
-// with userData.shared so disposeObject() leaves them alone.
+// Look of doors and of the map building previews. Every door shares the same geometries,
+// materials and texture, so a map with fifty doors costs the GPU no more memory than a map with one.
+// Shared objects are flagged with userData.shared so disposeObject() leaves them alone.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
@@ -131,7 +131,6 @@ export function getDoorParts() {
     frameMaterial: shared(new THREE.MeshLambertMaterial({ color: 0x7a746c })),
     panelMaterial: shared(new THREE.MeshLambertMaterial({ map: plankTexture() })),
     handleMaterial: shared(new THREE.MeshLambertMaterial({ color: 0x2a2a2c })),
-    wallMaterial: shared(new THREE.MeshPhongMaterial({ color: 0x868f8c })),
     // previews of what a click or drag will build
     ghostMaterial: shared(
       new THREE.MeshBasicMaterial({
