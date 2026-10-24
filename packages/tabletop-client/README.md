@@ -154,6 +154,7 @@ is what the "up" button goes back to.
 | `src/connection.ts`, `src/protocol.ts`                         | The transport adapter: v2 wire messages to and from the viewer's vocabulary; reconnect, throttle, ordering |
 | `src/config.ts`, `src/models.ts`, `src/demo.ts`                | Options and URL builders, token models and fallbacks, the offline demo room                                |
 | `src/ui.js`, `src/skybox.js`                                   | Toasts and banner, the sky                                                                                 |
+| `src/walls.ts`, `src/doors.js`                                 | Wall geometry, door openings and snapping, room/corridor outlines; the shared door and wall look           |
 | `src/TranslateControls.js` and the other controls              | The original drag, rotate, scale and hover helpers                                                         |
 | `src/context-menu.js`, `src/style.css`, `src/context-menu.css` | The original menu and styles                                                                               |
 
@@ -169,6 +170,20 @@ options, the room switch no longer reloads the page, and "Make DM" adds a host w
 To keep it comparable with the original, these files are excluded from Prettier (`.prettierignore`) and a
 package-local `eslint.config.mjs` turns off three rules for them only (`no-unused-vars`, `no-this-alias`,
 `no-unused-expressions`). All other rules, and all new code, are linted and formatted normally.
+
+## Building maps
+
+In wall mode the host gets a toolbar: **Walls** (click to place points; clicking the first point closes the
+room, clicking another wall's point joins it, right-click or Esc finishes), **Room** (drag out a closed
+rectangle on grid lines), **Corridor** (drag out two parallel walls, 2 squares apart) and **Undo**
+(Ctrl+Z / ⌘Z, for adds, moves, turns and door removals made in this session). Points of different walls on
+the same spot move together. In door mode a door dropped near a wall snaps into it, lined up and on a whole
+square, and the wall gets an opening; dragging a door slides it along the wall. A preview shows what a click
+or drag will build.
+
+Performance: each wall is one merged geometry (one draw call), rebuilt only when its own points or door
+openings change; a loading room builds its walls once at the end instead of once per point; all doors share
+one set of geometries, materials and texture; previews update at most once per frame.
 
 ## End-to-end test
 
@@ -186,5 +201,5 @@ Chromium's bundled software WebGL.
 ## Assets
 
 No images, textures, skyboxes, models or fonts ship with this package: the sky is a drawn gradient, walls are
-generated geometry, tokens without a picture are cylinders, the font is the system font stack. The only
+generated geometry, the door planks are drawn on a canvas, tokens without a picture are cylinders, the font is the system font stack. The only
 bundled file is the Material Icons font for the button icons (Apache-2.0). See `ASSETS.md` in the repo root.
