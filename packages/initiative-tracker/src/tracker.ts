@@ -106,26 +106,9 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   });
   const nameLabel = el(doc, 'label', { class: 'it-field' });
   nameLabel.append(el(doc, 'span', {}, 'Encounter name'), nameInput);
-  const roundNum = el(doc, 'strong', { class: 'it-round-num' });
-  const roundBox = el(doc, 'div', { class: 'it-round' });
-  roundBox.append(
-    el(doc, 'span', {}, 'Round'),
-    roundNum,
-    el(
-      doc,
-      'button',
-      { type: 'button', 'data-action': 'reset-round', 'aria-label': 'Reset round' },
-      'Reset round',
-    ),
-  );
   const header = el(doc, 'div', { class: 'it-header' });
-  header.append(nameLabel, roundBox);
+  header.append(nameLabel);
 
-  const toolbar = el(doc, 'div', {
-    class: 'it-toolbar',
-    role: 'group',
-    'aria-label': 'Encounter actions',
-  });
   const button = (action: string, label: string, text: string, cls = '') =>
     el(
       doc,
@@ -133,13 +116,6 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       { type: 'button', 'data-action': action, 'aria-label': label, class: cls },
       text,
     );
-  toolbar.append(
-    button('add', 'Add creature', 'Add creature', 'it-primary'),
-    button('roll-all', 'Roll all initiatives', 'Roll all'),
-    button('sort', 'Sort by initiative', 'Sort'),
-    button('next', 'Next turn', 'Next', 'it-primary'),
-    button('clear', 'Clear all creatures', 'Clear'),
-  );
 
   const turnLine = el(doc, 'p', {
     class: 'it-turn',
@@ -148,34 +124,69 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     'aria-atomic': 'true',
   });
 
-  const table = el(doc, 'table', { class: 'it-table' });
-  table.append(el(doc, 'caption', { class: 'it-sr' }, 'Creatures in turn order'));
-  const headRow = el(doc, 'tr');
-  [
-    ['', 'Reorder by dragging'],
-    ['Turn', ''],
-    ['Init', ''],
-    ['Bonus', ''],
-    ['Name', ''],
-    ['HP', ''],
-    ['Max HP', ''],
-    ['AC', ''],
-    ['Actions', ''],
-  ].forEach(([text, sr]) => {
-    const th = el(doc, 'th', { scope: 'col' }, text);
-    if (sr) th.append(el(doc, 'span', { class: 'it-sr' }, sr));
-    headRow.append(th);
+  // The creature list is a grid of divs with table roles (rows can then follow the pointer while
+  // they are dragged, which table rows do not do reliably).
+  const table = el(doc, 'div', {
+    class: 'it-table',
+    role: 'table',
+    'aria-label': 'Creatures in turn order',
   });
-  const thead = el(doc, 'thead');
-  thead.append(headRow);
-  const tbody = el(doc, 'tbody');
-  table.append(thead, tbody);
+  const head = el(doc, 'div', { class: 'it-head', role: 'row' });
+  [
+    ['grip', '', 'Reorder'],
+    ['init', 'Initiative', ''],
+    ['name', 'Name', ''],
+    ['hp', 'HP', ''],
+    ['ac', 'AC', ''],
+    ['remove', '', 'Remove'],
+  ].forEach(([cls, text, sr]) => {
+    const th = el(doc, 'div', { class: 'it-th it-c-' + cls, role: 'columnheader' }, text);
+    if (sr) th.append(el(doc, 'span', { class: 'it-sr' }, sr));
+    head.append(th);
+  });
+  const rowsEl = el(doc, 'div', { class: 'it-rows', role: 'rowgroup' });
+  table.append(head, rowsEl);
   const emptyNote = el(
     doc,
     'p',
     { class: 'it-empty' },
     'No creatures yet. Use "Add creature" to start.',
   );
+
+  // Under the list, as on the first tracker: Next, Sort and Clear on the left, the round and the
+  // big add button on the right.
+  const toolbar = el(doc, 'div', {
+    class: 'it-toolbar',
+    role: 'group',
+    'aria-label': 'Encounter actions',
+  });
+  const leftTools = el(doc, 'div', { class: 'it-tools-left' });
+  leftTools.append(
+    button('next', 'Next turn', 'Next', 'it-primary'),
+    button('sort', 'Sort by initiative', 'Sort'),
+    button('roll-all', 'Roll all initiatives', 'Roll all'),
+    button('clear', 'Clear all creatures', 'Clear', 'it-danger'),
+  );
+  const roundNum = el(doc, 'strong', { class: 'it-round-num' });
+  const roundBox = el(doc, 'div', { class: 'it-round' });
+  roundBox.append(
+    el(doc, 'span', {}, 'Round '),
+    roundNum,
+    el(
+      doc,
+      'button',
+      {
+        type: 'button',
+        'data-action': 'reset-round',
+        'aria-label': 'Reset round',
+        class: 'it-icon',
+      },
+      '\u21BB',
+    ),
+  );
+  const rightTools = el(doc, 'div', { class: 'it-tools-right' });
+  rightTools.append(roundBox, button('add', 'Add creature', '+', 'it-add'));
+  toolbar.append(leftTools, rightTools);
 
   const saveSelect = el(doc, 'select', { 'data-field': 'saved' });
   const storageBox = el(doc, 'div', {
@@ -194,7 +205,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   );
   const message = el(doc, 'p', { class: 'it-message', role: 'status', 'aria-live': 'polite' });
 
-  root.append(header, toolbar, turnLine, table, emptyNote);
+  root.append(header, turnLine, table, emptyNote, toolbar);
   if (storage) root.append(storageBox);
   root.append(message);
   container.appendChild(root);
@@ -211,10 +222,8 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       '[data-field="maxhp"]': 'Maximum hit points, ' + label,
       '[data-field="ac"]': 'Armor class, ' + label,
       '[data-action="roll"]': 'Roll initiative for ' + label,
-      '[data-action="up"]': 'Move ' + label + ' up',
-      '[data-action="down"]': 'Move ' + label + ' down',
+      '[data-grip]': 'Reorder ' + label + '. Drag, or press the up and down arrow keys',
       '[data-action="remove"]': 'Remove ' + label,
-      '.it-actions': 'Actions for ' + label,
     };
     Object.keys(names).forEach((sel) => {
       const node = tr.querySelector(sel);
@@ -222,7 +231,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     });
   }
   const rowEl = (id: string) =>
-    Array.from(tbody.children).find((tr) => (tr as HTMLElement).dataset.id === id) as
+    Array.from(rowsEl.children).find((tr) => (tr as HTMLElement).dataset.id === id) as
       HTMLElement | undefined;
   const say = (text: string) => {
     message.textContent = text;
@@ -240,55 +249,54 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   }
 
   // ---------- rendering ----------
+  function cellOf(cls: string, label: string) {
+    return el(doc, 'div', { class: 'it-td it-c-' + cls, role: 'cell', 'data-label': label });
+  }
   function inputCell(cls: string, label: string, attrs: Attrs, value: string | number) {
-    const td = el(doc, 'td', { class: 'it-c-' + cls, 'data-label': label });
+    const td = cellOf(cls, label);
     const input = el(doc, 'input', { autocomplete: 'off', ...attrs });
     input.value = String(value);
     td.append(input);
     return { td, input };
   }
 
-  function buildRow(row: TrackerRow, index: number): HTMLTableRowElement {
+  function buildRow(row: TrackerRow, index: number): HTMLElement {
     const label = labelOf(row, index);
-    const tr = el(doc, 'tr', { class: 'it-row', 'data-id': row.id });
+    const tr = el(doc, 'div', { class: 'it-row', role: 'row', 'data-id': row.id });
 
-    const gripCell = el(doc, 'td', { class: 'it-c-grip' });
+    const gripCell = cellOf('grip', '');
     gripCell.append(
       el(
         doc,
-        'span',
-        { class: 'it-grip', 'data-grip': 'true', title: 'Drag to reorder', 'aria-hidden': 'true' },
-        '⋮⋮',
+        'button',
+        { type: 'button', class: 'it-grip', 'data-grip': 'true', title: 'Drag to reorder' },
+        '\u22EE\u22EE',
       ),
     );
-    const turnCell = el(doc, 'td', { class: 'it-c-turn' });
-    turnCell.append(el(doc, 'span', { class: 'it-marker' }));
 
-    const init = inputCell(
-      'init',
-      'Init',
-      {
-        type: 'number',
-        class: 'it-num',
-        'data-field': 'initiative',
-        'aria-label': 'Initiative, ' + label,
-      },
-      row.initiative,
-    );
-    const bonus = inputCell(
-      'bonus',
-      'Bonus',
-      {
-        type: 'number',
-        class: 'it-num',
-        'data-field': 'bonus',
-        'aria-label': 'Initiative bonus, ' + label,
-      },
-      row.initiativeBonus,
-    );
+    // initiative: the d20 roll button sits in the cell, with the number and the bonus
+    const initCell = cellOf('init', 'Initiative');
+    const initInput = el(doc, 'input', {
+      type: 'number',
+      class: 'it-num it-init',
+      'data-field': 'initiative',
+      autocomplete: 'off',
+    });
+    initInput.value = String(row.initiative);
+    const mod = el(doc, 'label', { class: 'it-mod' });
+    const bonusInput = el(doc, 'input', {
+      type: 'number',
+      class: 'it-bonus',
+      'data-field': 'bonus',
+      autocomplete: 'off',
+    });
+    bonusInput.value = String(row.initiativeBonus);
+    mod.append(el(doc, 'span', { 'aria-hidden': 'true' }, '+'), bonusInput);
+    initCell.append(button('roll', 'Roll initiative for ' + label, '20', 'it-d20'), initInput, mod);
 
     const listId = `it-list-${instance}-${row.id}`;
-    const nameCell = el(doc, 'td', { class: 'it-c-name', 'data-label': 'Name' });
+    const nameCell = cellOf('name', 'Name');
+    nameCell.append(el(doc, 'span', { class: 'it-marker' }));
     const wrap = el(doc, 'div', { class: 'it-name-wrap' });
     const nameField = el(doc, 'input', {
       type: 'text',
@@ -306,63 +314,40 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     wrap.append(nameField);
     nameCell.append(wrap);
 
-    const hp = inputCell(
-      'hp',
-      'HP',
-      {
-        type: 'text',
-        class: 'it-hp',
-        'data-field': 'hp',
-        'aria-label': 'Hit points, ' + label + '. Type a number, or +3 / -5 to change it',
-        inputmode: 'text',
-      },
-      row.hp,
-    );
-    hp.td.append(el(doc, 'span', { class: 'it-down', hidden: true }, 'Down'));
-    const maxHp = inputCell(
-      'maxhp',
-      'Max HP',
-      {
-        type: 'number',
-        class: 'it-num',
-        'data-field': 'maxhp',
-        min: 0,
-        'aria-label': 'Maximum hit points, ' + label,
-      },
-      row.maxHp,
+    const hpCell = cellOf('hp', 'HP');
+    const hpInput = el(doc, 'input', {
+      type: 'text',
+      class: 'it-hp',
+      'data-field': 'hp',
+      inputmode: 'text',
+      autocomplete: 'off',
+    });
+    hpInput.value = String(row.hp);
+    const maxInput = el(doc, 'input', {
+      type: 'number',
+      class: 'it-maxhp',
+      'data-field': 'maxhp',
+      min: 0,
+      autocomplete: 'off',
+    });
+    maxInput.value = String(row.maxHp);
+    hpCell.append(
+      hpInput,
+      el(doc, 'span', { class: 'it-slash', 'aria-hidden': 'true' }, '/'),
+      maxInput,
+      el(doc, 'span', { class: 'it-down', hidden: true }, 'Down'),
     );
     const ac = inputCell(
       'ac',
       'AC',
-      {
-        type: 'number',
-        class: 'it-num',
-        'data-field': 'ac',
-        min: 0,
-        'aria-label': 'Armor class, ' + label,
-      },
+      { type: 'number', class: 'it-num', 'data-field': 'ac', min: 0 },
       row.ac,
     );
 
-    const actions = el(doc, 'td', { class: 'it-c-actions' });
-    const box = el(doc, 'div', {
-      class: 'it-actions',
-      role: 'group',
-      'aria-label': 'Actions for ' + label,
-    });
-    const up = button('up', 'Move ' + label + ' up', '▲');
-    const down = button('down', 'Move ' + label + ' down', '▼');
-    up.disabled = index === 0;
-    down.disabled = index === state.rows.length - 1;
-    box.append(
-      button('roll', 'Roll initiative for ' + label, 'Roll'),
-      up,
-      down,
-      button('remove', 'Remove ' + label, '✕'),
-    );
-    actions.append(box);
+    const removeCell = cellOf('remove', '');
+    removeCell.append(button('remove', 'Remove ' + label, '\u2715', 'it-x'));
 
-    tr.append(gripCell, turnCell, init.td, bonus.td, nameCell, hp.td, maxHp.td, ac.td, actions);
+    tr.append(gripCell, initCell, nameCell, hpCell, ac.td, removeCell);
     relabel(tr, row, index);
     return tr;
   }
@@ -397,14 +382,22 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   function renderTurn(announce: boolean) {
     roundNum.textContent = String(state.round);
     const active = state.rows[state.turn];
-    Array.from(tbody.children).forEach((node, i) => {
+    Array.from(rowsEl.children).forEach((node, i) => {
       const tr = node as HTMLElement;
       const isActive = !!active && i === state.turn;
       tr.classList.toggle('it-row--active', isActive);
       if (isActive) tr.setAttribute('aria-current', 'true');
       else tr.removeAttribute('aria-current');
       const marker = tr.querySelector('.it-marker');
-      if (marker) marker.textContent = isActive ? '▶ Turn' : '';
+      if (marker) {
+        marker.textContent = '';
+        if (isActive) {
+          marker.append(
+            el(doc, 'span', { 'aria-hidden': 'true' }, '\u25B6'),
+            el(doc, 'span', { class: 'it-sr' }, 'Turn'),
+          );
+        }
+      }
     });
     if (!active) {
       turnLine.textContent = '';
@@ -421,20 +414,22 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   function renderRows() {
     const focused = doc.activeElement as HTMLElement | null;
     let restore: { id: string; sel: string } | null = null;
-    if (focused && tbody.contains(focused)) {
-      const tr = focused.closest('tr') as HTMLElement | null;
+    if (focused && rowsEl.contains(focused)) {
+      const tr = focused.closest('.it-row') as HTMLElement | null;
       const sel = focused.dataset.action
         ? `[data-action="${focused.dataset.action}"]`
-        : focused.dataset.field
-          ? `[data-field="${focused.dataset.field}"]`
-          : '';
+        : focused.dataset.grip
+          ? '[data-grip]'
+          : focused.dataset.field
+            ? `[data-field="${focused.dataset.field}"]`
+            : '';
       if (tr && sel) restore = { id: tr.dataset.id, sel };
     }
     closeSuggest();
-    tbody.textContent = '';
+    rowsEl.textContent = '';
     state.rows.forEach((row, i) => {
       const tr = buildRow(row, i);
-      tbody.append(tr);
+      rowsEl.append(tr);
       refreshDown(tr, row);
     });
     emptyNote.hidden = state.rows.length > 0;
@@ -443,13 +438,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     renderTurn(false);
     if (restore) {
       const tr = rowEl(restore.id);
-      let target = tr && (tr.querySelector(restore.sel) as HTMLButtonElement | null);
-      if (target && target.disabled && tr) {
-        // The move button we were on has nowhere left to go; use its sibling.
-        target = tr.querySelector(
-          restore.sel === '[data-action="up"]' ? '[data-action="down"]' : '[data-action="up"]',
-        );
-      }
+      const target = tr && (tr.querySelector(restore.sel) as HTMLButtonElement | null);
       if (target && !target.disabled) target.focus();
     }
   }
@@ -665,7 +654,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
 
   // ---------- actions ----------
   function rowIdOf(node: Element): string | undefined {
-    const tr = node.closest('tr') as HTMLElement | null;
+    const tr = node.closest('.it-row') as HTMLElement | null;
     return tr ? tr.dataset.id : undefined;
   }
 
@@ -687,7 +676,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
         commit(addRow(state));
         renderRows();
         renderTurn(false);
-        const tr = tbody.children[before] as HTMLElement;
+        const tr = rowsEl.children[before] as HTMLElement;
         const field = tr && (tr.querySelector('[data-field="name"]') as HTMLInputElement);
         if (field) field.focus();
         break;
@@ -735,14 +724,6 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
           commit(removeRow(state, id));
           renderRows();
           (toolbar.querySelector('[data-action="add"]') as HTMLElement).focus();
-        }
-        break;
-      case 'up':
-      case 'down':
-        if (id) {
-          const from = state.rows.findIndex((r) => r.id === id);
-          commit(moveRowTo(state, id, from + (action === 'up' ? -1 : 1)));
-          renderRows();
         }
         break;
       case 'save':
@@ -804,6 +785,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   }
 
   function onKeydown(e: KeyboardEvent) {
+    if (onGripKey(e)) return;
     const input = e.target as HTMLInputElement;
     if (!suggest || input !== suggest.input) return;
     const n = suggest.items.length;
@@ -835,17 +817,31 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   }
 
   // ---------- drag to reorder (pointer events on the grip) ----------
-  let drag: { id: string; from: number; slot: number } | null = null;
+  // The row follows the pointer while the others slide out of its way, as on the first tracker.
+  // Nothing is committed until the pointer is released.
+  let drag: {
+    id: string;
+    from: number;
+    over: number;
+    startY: number;
+    pitch: number;
+    el: HTMLElement;
+    rows: HTMLElement[];
+    pointerId: number | undefined;
+  } | null = null;
 
-  function clearDropMarks() {
-    Array.from(tbody.children).forEach((tr) =>
-      tr.classList.remove('it-row--drop-before', 'it-row--drop-after', 'it-row--dragging'),
-    );
+  function resetDragStyles() {
+    Array.from(rowsEl.children).forEach((node) => {
+      const tr = node as HTMLElement;
+      tr.classList.remove('it-row--dragging', 'it-row--shifted', 'it-row--settling');
+      tr.style.removeProperty('transform');
+    });
+    rowsEl.classList.remove('it-rows--dragging');
   }
 
   function onPointerDown(e: PointerEvent) {
     const grip = (e.target as Element).closest('[data-grip]') as HTMLElement | null;
-    if (!grip || (e.button !== undefined && e.button > 0)) return;
+    if (!grip || (e.button !== undefined && e.button > 0) || drag) return;
     const id = rowIdOf(grip);
     if (!id) return;
     e.preventDefault();
@@ -856,43 +852,99 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
         // Capture is a nicety; dragging still works while the pointer stays over the page.
       }
     }
-    drag = { id, from: state.rows.findIndex((r) => r.id === id), slot: -1 };
-    rowEl(id).classList.add('it-row--dragging');
+    const rows = Array.from(rowsEl.children) as HTMLElement[];
+    const from = rows.findIndex((r) => r.dataset.id === id);
+    const rect = rows[from].getBoundingClientRect();
+    // distance from one row to the next (row height plus the gap), measured, not assumed
+    const next = rows[from + 1] || rows[from - 1];
+    const pitch = next
+      ? Math.abs(next.getBoundingClientRect().top - rect.top) || rect.height
+      : rect.height;
+    drag = {
+      id,
+      from,
+      over: from,
+      startY: e.clientY,
+      pitch,
+      el: rows[from],
+      rows,
+      pointerId: e.pointerId,
+    };
+    rows[from].classList.add('it-row--dragging');
+    rowsEl.classList.add('it-rows--dragging');
+    rows.forEach((r, i) => {
+      if (i !== from) r.classList.add('it-row--shifted');
+    });
   }
 
   function onPointerMove(e: PointerEvent) {
     if (!drag) return;
-    const rows = Array.from(tbody.children) as HTMLElement[];
-    let slot = rows.length;
-    for (let i = 0; i < rows.length; i++) {
-      const rect = rows[i].getBoundingClientRect();
-      if (e.clientY < rect.top + rect.height / 2) {
-        slot = i;
-        break;
-      }
+    const { from, rows, pitch, startY } = drag;
+    const dy = e.clientY - startY;
+    // keep the dragged row inside the list
+    const min = -from * pitch;
+    const max = (rows.length - 1 - from) * pitch;
+    const clamped = Math.max(min, Math.min(max, dy));
+    drag.el.style.transform = `translateY(${clamped}px)`;
+    const over = Math.max(0, Math.min(rows.length - 1, from + Math.round(clamped / pitch)));
+    drag.over = over;
+    rows.forEach((r, i) => {
+      if (i === from) return;
+      let shift = 0;
+      if (from < over && i > from && i <= over) shift = -pitch;
+      else if (from > over && i >= over && i < from) shift = pitch;
+      r.style.transform = shift ? `translateY(${shift}px)` : '';
+    });
+  }
+
+  function finishDrag(commitIt: boolean) {
+    if (!drag) return;
+    const { id, from, over, el: dragged, pitch, rows } = drag;
+    drag = null;
+    if (!commitIt || over === from) {
+      // slide back
+      dragged.classList.add('it-row--settling');
+      dragged.style.transform = '';
+      rows.forEach((r) => (r.style.transform = ''));
+      setTimeout(() => {
+        if (!destroyed) resetDragStyles();
+      }, 160);
+      return;
     }
-    drag.slot = slot;
-    rows.forEach((tr) => tr.classList.remove('it-row--drop-before', 'it-row--drop-after'));
-    if (slot < rows.length) rows[slot].classList.add('it-row--drop-before');
-    else rows[rows.length - 1].classList.add('it-row--drop-after');
+    // slide into the slot, then rebuild the list in the new order
+    dragged.classList.add('it-row--settling');
+    dragged.style.transform = `translateY(${(over - from) * pitch}px)`;
+    const finish = () => {
+      if (destroyed) return;
+      resetDragStyles();
+      commit(moveRowTo(state, id, over));
+      renderRows();
+    };
+    setTimeout(finish, 140);
   }
 
   function onPointerUp() {
-    if (!drag) return;
-    const { id, from, slot } = drag;
-    drag = null;
-    clearDropMarks();
-    if (slot < 0) return;
-    const to = slot > from ? slot - 1 : slot;
-    if (to !== from) {
-      commit(moveRowTo(state, id, to));
-      renderRows();
-    }
+    finishDrag(true);
   }
 
   function onPointerCancel() {
-    drag = null;
-    clearDropMarks();
+    finishDrag(false);
+  }
+
+  // The same, from the keyboard: arrow keys on the grip move the row one place.
+  function onGripKey(e: KeyboardEvent) {
+    const grip = (e.target as Element).closest('[data-grip]') as HTMLElement | null;
+    if (!grip || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return false;
+    const id = rowIdOf(grip);
+    if (!id) return false;
+    e.preventDefault();
+    const from = state.rows.findIndex((r) => r.id === id);
+    const to = from + (e.key === 'ArrowUp' ? -1 : 1);
+    if (to < 0 || to >= state.rows.length) return true;
+    commit(moveRowTo(state, id, to));
+    renderRows();
+    say(`${labelOf(state.rows[to], to)} moved to place ${to + 1} of ${state.rows.length}`);
+    return true;
   }
 
   const listeners: Array<[string, EventListener]> = [
