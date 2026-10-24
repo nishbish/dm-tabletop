@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { css, themeVariables } from './styles';
 
 describe('theme variables', () => {
   it('are all documented in the README', () => {
-    const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+    const readme = readFileSync(resolve(__dirname, '../README.md'), 'utf8');
     for (const v of themeVariables) expect(readme).toContain('`--it-' + v.name + '`');
   });
 
