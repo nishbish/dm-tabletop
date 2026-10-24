@@ -185,6 +185,15 @@ instead). Headless Chromium has no GPU, so the test launches it with
 `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist`, which selects
 Chromium's bundled software WebGL.
 
+## Fog of war
+
+What a token cannot see is hidden by soft, animated fog (`src/fog.js`), not by a flat black box. The vision code is
+unchanged: it works out the polygon a token sees; the fog draws that polygon (blurred) and the shader shows deep,
+drifting fog over what was never seen, a thin dim veil over what was seen earlier in this visit (kept in the browser
+only: the server's fog data is not touched or extended), nothing over what is visible, wisps that curl into the edge,
+and a 0.4 s fade whenever the view changes. The strength is the fog mesh's `material.opacity` (1 for players, 0.6 for the
+host's translucent view, 0 for the clear view). One transparent plane and a three-octave noise: it runs on software WebGL.
+
 ## Assets
 
 No images, textures, skyboxes, models or fonts ship with this package: the sky is a drawn gradient, walls are
