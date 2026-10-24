@@ -73,7 +73,8 @@ names are not prefixed), so it is best used on a page of its own or in an iframe
 | `debug`        | `false`                                                        | Exposes `tabletop.debug.map`, the internal state object                                                                                                                                                                                      |
 
 `createTabletop` returns `{ destroy(), getSceneStats(), getTokenPosition(id), getTokenScreenPosition(id), debug }`.
-The last three exist mainly for tests.
+The last three exist mainly for tests. `getTokenScreenPosition` returns `null` for a token the previewed player cannot see
+(outside the vision of the selected token), so a page that draws its own name tags never shows one in the fog.
 
 Upload hooks receive a `FormData` (`file`, `name`, and for tokens the form fields) and return one of:
 `{ error: 'message' }`, `{ limit: { title, description } }` (shows a notice), or for tokens

@@ -6080,7 +6080,8 @@ return {
 	// Where a token's base is on screen, in page coordinates (used by tests to drag it).
 	getTokenScreenPosition: function(tokenId) {
 		var token = map.objects.tokens[tokenId];
-		if (!token) { return null; }
+		// a token the player cannot see (outside the vision of the selected token) has no position
+		if (!token || !token.visible) { return null; }
 
 		var point = new THREE.Vector3(token.position.x, token.position.y - 0.45, token.position.z).project(map.objects.camera);
 		var rect = map.canvas.getBoundingClientRect();
