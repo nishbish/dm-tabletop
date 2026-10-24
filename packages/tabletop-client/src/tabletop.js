@@ -3248,6 +3248,8 @@ function syncBuildMode() {
 	var toolbar = buildToolbar();
 	var building = isBuildMode();
 	toolbar.style.display = building ? 'flex' : 'none';
+	//lets the host page get its own overlays out of the toolbar's way
+	root.classList.toggle('dmt-building', building);
 
 	if (!building) {
 		map.wallDrag = null;
