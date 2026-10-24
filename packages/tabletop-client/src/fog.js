@@ -8,10 +8,11 @@
 //   the one before  the previous polygon, so the change fades over about 0.4 s
 //   explored      everything that was ever visible in this browser (never sent anywhere: the
 //                 server's fog data is untouched)
-// The shader draws deep, drifting fog over what was never seen, a thinner, dimmer veil over what
-// was seen before but is out of sight now, and nothing over what is visible. Wisps of noise drift
-// across the fog and curl into the edge of the vision, so the edge is never a hard outline.
-// `material.opacity` still sets how strong the fog is (1 for players, 0.3 for the host's
+// The shader draws deep, drifting fog over what was never seen (fully opaque at full strength, so
+// unrevealed walls never show through), a thinner, dimmer veil over what was seen before but is
+// out of sight now, and nothing over what is visible. Wisps of noise drift across the fog and
+// curl into the edge of the vision, so the edge is never a hard outline.
+// `material.opacity` still sets how strong the fog is (1 for players, 0.6 for the host's
 // translucent view, 0 for the clear view); the rest of the viewer keeps changing it as before.
 
 import * as THREE from 'three';
@@ -79,9 +80,10 @@ var fragmentShader = [
   '	float v = clamp(visible + (wisp - 0.5) * 0.9 * edge, 0.0, 1.0);',
   '	float clear = smoothstep(0.08, 0.92, v);',
   '	// deep fog over the never-seen, a thin dim veil over what was seen before',
-  '	float density = mix(0.97, 0.52, explored);',
+  '	// (the never-seen fog is solid: the wisps only change its colour, never let the map through)',
+  '	float density = mix(1.0, 0.52, explored);',
   '	float alpha = density * (1.0 - clear);',
-  '	alpha *= 0.9 + 0.1 * smoothstep(0.25, 0.75, wisp);',
+  '	alpha *= mix(1.0, 0.9 + 0.1 * smoothstep(0.25, 0.75, wisp), explored);',
   '	vec3 deep = vec3(0.030, 0.043, 0.067);',
   '	vec3 pale = vec3(0.19, 0.24, 0.31);',
   '	vec3 col = mix(deep, pale, smoothstep(0.35, 0.8, wisp) * mix(0.8, 0.35, explored));',
