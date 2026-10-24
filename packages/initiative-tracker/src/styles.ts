@@ -140,7 +140,7 @@ export const css: string = `
 }
 .it-root input, .it-root select {
   font: inherit; color: var(--_fg); background: var(--_input-bg); min-width: 0;
-  border: 1px solid var(--_border-strong); padding: 6px 10px; min-height: var(--_control-height);
+  border: 1px solid var(--_border-strong); border-radius: 0; padding: 6px 10px; min-height: var(--_control-height);
   clip-path: ${CUT};
 }
 
@@ -149,7 +149,7 @@ export const css: string = `
   --edge: var(--_border-strong); --fill: var(--_surface); --ink: var(--_fg);
   position: relative; isolation: isolate; margin: 0; padding: 6px 18px; min-height: var(--_control-height);
   font: inherit; font-weight: var(--_weight-strong); letter-spacing: 0.01em; color: var(--ink);
-  background: var(--edge); border: 0; cursor: pointer; clip-path: ${CUT};
+  background: var(--edge); border: 0; border-radius: 0; cursor: pointer; clip-path: ${CUT};
 }
 .it-root button::before {
   content: ''; position: absolute; inset: 2px; z-index: -1; background: var(--fill); clip-path: ${CUT_INNER};
