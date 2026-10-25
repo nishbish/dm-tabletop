@@ -1812,9 +1812,18 @@ function createGrid(width, height, squareSize, color) {
 	return gridObject;
 }
 
-var clickTimer;
+// A press counts as a click when it is released within CLICK_MS, and a second press within
+// CLICK_MS of the first is a double-click (a ping). Both are measured with the events' own
+// timestamps (when the input happened), not with a timer: on a slow machine a heavy frame can
+// delay the handlers past a timer and a normal click was then thrown away.
+var CLICK_MS = 200;
+var lastPointerDown = -Infinity;
 var contextTimer;
 var clickValid = false;
+
+function eventTime(event) {
+	return typeof event.timeStamp === 'number' && event.timeStamp > 0 ? event.timeStamp : performance.now();
+}
 var sceneTouchDown = {
 	x: 0,
 	y: 0
@@ -1854,7 +1863,11 @@ function canvasCheck(event) {
 		}
 	}, 0);
 
-	if (clickValid && event.which == 1 && pointerCount < 2) { 	//double click
+	var downAt = eventTime(event);
+	var doubleClick = downAt - lastPointerDown < CLICK_MS;
+	lastPointerDown = downAt;
+
+	if (doubleClick && event.which == 1 && pointerCount < 2) { 	//double click
 		if (user_id in map.users) {
 			var color = map.users[user_id].color;
 		}
@@ -1865,11 +1878,7 @@ function canvasCheck(event) {
 		map.ping(event, '0x' + color);
 	}
 	
-	clearTimeout(clickTimer);
 	clickValid = true;
-	clickTimer = setTimeout(function() {
-		clickValid = false;
-	}, 200);
 	
 	clearTimeout(contextTimer);
 
@@ -1955,7 +1964,8 @@ function canvasClick(event) {
 	}
 
 	clearTimeout(contextTimer);
-	if (!clickValid) { return false; }
+	// released too late: a long press or a drag, not a click
+	if (!clickValid || eventTime(event) - lastPointerDown >= CLICK_MS) { return false; }
 	
 	if (event.which < 2) {
 		checkSceneClick(event, 'left');
