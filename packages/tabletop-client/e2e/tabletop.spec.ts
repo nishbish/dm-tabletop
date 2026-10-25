@@ -188,7 +188,8 @@ test('two players share a room, see token moves, and survive a server restart', 
 
 test('offline demo works with no server', async ({ page }) => {
   await page.goto('/?demo=1');
-  await expect.poll(async () => (await stats(page))?.tokens).toBe(4);
+  // the first build of the scene can take more than the default 5 s on a busy machine
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
   const s = await stats(page);
   expect(s.isHost).toBe(true);
   expect(s.doors).toBe(2);

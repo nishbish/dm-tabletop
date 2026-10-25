@@ -65,7 +65,9 @@ names are not prefixed), so it is best used on a page of its own or in an iframe
 | `uploadModel`  | none: upload UI hidden                                         | `async (formData) => result` called when the host uploads a token image (see below)                                                                                                                                                                                                                                                                                                          |
 | `uploadPlane`  | none: upload UI hidden                                         | same for map images                                                                                                                                                                                                                                                                                                                                                                          |
 | `inviteLink`   | none: invite button hidden                                     | `(code) => url`; the host app provides the code (see "Host-app extension points")                                                                                                                                                                                                                                                                                                            |
-| `trackerUrl`   | none: tracker pane hidden                                      | URL of an initiative tracker to embed in an iframe                                                                                                                                                                                                                                                                                                                                           |
+| `trackerUrl`   | none: tracker button hidden                                    | URL of an initiative tracker page, shown in a frame in the side drawer                                                                                                                                                                                                                                                                                                                       |
+| `mountTracker` | none                                                           | `(element) => void`: draws a tracker (or anything) into the side drawer the first time it opens; wins over `trackerUrl`                                                                                                                                                                                                                                                                      |
+| `buttons`      | none                                                           | Extra side buttons: `[{name, title, icon, help?, hostOnly?, onClick}]`. `icon` is a Material Icons name, `help` the line in the tooltip and Help                                                                                                                                                                                                                                             |
 | `resolveModel` | built-in cylinder tokens                                       | `async (modelId) => {id, name, src, baseColor, ...} \| null`, see "Tokens and models"                                                                                                                                                                                                                                                                                                        |
 | `skybox`       | plain gradient sky                                             | `{day: {path, extension}, night: {...}}`: six face images `<assetBaseUrl>/<path>_<ft\|bk\|up\|dn\|rt\|lf><extension>` (`.tga` works too)                                                                                                                                                                                                                                                     |
 | `wallTexture`  | plain grey walls                                               | `{src, tileSize?}`: a picture repeated on the walls, one tile per `tileSize` world units (default 2). `src` is relative to `assetBaseUrl` unless absolute or a `data:` URI                                                                                                                                                                                                                   |
@@ -176,15 +178,34 @@ To keep it comparable with the original, these files are excluded from Prettier 
 package-local `eslint.config.mjs` turns off three rules for them only (`no-unused-vars`, `no-this-alias`,
 `no-unused-expressions`). All other rules, and all new code, are linted and formatted normally.
 
+## Theming
+
+Colours, fonts and the corner cut come from CSS variables a page may set anywhere above the viewer (on
+`:root` is simplest, because the player menu is attached to `<body>`). Unset ones keep the built-in look:
+dark green bars, cream text, gold for what is switched on, cut corners and hexagon buttons.
+`--dmt-font`, `--dmt-font-display`, `--dmt-surface`, `--dmt-surface-raised`, `--dmt-surface-sunken`,
+`--dmt-text`, `--dmt-text-muted`, `--dmt-heading`, `--dmt-border`, `--dmt-border-strong`, `--dmt-bar`,
+`--dmt-bar-raised`, `--dmt-bar-edge`, `--dmt-on-bar`, `--dmt-on-bar-muted`, `--dmt-accent`, `--dmt-on-accent`,
+`--dmt-gold`, `--dmt-on-gold`, `--dmt-danger`, `--dmt-focus`, `--dmt-cut`, `--dmt-shadow`. Panes, menus, the
+lighting panel and the drawer use the surface colours; the side buttons, the Edit Map bar and the token
+portraits use the bar colours.
+
+The side buttons: **Menu** (Help, Settings, Rooms, Invite Link), and for the host **Edit Map**, **Lighting**
+(daylight, moonlight, how much fog the host sees), **Initiative Tracker** (a drawer on the right), any
+`buttons` from the options, and **Focus Players**. Each shows its name and what it does on hover or keyboard
+focus, and for a moment after a tap. Box select is Shift + drag; a token is raised or lowered with a right
+drag or with **Raise or Lower** in its menu.
+
 ## Building maps
 
-In wall mode the host gets a toolbar: **Walls** (click to place points; clicking the first point closes the
+**Edit Map** opens a bar at the top: what to edit (**Walls**, **Doors**, **Images**), **Done**, and for walls
+a second row of tools: **Line** (click to place points; clicking the first point closes the
 room, clicking another wall's point joins it, right-click or Esc finishes), **Room** (drag out a closed
 rectangle on grid lines), **Corridor** (drag out two parallel walls, 2 squares apart) and **Undo**
 (Ctrl+Z / ⌘Z, for adds, moves, turns and door removals made in this session). Points of different walls on
 the same spot move together. In door mode a door dropped near a wall snaps into it, lined up and on a whole
 square, and the wall gets an opening; dragging a door slides it along the wall. A preview shows what a click
-or drag will build. While wall or door mode is on, the viewer's root element has the class `dmt-building`, so
+or drag will build. While the bar is open, the viewer's root element has the class `dmt-building`, so
 a host page can move or hide its own overlays (the toolbar sits at the top middle).
 
 Performance: each wall is one merged geometry (one draw call), rebuilt only when its own points or door

@@ -237,6 +237,7 @@ map.menus.defaultPlaneImage = new ContextMenu( {
 var tokenMenuItems = [
 	{'icon': 'person_add', 'name': 'Enlarge',  action: (e) => resizeToken(e, 1)  },
 	{'icon': 'person_remove', 'name': 'Shrink',  action: (e) => resizeToken(e, -1)  },
+	{'icon': 'height', 'name': 'Raise or Lower',  action: (e) => startVerticalMove()  },
 ];
 if (options.uploadModel) {
 	tokenMenuItems.push({'icon': 'edit', 'name': 'Edit',  action: (e) => editModel(e)  });
@@ -424,9 +425,7 @@ function init() {
 	  if (e.shiftKey) {
 	  	shiftPressed = true;
 
-			if (!map.selectModeActive && map.sideButtons.selectMode) {
-				map.sideButtons.selectMode.element.click();
-			}
+			setSelectMode(true);
 	  }
 	});
 
@@ -440,9 +439,7 @@ function init() {
     if (char == 16) {
     	shiftPressed = false;
 
-			if (map.selectModeActive && map.sideButtons.selectMode) {
-				map.sideButtons.selectMode.element.click();
-			}
+			setSelectMode(false);
     }
 	});
 
@@ -1108,7 +1105,7 @@ function init() {
 	map.translateControls.token.translateend = function (e) {
 		if (map.toggleMode == 'token') {
 			if (map.local.verticalTranslate) {
-				map.sideButtons.translateMode.element.click();
+				stopVerticalMove();
 			}
 
 			map.orbitControls.enablePan = true;
@@ -1967,7 +1964,7 @@ function canvasClick(event) {
 			0.5
 		);
 
-		map.sideButtons.selectMode.element.click(); 	//turn off select once done
+		setSelectMode(false); 	//turn off select once done
 		handleSelectionBox();
 		return;
 	}
@@ -3277,8 +3274,17 @@ var BUILD_HINTS = {
 	points: 'Click to place wall points. Click the first point to close a room. Right-click or Esc to finish a wall.',
 	room: 'Drag on the floor to draw a room. Right-drag turns the camera, arrow keys move it.',
 	corridor: 'Drag on the floor to draw a corridor ' + CORRIDOR_WIDTH + ' squares wide. Right-drag turns the camera.',
-	door: 'Click a wall to put a door in it, or drag a door along a wall. Click a door to turn it.'
+	door: 'Click a wall to put a door in it, or drag a door along a wall. Click a door to turn it.',
+	plane: 'Click a map image to move, turn or resize it (hold Ctrl to do it freely). Right-click the floor to add one.',
+	wallPoint: 'Draw walls point by point, or drag out whole rooms and corridors.'
 };
+
+// What the Edit Map bar can edit. data-button keeps the old side-button names.
+var EDIT_TABS = [
+	{ mode: 'wallPoint', button: 'wallMode', icon: 'view_carousel', label: 'Walls', hint: 'wallPoint' },
+	{ mode: 'door', button: 'doorMode', icon: 'door_front', label: 'Doors', hint: 'door' },
+	{ mode: 'plane', button: 'planeMode', icon: 'image', label: 'Images', hint: 'plane' }
+];
 
 function buildToolbar() {
 	var toolbar = byId('build-toolbar');
@@ -3287,12 +3293,21 @@ function buildToolbar() {
 	toolbar = document.createElement('div');
 	toolbar.id = 'build-toolbar';
 	toolbar.className = 'noselect';
+	toolbar.style.display = 'none';
 	toolbar.innerHTML =
 		'<div class="build-tools">' +
-			'<button type="button" data-tool="points" title="Draw walls point by point"><span class="material-icons">timeline</span><span>Walls</span></button>' +
-			'<button type="button" data-tool="room" title="Drag out a closed room"><span class="material-icons">crop_square</span><span>Room</span></button>' +
-			'<button type="button" data-tool="corridor" title="Drag out a corridor"><span class="material-icons">drag_handle</span><span>Corridor</span></button>' +
-			'<button type="button" data-action="undo" title="Undo (Ctrl+Z / ⌘Z)"><span class="material-icons">undo</span><span>Undo</span></button>' +
+			'<div class="build-group build-modes" role="group" aria-label="What to edit">' +
+				EDIT_TABS.map(function(tab) {
+					return '<button type="button" data-mode="' + tab.mode + '" data-button="' + tab.button + '"><span class="material-icons" aria-hidden="true">' + tab.icon + '</span><span>' + tab.label + '</span></button>';
+				}).join('') +
+			'</div>' +
+			'<div class="build-group build-wall-tools" role="group" aria-label="Wall tools">' +
+				'<button type="button" data-tool="points" title="Draw walls point by point"><span class="material-icons" aria-hidden="true">timeline</span><span>Line</span></button>' +
+				'<button type="button" data-tool="room" title="Drag out a closed room"><span class="material-icons" aria-hidden="true">crop_square</span><span>Room</span></button>' +
+				'<button type="button" data-tool="corridor" title="Drag out a corridor"><span class="material-icons" aria-hidden="true">drag_handle</span><span>Corridor</span></button>' +
+				'<button type="button" data-action="undo" title="Undo (Ctrl+Z / ⌘Z)"><span class="material-icons" aria-hidden="true">undo</span><span>Undo</span></button>' +
+			'</div>' +
+			'<button type="button" class="build-done" data-button="editDone" title="Stop editing the map"><span class="material-icons" aria-hidden="true">check</span><span>Done</span></button>' +
 		'</div>' +
 		'<div class="build-hint"></div>';
 	root.appendChild(toolbar);
@@ -3304,6 +3319,12 @@ function buildToolbar() {
 		if (button.dataset.action == 'undo') {
 			undo();
 		}
+		else if (button.dataset.mode) {
+			setEditMode(button.dataset.mode);
+		}
+		else if (button.dataset.button == 'editDone') {
+			setEditMode('token');
+		}
 		else if (button.dataset.tool) {
 			finishWall();
 			map.wallTool = button.dataset.tool;
@@ -3314,6 +3335,61 @@ function buildToolbar() {
 	return toolbar;
 }
 
+// Switches between moving tokens ('token') and editing walls, doors or map images.
+function setEditMode(mode) {
+	var old = map.toggleMode;
+	if (old == mode) { return; }
+
+	if (old == 'door') {
+		map.translateControls.door.enabled = false;
+		map.rotationControls.door.enabled = false;
+		map.rotationControls.door.detach();
+	}
+	else if (old == 'wallPoint') {
+		map.translateControls.wallPoint.enabled = false;
+	}
+	else if (old == 'plane') {
+		map.rotationControls.plane.enabled = false;
+		map.translateControls.plane.enabled = false;
+		map.scaleControls.plane.enabled = false;
+		map.rotationControls.plane.detach();
+		map.scaleControls.plane.detach();
+	}
+
+	map.toggleMode = mode;
+	map.translateControls.token.enabled = mode == 'token';
+
+	if (mode == 'door') {
+		map.translateControls.door.enabled = true;
+		map.rotationControls.door.enabled = true;
+	}
+	else if (mode == 'wallPoint') {
+		map.translateControls.wallPoint.enabled = true;
+		addWallGroup();
+	}
+	else if (mode == 'plane') {
+		map.rotationControls.plane.enabled = true;
+		map.translateControls.plane.enabled = true;
+		map.scaleControls.plane.enabled = true;
+	}
+
+	if (mode != 'token') {
+		map.local.lastEditMode = mode;
+	}
+
+	//wall points only show while editing walls
+	if (old == 'wallPoint' || mode == 'wallPoint') {
+		for (const [wallPointGroupId, wallPointGroup] of Object.entries(map.wallPointGroups)) {
+			for (const [wallPointId, wallPoint] of Object.entries(wallPointGroup.points)) {
+				wallPoint.visible = mode == 'wallPoint';
+			}
+		}
+	}
+
+	clearGroupSelection();
+	syncBuildMode();
+}
+
 // Brings the toolbar, camera buttons and previews in line with the current mode and tool.
 function syncBuildMode() {
 	var dragTool = isDM && map.toggleMode == 'wallPoint' && map.wallTool != 'points';
@@ -3321,24 +3397,36 @@ function syncBuildMode() {
 	map.orbitControls.touches.ONE = dragTool ? null : THREE.TOUCH.PAN;
 
 	var toolbar = buildToolbar();
-	var building = isBuildMode();
-	toolbar.style.display = building ? 'flex' : 'none';
+	var editing = isDM && map.toggleMode != 'token';
+	toolbar.style.display = editing ? 'flex' : 'none';
 	//lets the host page get its own overlays out of the toolbar's way
-	root.classList.toggle('dmt-building', building);
+	root.classList.toggle('dmt-building', editing);
 
-	if (!building) {
+	if (map.sideButtons.editMap) {
+		map.sideButtons.editMap.element.classList.toggle('active', editing);
+	}
+
+	if (!isBuildMode()) {
 		map.wallDrag = null;
 		ghostPointer = null;
 	}
-	else {
+
+	if (editing) {
 		var walling = map.toggleMode == 'wallPoint';
 
+		for (const button of toolbar.querySelectorAll('[data-mode]')) {
+			var current = button.dataset.mode == map.toggleMode;
+			button.classList.toggle('active', current);
+			button.setAttribute('aria-pressed', current ? 'true' : 'false');
+		}
+
+		toolbar.querySelector('.build-wall-tools').style.display = walling ? '' : 'none';
+
 		for (const button of toolbar.querySelectorAll('[data-tool]')) {
-			button.style.display = walling ? '' : 'none';
 			button.classList.toggle('active', walling && button.dataset.tool == map.wallTool);
 		}
 
-		toolbar.querySelector('.build-hint').textContent = BUILD_HINTS[walling ? map.wallTool : 'door'];
+		toolbar.querySelector('.build-hint').textContent = BUILD_HINTS[walling ? map.wallTool : map.toggleMode];
 	}
 
 	buildGhosts();
@@ -3993,22 +4081,64 @@ function buildPaneItem(pane, text, type, value = false, dmOnly = false, name = '
 	return item;
 }
 
+// One shared tooltip for the side buttons (a tooltip inside each button would be cut off by the
+// scrolling button column).
+var sideTip = null;
+var sideTipTimer = null;
+
+function showSideTip(element, title, text, autoHide, placement = 'left') {
+	if (!sideTip) {
+		sideTip = document.createElement('div');
+		sideTip.id = 'dmt-tip';
+		sideTip.setAttribute('role', 'tooltip');
+		root.appendChild(sideTip);
+	}
+
+	sideTip.innerHTML = '<b>' + escapeHtml(title) + '</b>' + (text ? '<span>' + escapeHtml(text) + '</span>' : '');
+
+	var r = element.getBoundingClientRect();
+	var rr = root.getBoundingClientRect();
+	sideTip.classList.toggle('dmt-tip-top', placement == 'top');
+
+	if (placement == 'top') {
+		sideTip.style.right = '';
+		sideTip.style.left = Math.round(Math.max(8, r.left - rr.left + r.width / 2)) + 'px';
+		sideTip.style.top = Math.round(r.top - rr.top - 8) + 'px';
+	}
+	else {
+		sideTip.style.left = '';
+		sideTip.style.top = Math.round(r.top - rr.top + r.height / 2) + 'px';
+		sideTip.style.right = Math.round(rr.right - r.left + 8) + 'px';
+	}
+
+	sideTip.classList.add('show');
+
+	clearTimeout(sideTipTimer);
+	if (autoHide) { sideTipTimer = setTimeout(hideSideTip, autoHide); }
+}
+
+function hideSideTip() {
+	if (sideTip) { sideTip.classList.remove('show'); }
+}
+
 function buildSideButton(name, title, icon, dmOnly = false, helpText = false, inDemo = true) {
 	var sideButton = { 
-		element: document.createElement('div'),
+		element: document.createElement('button'),
 		title: title,
 		icon: icon,
 		dmOnly: dmOnly,
-		helpText: helpText
+		helpText: helpText,
+		inDemo: inDemo
 	}
 
-	sideButton.element.className = 'side-button button button-3d button-plain button-circle button-jumbo noselect';
-	sideButton.element.style.display = !dmOnly || (dmOnly && isDM) ? 'block' : 'none';
+	sideButton.element.type = 'button';
+	sideButton.element.className = 'side-button noselect';
+	sideButton.element.style.display = !dmOnly || (dmOnly && isDM) ? '' : 'none';
 	sideButton.element.setAttribute('data-button', name);
-	sideButton.element.title = title;
+	sideButton.element.setAttribute('aria-label', title);
 	
 	if (demo) {
-		sideButton.element.style.display = inDemo ? 'block' : 'none';
+		sideButton.element.style.display = inDemo ? '' : 'none';
 	}
 	
 	var sideButtonContainer = byId('side-button-container');
@@ -4016,14 +4146,280 @@ function buildSideButton(name, title, icon, dmOnly = false, helpText = false, in
 		sideButtonContainer.appendChild(sideButton.element);
 	}
 
+	var hex = document.createElement('span');
+	hex.className = 'side-button-hex';
+	sideButton.element.appendChild(hex);
+
 	var buttonIcon = document.createElement('span');
 	buttonIcon.className = 'material-icons';
+	buttonIcon.setAttribute('aria-hidden', 'true');
 	buttonIcon.innerHTML = icon;
-	sideButton.element.appendChild(buttonIcon);
+	hex.appendChild(buttonIcon);
+
+	var tipText = helpText === false ? '' : helpText;
+	sideButton.element.addEventListener('pointerenter', function(e) {
+		if (e.pointerType == 'mouse') { showSideTip(sideButton.element, title, tipText); }
+	});
+	sideButton.element.addEventListener('pointerleave', hideSideTip);
+	sideButton.element.addEventListener('pointerup', function(e) {
+		if (e.pointerType != 'mouse') { showSideTip(sideButton.element, title, tipText, 1800); }
+	});
+	sideButton.element.addEventListener('focus', function() {
+		if (sideButton.element.matches(':focus-visible')) { showSideTip(sideButton.element, title, tipText); }
+	});
+	sideButton.element.addEventListener('blur', hideSideTip);
 
 	map.sideButtons[name] = sideButton;
 
 	return sideButton;
+}
+
+// Daylight, moonlight and the host's fog view, opened from the Lighting button.
+var DM_LIGHT_NAMES = ['Solid', 'See-through', 'Off'];
+
+function buildLightingPanel() {
+	var panel = buildPopover('lighting-panel', 'lighting', 'Lighting');
+	panel.innerHTML +=
+		'<button type="button" class="popover-switch" role="switch" data-button="daylight">' +
+			'<span class="material-icons" aria-hidden="true">brightness_6</span>' +
+			'<span class="popover-label"><b>Daylight</b><small>Tokens see as far as their view distance, not just their own light.</small></span>' +
+			'<span class="popover-track" aria-hidden="true"></span>' +
+		'</button>' +
+		'<button type="button" class="popover-switch" role="switch" data-button="moonlight">' +
+			'<span class="material-icons" aria-hidden="true">nightlight</span>' +
+			'<span class="popover-label"><b>Moonlight</b><small>A faint blue light over everything at night.</small></span>' +
+			'<span class="popover-track" aria-hidden="true"></span>' +
+		'</button>' +
+		'<div class="popover-sub"><span class="material-icons" aria-hidden="true">highlight</span><span class="popover-label"><b>Fog of war for you</b><small>Players always see it solid. Tokens bump into walls while it is solid.</small></span></div>' +
+		'<div class="popover-segment" role="radiogroup" aria-label="Fog of war for you">' +
+			DM_LIGHT_NAMES.map(function(label, i) {
+				return '<button type="button" role="radio" data-button="dmView" data-dm-light="' + i + '">' + label + '</button>';
+			}).join('') +
+		'</div>';
+
+	panel.querySelector('[data-button="daylight"]').addEventListener('click', function() {
+		if (!isDM) { return; }
+
+		map.local.daylight = map.local.daylight ? 0 : 1;
+		map.objects.light.intensity = lightLevel(map.local.daylight ? 1.1 : 0.9);
+
+		updateTokenVision();
+		sendMessage('update', 'updateDaylight', { daylight: map.local.daylight });
+		syncLightingPanel();
+	}, false);
+
+	panel.querySelector('[data-button="moonlight"]').addEventListener('click', function() {
+		if (!isDM) { return; }
+
+		var args = {
+			moonlight: map.local.moonlight ? 0 : 1
+		};
+
+		updateClient.updateMoonlight(args);
+		sendMessage('update', 'updateMoonlight', args);
+		syncLightingPanel();
+	}, false);
+
+	for (const button of panel.querySelectorAll('[data-dm-light]')) {
+		button.addEventListener('click', function() {
+			setDmLight(Number(button.dataset.dmLight));
+			syncLightingPanel();
+		}, false);
+	}
+
+	return panel;
+}
+
+function syncLightingPanel() {
+	var panel = byId('lighting-panel');
+	if (!panel) { return; }
+
+	panel.querySelector('[data-button="daylight"]').setAttribute('aria-checked', map.local.daylight ? 'true' : 'false');
+	panel.querySelector('[data-button="moonlight"]').setAttribute('aria-checked', map.local.moonlight ? 'true' : 'false');
+
+	for (const button of panel.querySelectorAll('[data-dm-light]')) {
+		button.setAttribute('aria-checked', Number(button.dataset.dmLight) === map.local.dmLight ? 'true' : 'false');
+	}
+}
+
+// A small panel beside a side button (Menu, Lighting). One is open at a time; a click anywhere
+// else or Esc closes it.
+var openPopoverPanel = null;
+
+function buildPopover(id, buttonName, title) {
+	var panel = document.createElement('div');
+	panel.id = id;
+	panel.className = 'dmt-popover noselect';
+	panel.hidden = true;
+	panel.dataset.anchor = buttonName;
+	panel.innerHTML = '<div class="popover-title">' + escapeHtml(title) + '</div>';
+	root.appendChild(panel);
+	return panel;
+}
+
+function togglePopover(panel, anchor) {
+	if (openPopoverPanel == panel) {
+		closePopover();
+		return;
+	}
+
+	closePopover();
+	if (panel.id == 'lighting-panel') { syncLightingPanel(); }
+	hideSideTip();
+	panel.hidden = false;
+	openPopoverPanel = panel;
+
+	var r = anchor.getBoundingClientRect();
+	var rr = root.getBoundingClientRect();
+	panel.style.right = Math.round(rr.right - r.left + 8) + 'px';
+	var top = r.top - rr.top - 12;
+	panel.style.top = Math.max(8, Math.min(top, rr.height - panel.offsetHeight - 8)) + 'px';
+	anchor.classList.add('active');
+}
+
+function closePopover() {
+	if (!openPopoverPanel) { return; }
+
+	var panel = openPopoverPanel;
+	openPopoverPanel = null;
+	panel.hidden = true;
+
+	var button = map.sideButtons[panel.dataset.anchor];
+	if (button) { button.element.classList.remove('active'); }
+}
+
+listen(document, 'pointerdown', function(e) {
+	if (openPopoverPanel && !openPopoverPanel.contains(e.target) && !e.target.closest('[data-button="' + openPopoverPanel.dataset.anchor + '"]')) {
+		closePopover();
+	}
+}, true);
+listen(document, 'keydown', function(e) {
+	if (e.key === 'Escape') { closePopover(); }
+});
+
+// An entry of the Menu panel; works like a side button (map.sideButtons, Help, host-only).
+function buildMenuItem(panel, name, title, icon, dmOnly = false, helpText = false, inDemo = true) {
+	var item = {
+		element: document.createElement('button'),
+		title: title,
+		icon: icon,
+		dmOnly: dmOnly,
+		helpText: helpText,
+		inDemo: inDemo
+	};
+
+	item.element.type = 'button';
+	item.element.className = 'popover-item';
+	item.element.setAttribute('data-button', name);
+	item.element.style.display = (!dmOnly || isDM) && (!demo || inDemo) ? '' : 'none';
+	item.element.innerHTML =
+		'<span class="material-icons" aria-hidden="true">' + icon + '</span>' +
+		'<span class="popover-label"><b>' + escapeHtml(title) + '</b>' + (helpText ? '<small>' + escapeHtml(helpText) + '</small>' : '') + '</span>';
+	item.element.addEventListener('click', closePopover);
+	panel.appendChild(item.element);
+
+	map.sideButtons[name] = item;
+	return item;
+}
+
+/*
+DM Light (what the fog looks like to the host)
+
+0: opaque
+1: translucent
+2: transparent
+*/
+function setDmLight(level) {
+	map.local.dmLight = level;
+
+	switch (map.local.dmLight) {
+		case 0:
+			map.mask.mesh.material.opacity = 1;
+			break;
+		case 1:
+			map.mask.mesh.material.opacity = DM_FOG_OPACITY;
+			break;
+		case 2:
+			map.mask.mesh.material.opacity = 0;
+			break;
+	}
+
+	if (map.local.dmLight > 0) {
+		for (const [tokenId, token] of Object.entries(map.objects.tokens)) {
+			token.visible = true;
+		}
+	}
+
+	updateVisionMeshes();
+	updateTokenVision();
+}
+
+// The tracker drawer on the right. Keys, wheel and right-clicks inside it stay inside it (the
+// camera listens to the arrow keys on the window, the table to Shift and right-clicks).
+var trackerDrawer = null;
+
+function toggleTrackerDrawer(button) {
+	if (!trackerDrawer) {
+		trackerDrawer = document.createElement('aside');
+		trackerDrawer.id = 'tracker-drawer';
+		trackerDrawer.className = 'dmt-drawer';
+		trackerDrawer.setAttribute('aria-label', 'Initiative tracker');
+		trackerDrawer.innerHTML =
+			'<div class="pane-header"><div class="pane-header-title">Initiative</div>' +
+			'<button type="button" class="pane-close-button" aria-label="Close the tracker"><span class="material-icons" aria-hidden="true">close</span></button></div>' +
+			'<div class="dmt-drawer-body"></div>';
+		root.appendChild(trackerDrawer);
+
+		for (const type of ['keydown', 'keyup', 'contextmenu', 'wheel']) {
+			trackerDrawer.addEventListener(type, function(e) { e.stopPropagation(); });
+		}
+
+		trackerDrawer.querySelector('.pane-close-button').addEventListener('click', function() {
+			toggleTrackerDrawer(button);
+		});
+
+		var body = trackerDrawer.querySelector('.dmt-drawer-body');
+
+		if (options.mountTracker) {
+			options.mountTracker(body);
+		}
+		else {
+			var frame = document.createElement('iframe');
+			frame.src = options.trackerUrl;
+			frame.title = 'Initiative tracker';
+			body.appendChild(frame);
+			body.classList.add('dmt-drawer-frame');
+		}
+	}
+
+	var open = !trackerDrawer.classList.contains('open');
+	trackerDrawer.classList.toggle('open', open);
+	root.classList.toggle('dmt-drawer-open', open);
+	button.classList.toggle('active', open);
+}
+
+// Box select: on while Shift is held.
+function setSelectMode(on) {
+	if (map.selectModeActive == on) { return; }
+
+	map.selectModeActive = on;
+	map.orbitControls.enablePan = !on;
+	map.orbitControls.enableRotate = !on;
+	map.selectionHelper.enabled = on;
+}
+
+// "Raise or Lower" in the token menu: the next drag of a token moves it up and down (a right drag
+// does the same with a mouse; this is the way on a touch screen).
+function startVerticalMove() {
+	hideContextMenu();
+	map.local.verticalTranslate = true;
+	map.translateControls.token.translateMode = 'vertical';
+	showToast(root, 'Drag the token up or down.');
+}
+
+function stopVerticalMove() {
+	map.local.verticalTranslate = false;
+	map.translateControls.token.translateMode = 'horizontal';
 }
 
 function buildGui() {
@@ -4555,49 +4951,29 @@ function buildGui() {
 
 	
 
-	//initiative tracker
-	var initiativePane = buildPane('Initiative Tracker', 'initiative');
-	initiativePane.element.style.height = '100%';
-
-	//side buttons
+	//side buttons: a column of hexagons on the right; each shows its name and what it does in a
+	//tooltip (hover or keyboard focus; a tap on a touch screen shows it for a moment)
 	var sideButtonContainer = document.createElement('div');
 	sideButtonContainer.id = 'side-button-container';
 	root.appendChild(sideButtonContainer);
 
-	//help button
-	var helpButton = buildSideButton('help', 'Help', 'help_outline');
+	//menu: help, settings, rooms and the invite link in one panel
+	var menuButton = buildSideButton('menu', 'Menu', 'menu', false, 'Help, settings, rooms and the invite link.');
+	var menuPanel = buildPopover('main-menu', 'menu', 'Menu');
+	menuButton.element.addEventListener('click', function() {
+		togglePopover(menuPanel, menuButton.element);
+	}, false);
+
+	//help
+	var helpButton = buildMenuItem(menuPanel, 'help', 'Help', 'help_outline', false, 'Controls and what every button does.');
 	helpButton.element.addEventListener('click', function() {
 		helpPane.open ? closePane(helpPane) : openPane(helpPane);
 	}, false);
 
 	//settings button
-	var settingsButton = buildSideButton('settings', 'Settings', 'settings', false, 'Change Dungeons settings.');
+	var settingsButton = buildMenuItem(menuPanel, 'settings', 'Settings', 'settings', false, 'Graphics quality, camera and token options for this browser.');
 	settingsButton.element.addEventListener('click', function() {
 		settingsPane.open ? closePane(settingsPane) : openPane(settingsPane);
-	}, false);
-
-	//Initiative tracker button
-	var frameLoaded = false;
-
-	// NOTE(port): the embedded tracker is only offered when the host app gives a trackerUrl.
-	var initiativeButton = buildSideButton('tracker', 'Initiative Tracker', 'list', true, 'Opens the initiative tracker inside the tabletop.');
-	if (!options.trackerUrl) {
-		initiativeButton.element.style.display = 'none';
-		initiativeButton.unavailable = true;
-	}
-	initiativeButton.element.addEventListener('click', function() {
-		
-		if (initiativePane.open) {
-			closePane(initiativePane);
-		}
-		else {
-			if (!frameLoaded) {
-				var frameItem = buildPaneItem(initiativePane, '', 'iframe', options.trackerUrl, true);
-				frameItem.input.style.minWidth = '1024px';
-				frameLoaded = true;
-			}
-			openPane(initiativePane);
-		}
 	}, false);
 
 	//room pane
@@ -4622,210 +4998,49 @@ function buildGui() {
 	}, false);
 
 	//room button
-	var roomButton = buildSideButton('rooms', 'Manage Rooms', 'place', true, 'Allows you to create, delete & move to other rooms/maps in the campaign.', false);
+	var roomButton = buildMenuItem(menuPanel, 'rooms', 'Rooms', 'place', true, 'Create, delete and move between the rooms (maps) of this campaign.', false);
 	roomButton.element.addEventListener('click', function() {
 		sendMessage('request', 'getRooms', {});
 	}, false);
-	
-	//edit toglle buttons
-	var doorModeButton = buildSideButton('doorMode', 'Door Mode', 'door_front', true, 'Toggles door mode. Allows you to add, move, rotate & delete doors.');
-	var wallModeButton = buildSideButton('wallMode', 'Wall Mode', 'view_carousel', true, 'Toggles wall edit mode. Allows you to add, move & delete wall points.');
-	var planeModeButton = buildSideButton('planeMode', 'Plane Mode', 'image', true, 'Toggles plane image edit mode. Allows you to add, move & delete image planes.');
 
-	//doors button
-	doorModeButton.element.addEventListener('click', function() {
-		
-		if (map.toggleMode == 'plane') { planeModeButton.element.click(); }		//turn off plane mode
-		if (map.toggleMode == 'wallPoint') { wallModeButton.element.click(); }			//turn off wall mode
+	//edit map: one button for walls, doors and images; the bar at the top picks which
+	var editButton = buildSideButton('editMap', 'Edit Map', 'construction', true, 'Draw walls and rooms, place doors and move map images. The bar at the top picks what to edit.');
+	editButton.element.addEventListener('click', function() {
+		setEditMode(map.toggleMode == 'token' ? (map.local.lastEditMode || 'wallPoint') : 'token');
+	}, false);
+	buildToolbar();
 
-		map.toggleMode = map.toggleMode == 'door' ? 'token' : 'door';
-		map.translateControls.door.enabled = map.toggleMode == 'door';
-		map.rotationControls.door.enabled = map.toggleMode == 'door';
-
-		map.translateControls.token.enabled = map.toggleMode == 'token';
-
-		if (map.toggleMode == 'door') {
-			map.translateControls.door.enabled = true;
-		}
-		else {
-			map.rotationControls.door.detach();
-		}
-
-		clearGroupSelection();
-		doorModeButton.element.classList.toggle('active');
-		syncBuildMode();
+	//lighting: daylight, moonlight and how much fog the host sees, in one small panel
+	var lightingButton = buildSideButton('lighting', 'Lighting', 'wb_sunny', true, 'Daylight, moonlight and how much of the fog of war you see.');
+	var lightingPanel = buildLightingPanel();
+	lightingButton.element.addEventListener('click', function() {
+		togglePopover(lightingPanel, lightingButton.element);
 	}, false);
 
-	//walls button
-	wallModeButton.element.addEventListener('click', function() {
-		
-		if (map.toggleMode == 'plane') { planeModeButton.element.click(); }		//turn off plane mode
-		if (map.toggleMode == 'door') { doorModeButton.element.click(); }			//turn off door mode
-
-		map.toggleMode = map.toggleMode == 'wallPoint' ? 'token' : 'wallPoint';
-		map.translateControls.wallPoint.enabled = map.toggleMode == 'wallPoint';
-
-		map.translateControls.token.enabled = map.toggleMode == 'token';
-
-		clearGroupSelection();
-		wallModeButton.element.classList.toggle('active');
-		
-		if (map.toggleMode == 'wallPoint') {
-			addWallGroup();
-		}
-
-		//show wall points
-		for (const [wallPointGroupId, wallPointGroup] of Object.entries(map.wallPointGroups)) {
-			for (const [wallPointId, wallPoint] of Object.entries(wallPointGroup.points)) {
-				wallPoint.visible = map.toggleMode == 'wallPoint';
-			}
-		}
-
-		syncBuildMode();
-	}, false);
-
-	//plane mode button
-	planeModeButton.element.addEventListener('click', function() {
-		
-		if (map.toggleMode == 'wallPoint') { wallModeButton.element.click(); }		//turn off wall mode
-		if (map.toggleMode == 'door') { doorModeButton.element.click(); }			//turn off door mode
-
-		map.toggleMode = map.toggleMode == 'plane' ? 'token' : 'plane';
-		map.translateControls.token.enabled = map.toggleMode == 'token';
-		
-		map.rotationControls.plane.enabled = map.toggleMode == 'plane';
-		map.translateControls.plane.enabled = map.toggleMode == 'plane';
-		map.scaleControls.plane.enabled = map.toggleMode == 'plane';
-
-		if (map.toggleMode == 'plane') {
-			map.translateControls.plane.enabled = true;
-		}
-		else {
-			map.rotationControls.plane.detach();
-			map.scaleControls.plane.detach();
-		}
-
-		clearGroupSelection();
-		planeModeButton.element.classList.toggle('active');
-		syncBuildMode();
-	}, false);
-
-	//select mode button
-	var selectModeButton = buildSideButton('selectMode', 'Select Mode', 'highlight_alt', false, 'Allows you to select multiple objects to move at once.');
-	selectModeButton.element.addEventListener('click', function() {
-		map.selectModeActive = !map.selectModeActive;
-
-		map.orbitControls.enablePan = !map.selectModeActive;
-		map.orbitControls.enableRotate = !map.selectModeActive;
-
-		map.selectionHelper.enabled = map.selectModeActive;
-
-		selectModeButton.element.classList.toggle('active');
-	}, false);
-
-	//translate mode
-	var translateModeButton = buildSideButton('translateMode', 'Vertical Movement', 'height', false, 'Toggle vertical movement mode.');
-	translateModeButton.element.addEventListener('click', function() {
-		map.local.verticalTranslate = !map.local.verticalTranslate;
-
-		map.translateControls.token.translateMode = map.local.verticalTranslate ? 'vertical' : 'horizontal';
-
-		translateModeButton.element.classList.toggle('active');
-	}, false);
-
-	//daylight button
-	var daylightButton = buildSideButton('daylight', 'Daylight', 'brightness_6', true, 'Toggles tokens vision range from \'darkness\' to \'daylight\'.');
-	daylightButton.element.addEventListener('click', function() {
-
-		if (isDM) {
-			daylightButton.element.classList.toggle('active');
-
-			map.local.daylight = map.local.daylight ? 0 : 1;
-			map.objects.light.intensity = lightLevel(map.local.daylight ? 1.1 : 0.9);
-
-			updateTokenVision();
-
-			var args = {
-				daylight: map.local.daylight
-			};
-
-			//send to server	
-			sendMessage('update', 'updateDaylight', args);
-		}
-
-	}, false);
-
-	if (map.local.daylight) {
-		daylightButton.element.classList.add('active');
+	//initiative tracker: a drawer on the right (the host app draws the tracker into it)
+	var trackerButton = buildSideButton('tracker', 'Initiative Tracker', 'format_list_numbered', true, 'Opens the initiative tracker beside the table.');
+	if (!options.mountTracker && !options.trackerUrl) {
+		trackerButton.element.style.display = 'none';
+		trackerButton.unavailable = true;
 	}
-
-	//moonlight button
-	var moonlightButton = buildSideButton('moonlight', 'Moonlight', 'nightlight', true, 'Toggles \'moonlight\' mode for ambient lighting at night.');
-	moonlightButton.element.addEventListener('click', function() {
-
-		if (isDM) {
-			moonlightButton.element.classList.toggle('active');
-			
-			var args = {
-				moonlight: map.local.moonlight ? 0 : 1
-			};
-
-			updateClient.updateMoonlight(args);
-
-			//send to server	
-			sendMessage('update', 'updateMoonlight', args);
-		}
-
+	trackerButton.element.addEventListener('click', function() {
+		toggleTrackerDrawer(trackerButton.element);
 	}, false);
 
-	if (map.local.moonlight) {
-		moonlightButton.element.classList.add('active');
+	//the host app's own buttons (for example dice)
+	for (const extra of options.buttons || []) {
+		var extraButton = buildSideButton(extra.name, extra.title, extra.icon, !!extra.hostOnly, extra.help || false);
+		extraButton.element.addEventListener('click', function() { extra.onClick(); }, false);
 	}
-
-	//light toggle button
-	/*
-	DM Light
-
-	0: opaque
-	1: translucent
-	2: transparent
-
-	*/
-	var toggleView = buildSideButton('dmView', 'Toggle DM View', 'highlight', true, 'Switches the fog of war between, opaque, translucent & clear. Token collision is enabled in opaque mode.');
-	toggleView.element.addEventListener('click', function() {
-
-		map.local.dmLight = (map.local.dmLight + 1) % 3;
-
-		switch (map.local.dmLight) {
-			case 0:
-				map.mask.mesh.material.opacity = 1;
-				break;
-			case 1:
-				map.mask.mesh.material.opacity = DM_FOG_OPACITY;
-				break;
-			case 2:
-				map.mask.mesh.material.opacity = 0;
-				break;
-		}
-
-		if (map.local.dmLight > 0) {
-			for (const [tokenId, token] of Object.entries(map.objects.tokens)) {
-				token.visible = true;
-			}
-		}
-
-		updateVisionMeshes();
-		updateTokenVision();
-	}, false);
 
 	//cam focus button
 	var camFocusIndicator = document.createElement('div');
 	camFocusIndicator.id = 'camFocusIndicator';
 	root.appendChild(camFocusIndicator);
 
-	var camFocus = buildSideButton('focus', 'Focus Camera', 'photo_camera', true, 'Moves all players\' vision to DM\'s point of view & DM\'s current room.', false);
+	var camFocus = buildSideButton('focus', 'Focus Players', 'center_focus_strong', true, 'Moves every player\'s camera to your view and your current room.', false);
 	camFocus.element.addEventListener('click', function() {
-		
+
 		camFocusIndicator.classList.add('camFocusIndicatorAnim');
 		setTimeout(function() {
 			camFocusIndicator.classList.remove('camFocusIndicatorAnim');
@@ -4855,7 +5070,7 @@ function buildGui() {
 	// NOTE(port): invites are a host-app feature: the button exists only when options.inviteLink
 	// is given, and the invite code comes from the host app (room state or a refreshInviteCode
 	// request).
-	var shareButton = buildSideButton('invite', 'Get Invite Link', 'send', true, 'Copies an invite link to your clipboard.', false);
+	var shareButton = buildMenuItem(menuPanel, 'invite', 'Invite Link', 'person_add', true, 'Copies an invite link for this campaign to your clipboard.', false);
 	shareButton.element.id = 'shareButtonId';
 
 	if (!options.inviteLink) {
@@ -4877,25 +5092,32 @@ function buildGui() {
 
 	buildPaneItem(helpPane, 'Controls', 'header');
 	buildPaneItem(helpPane, 'Left Drag / 1 Touch Drag', 'text', 'Pan');
-	buildPaneItem(helpPane, 'Right Drag / 2 Touch Drag', 'text', 'Rotate / Move token vertically');
+	buildPaneItem(helpPane, 'Right Drag / 2 Touch Drag', 'text', 'Rotate the camera, or raise and lower a token');
 	buildPaneItem(helpPane, 'Scroll Wheel / 2 Touch Pinch', 'text', 'Zoom Camera');
 	buildPaneItem(helpPane, 'Double Click', 'text', 'Ping Location');
+	buildPaneItem(helpPane, 'Right-click / Long Press', 'text', 'Menu: add tokens and images, resize, raise or lower a token');
+	buildPaneItem(helpPane, 'Shift Key', 'text', 'Hold and drag to select several tokens');
 	buildPaneItem(helpPane, 'Ctrl Key', 'text', 'Free scale/rotate images');
-	buildPaneItem(helpPane, 'Shift Key', 'text', 'Toggle Box Select');
-	
+
 	//sidebar buttons help
-	buildPaneItem(helpPane, 'Sidebar Buttons', 'header');
+	buildPaneItem(helpPane, 'Buttons', 'header');
 
 	for (const [name, sideButton] of Object.entries(map.sideButtons)) {
-		if (name == 'help') { continue; }
+		if (name == 'help' || name == 'menu') { continue; }
 
-		var helpText = '<b>' + sideButton.title + '</b>';
+		var helpText = '<b>' + escapeHtml(sideButton.title) + '</b>';
 
 		if (sideButton.helpText !== false) {
-			helpText += ' - ' + sideButton.helpText;
+			helpText += ' - ' + escapeHtml(sideButton.helpText);
 		}
 
 		buildPaneItem(helpPane, '<i class="pane-help-icons material-icons">' + sideButton.icon + '</i>', 'text', helpText, sideButton.dmOnly);
+
+		if (name == 'editMap') {
+			for (const tab of EDIT_TABS) {
+				buildPaneItem(helpPane, '<i class="pane-help-icons pane-help-sub material-icons">' + tab.icon + '</i>', 'text', '<b>' + tab.label + '</b> - ' + BUILD_HINTS[tab.hint], true);
+			}
+		}
 	}
 }
 
@@ -4912,8 +5134,15 @@ function updateGuiItems(dm) {
 	//update side buttons
 	for (const [name, sideButton] of Object.entries(map.sideButtons)) {
 		if (sideButton.dmOnly) {
-			sideButton.element.style.display = (dm && !sideButton.unavailable) ? 'block' : 'none';
+			sideButton.element.style.display = (dm && !sideButton.unavailable && (!demo || sideButton.inDemo)) ? '' : 'none';
 		}
+	}
+
+	//no longer the host: stop editing, close the host-only panels
+	if (!dm) {
+		if (map.toggleMode != 'token') { setEditMode('token'); }
+		closePopover();
+		if (trackerDrawer && trackerDrawer.classList.contains('open')) { toggleTrackerDrawer(map.sideButtons.tracker.element); }
 	}
 }
 
@@ -5255,25 +5484,40 @@ function addAvatar(token, owner = true) {
 	var avatarInnerContainer = byId('avatarInnerContainer');
 	
 	if (avatarInnerContainer != null) {
-		var avatar = document.createElement('div');
+		var avatar = document.createElement('button');
+		avatar.type = 'button';
 		avatar.className = 'avatar';
 		var avatarModel = map.models[token.modelId];
 		var borderColor = '#' + ('000000' + (avatarModel.baseColor).toString(16)).slice(-6);
-		avatar.style.borderColor = borderColor;
+		var avatarName = avatarModel.name || 'Token';
+		avatar.style.setProperty('--avatar-edge', borderColor);
+		avatar.setAttribute('aria-label', 'Look through ' + avatarName + '\u2019s eyes');
+
+		var face = document.createElement('span');
+		face.className = 'avatar-face';
+		avatar.appendChild(face);
+
 		(function() {
 			avatar.addEventListener('click', function() {
 				lookAtObject(token);
 			}, false);
+			avatar.addEventListener('pointerenter', function(e) {
+				if (e.pointerType == 'mouse') { showSideTip(avatar, avatarName, 'Click to see through its eyes.', 0, 'top'); }
+			});
+			avatar.addEventListener('pointerleave', hideSideTip);
 		}());
 
 		if (avatarModel.src) {
 			var avatarImage = document.createElement('img');
+			avatarImage.alt = '';
 			avatarImage.src = options.imageUrl({ kind: 'model', src: avatarModel.src, size: 128, quality: 80 });
-			avatar.appendChild(avatarImage);
+			face.appendChild(avatarImage);
 		}
 		else {
-			// tokens without an image show their colour
-			avatar.style.backgroundColor = borderColor;
+			// tokens without an image show their colour and initial
+			face.style.backgroundColor = borderColor;
+			face.classList.add('avatar-face-plain');
+			face.textContent = avatarName.trim().charAt(0).toUpperCase();
 		}
 
 		avatarInnerContainer.appendChild(avatar);

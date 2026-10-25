@@ -1,24 +1,23 @@
 /* ============================================================================================ */
 /* ==================================== DEFAULT THEME ========================================= */
 /* ============================================================================================ */
+/* Drawn like the viewer's panes (theme variables in style.css): cut corners, the green bar colour
+   for the icons, a highlight row under the pointer. */
 
 .context-menu-default {
   position: fixed;
-  width: 200px;
-  padding: 0;
+  min-width: 210px;
+  padding: 6px 0;
   margin: 0;
-  background: white;
-  z-index: 100;
-  border-radius: 3px;
-  -webkit-box-shadow: 1px 1px 4px rgba(0, 0, 0, 0.3);
-          box-shadow: 1px 1px 4px rgba(0, 0, 0, 0.3);
+  background: var(--_surface-raised);
+  color: var(--_text);
+  font-family: var(--_font);
+  z-index: 1003;
+  box-shadow: inset 0 0 0 1px var(--_border-strong);
+  clip-path: var(--_clip-sm);
   opacity: 0;
-  -webkit-transform: translate(0, 15px) scale(0.95);
-  transform: translate(0, 15px) scale(0.95);
-  -webkit-transition: opacity 0.1s ease-out, -webkit-transform 0.1s ease-out;
-  transition: opacity 0.1s ease-out, -webkit-transform 0.1s ease-out;
+  transform: translate(0, 6px);
   transition: transform 0.1s ease-out, opacity 0.1s ease-out;
-  transition: transform 0.1s ease-out, opacity 0.1s ease-out, -webkit-transform 0.1s ease-out;
   pointer-events: none;
 }
 
@@ -31,48 +30,51 @@
 }
 
 .context-menu-default-btn {
-  background: none;
-  line-height: normal;
-  overflow: visible;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   width: 100%;
-  color: #444;
-  font-family: 'Roboto', sans-serif;
-  font-size: 13px;
+  min-height: 40px;
+  padding: 7px 16px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: normal;
   text-align: left;
-  cursor: pointer;
-  border: 1px solid transparent;
   white-space: nowrap;
-  padding: 8px 16px;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
-.context-menu-default-btn::-moz-focus-inner,
 .context-menu-default-btn::-moz-focus-inner {
   border: 0;
   padding: 0;
 }
 
 .context-menu-default-icon {
-  font-size: 16px;
-	width: 22px;
-	overflow:hidden;
+  flex: none;
+  width: 22px;
+  overflow: hidden;
+  color: var(--_accent);
 }
 
 .context-menu-default-text {
-  font-size: 14px;
-  margin-left: 18px;
-  position: absolute;
-  top: 50%;
-  float:left;
-  transform: translate(0 , -50%);
+  min-width: 0;
 }
 
-.context-menu-default-item:hover > .context-menu-default-btn {
+.context-menu-default-item:hover > .context-menu-default-btn,
+.context-menu-default-btn:focus-visible {
   outline: none;
-  background-color: #FAFAFA;
+  background-color: var(--_bar-raised);
+  color: var(--_on-bar);
+}
+
+.context-menu-default-item:hover .context-menu-default-icon {
+  color: var(--_gold);
 }
 
 .context-menu-default-item.disabled {
@@ -86,48 +88,21 @@
 
 .context-menu-default-separator {
   display: block;
-  margin: 7px 5px;
+  margin: 6px 12px;
   height: 1px;
-  border-bottom: 1px solid #fff;
-  background-color: #aaa;
+  background-color: var(--_border);
 }
 
-.context-menu-default-item.subcontext-menu-default::after {
-  content: '';
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  -webkit-transform: translateY(-50%);
-  transform: translateY(-50%);
-  border: 5px solid transparent;
-  border-left-color: #808080;
-}
-
-.context-menu-default-item.subcontext-menu-default:hover::after {
-  border-left-color: #fff;
-}
-
-.context-menu-default .context-menu-default {
-  top: 4px;
-  left: 99%;
-}
-
-.show-context-menu-default,
-.context-menu-default-item:hover > .context-menu-default {
+.show-context-menu-default {
   opacity: 1;
-  -webkit-transform: translate(0, 0) scale(1);
-  transform: translate(0, 0) scale(1);
+  transform: none;
   pointer-events: auto;
-}
-
-.context-menu-default-item:hover > .context-menu-default {
-  -webkit-transition-delay: 100ms;
-  transition-delay: 300ms;
 }
 
 .context-menu-thumb
 {
   pointer-events: none;
+  object-fit: contain;
 }
 
 /* ============================================================================================ */

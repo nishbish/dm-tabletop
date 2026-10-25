@@ -41,6 +41,17 @@ export interface TabletopOptions {
   uploadPlane?: (formData: FormData) => Promise<unknown>;
   inviteLink?: (code: string) => string;
   trackerUrl?: string;
+  /** Draws a tracker into the side drawer the first time it opens; wins over trackerUrl. */
+  mountTracker?: (element: HTMLElement) => void;
+  /** Extra side buttons (icon: a Material Icons name). */
+  buttons?: {
+    name: string;
+    title: string;
+    icon: string;
+    help?: string;
+    hostOnly?: boolean;
+    onClick: () => void;
+  }[];
   resolveModel?: (
     modelId: string,
   ) => ModelInfo | null | undefined | Promise<ModelInfo | null | undefined>;

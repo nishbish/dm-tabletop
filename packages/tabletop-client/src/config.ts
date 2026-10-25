@@ -33,6 +33,15 @@ export interface ModelInfo {
 // The function receives the room about to be joined (it changes when the user moves to another room).
 export type TokenSource = string | ((join: { roomId: string }) => string | Promise<string>);
 
+export interface SideButtonOptions {
+  name: string;
+  title: string;
+  icon: string;
+  help?: string;
+  hostOnly?: boolean;
+  onClick: () => void;
+}
+
 export interface TabletopOptions {
   serverUrl?: string;
   token?: TokenSource;
@@ -45,6 +54,12 @@ export interface TabletopOptions {
   uploadPlane?: (formData: FormData) => Promise<unknown>;
   inviteLink?: (code: string) => string;
   trackerUrl?: string;
+  // Draws an initiative tracker (or anything else) into the side drawer the Tracker button opens,
+  // once, the first time it opens. Wins over trackerUrl (which frames a page instead).
+  mountTracker?: (element: HTMLElement) => void;
+  // Extra buttons for the side rail, below the built-in ones (for example a dice roller).
+  // `icon` is a Material Icons ligature name; `help` is the line shown in the tooltip and Help.
+  buttons?: SideButtonOptions[];
   resolveModel?: (
     modelId: string,
   ) => ModelInfo | null | undefined | Promise<ModelInfo | null | undefined>;

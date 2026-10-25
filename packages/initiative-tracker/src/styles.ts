@@ -127,7 +127,7 @@ export const css: string = `
   .it-root { ${workingCopies('dark')} }
 }
 .it-root {
-  box-sizing: border-box; max-width: 100%; min-width: 0; padding: var(--_pad);
+  box-sizing: border-box; max-width: 100%; min-width: 0; padding: var(--_pad); container: it / inline-size;
   background: var(--_bg); color: var(--_fg);
   font: var(--_weight) 16px/1.4 var(--_font);
 }
@@ -268,8 +268,11 @@ export const css: string = `
   .it-root button:active:not(:disabled) { transform: none; }
   .it-row--shifted, .it-row--settling { transition: none; }
 }
+/* the narrow layout follows the tracker's own width, so it also fits a side panel on a wide screen */
 @media (max-width: 720px) {
   .it-root { padding: calc(var(--_pad) * 0.7); }
+}
+@container it (max-width: 720px) {
   .it-head { display: none; }
   .it-table { padding: 6px; }
   .it-row {
