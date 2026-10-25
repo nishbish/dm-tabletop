@@ -52,6 +52,9 @@ export interface TabletopOptions {
     hostOnly?: boolean;
     onClick: () => void;
   }[];
+  /** Room messages the host app handles itself: incoming updates with these names go to onAppEvent. */
+  appEvents?: string[];
+  onAppEvent?: (name: string, args: Record<string, unknown>, from: string | undefined) => void;
   resolveModel?: (
     modelId: string,
   ) => ModelInfo | null | undefined | Promise<ModelInfo | null | undefined>;
@@ -75,11 +78,30 @@ export interface SceneStats {
   status: string;
 }
 
+export interface TabletopView {
+  position: [number, number, number];
+  quaternion: [number, number, number, number];
+  target: [number, number, number];
+  fov: number;
+  near: number;
+  far: number;
+  width: number;
+  height: number;
+  /** Height of the table top (the floor the maps lie on). */
+  floorY: number;
+}
+
 export interface Tabletop {
   destroy(): void;
   getSceneStats(): SceneStats | null;
   getTokenPosition(tokenId: string): { x: number; y: number; z: number } | null;
   getTokenScreenPosition(tokenId: string): { x: number; y: number } | null;
+  /** Sends one of options.appEvents to the room; false when not connected. */
+  sendAppEvent(name: string, args: Record<string, unknown>): boolean;
+  /** The camera as plain numbers, for drawing a layer over the scene with the same view. */
+  getView(): TabletopView | null;
+  /** Puts an element (a transparent canvas) just above the 3D scene, below the viewer's panels. */
+  attachOverlay(element: HTMLElement): () => void;
   debug?: unknown;
 }
 

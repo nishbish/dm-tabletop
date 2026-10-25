@@ -62,7 +62,7 @@ if (!hasWebGL()) {
 	unsupportedMessage.textContent = 'This viewer needs WebGL, which your browser or device does not provide.';
 	container.appendChild(unsupportedMessage);
 
-	return { destroy: function() { unsupportedMessage.remove(); }, getSceneStats: function() { return null; }, getTokenPosition: function() { return null; } };
+	return { destroy: function() { unsupportedMessage.remove(); }, getSceneStats: function() { return null; }, getTokenPosition: function() { return null; }, sendAppEvent: function() { return false; }, getView: function() { return null; }, attachOverlay: function() { return function() {}; } };
 }
 
 const demo = options.demo;
@@ -7074,6 +7074,35 @@ return {
 		var rect = map.canvas.getBoundingClientRect();
 
 		return { x: rect.left + ((point.x + 1) / 2) * rect.width, y: rect.top + ((1 - point.y) / 2) * rect.height };
+	},
+	// Sends one of options.appEvents to the room (false when not connected: nothing is queued).
+	sendAppEvent: function(name, args) {
+		if (connection.status !== 'connected' || !(options.appEvents || []).includes(name)) { return false; }
+		sendMessage('update', name, args || {});
+		return true;
+	},
+	// The camera as plain numbers, so a host app can draw its own layer (dice) with the same view.
+	getView: function() {
+		var camera = map.objects.camera;
+		if (!camera || !map.canvas) { return null; }
+		camera.updateMatrixWorld();
+		var p = camera.position, q = camera.quaternion, t = map.orbitControls.target;
+		return {
+			position: [p.x, p.y, p.z],
+			quaternion: [q.x, q.y, q.z, q.w],
+			target: [t.x, t.y, t.z],
+			fov: camera.fov,
+			near: camera.near,
+			far: camera.far,
+			width: viewWidth(),
+			height: viewHeight(),
+			floorY: map.objects.plane ? map.objects.plane.position.y : -0.53
+		};
+	},
+	// Puts an element right above the 3D scene and below the panels and buttons. Returns a remover.
+	attachOverlay: function(element) {
+		map.canvas.after(element);
+		return function() { element.remove(); };
 	},
 	// Only available with options.debug: the internal state object.
 	debug: options.debug ? { map: map, connection: connection, updateClient: updateClient } : undefined
