@@ -191,7 +191,7 @@ lighting panel and the drawer use the surface colours; the side buttons, the Edi
 portraits use the bar colours.
 
 The side buttons: **Menu** (Help, Settings, Rooms, Invite Link), and for the host **Edit Map**, **Lighting**
-(daylight, moonlight, how much fog the host sees), **Initiative Tracker** (a drawer on the right), any
+(daylight, moonlight, how much fog the host sees), **Initiative Tracker** (a drawer on the right; drag its left edge, or focus it and use the arrow keys, to make it wider; the width is remembered in the browser), any
 `buttons` from the options, and **Focus Players**. Each shows its name and what it does on hover or keyboard
 focus, and for a moment after a tap. Box select is Shift + drag; a token is raised or lowered with a right
 drag or with **Raise or Lower** in its menu.

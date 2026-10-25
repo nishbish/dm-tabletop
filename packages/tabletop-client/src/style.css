@@ -641,6 +641,8 @@
 	display: flex;
 	flex-direction: column;
 	width: min(500px, calc(100% - 80px));
+	/* a width saved on a wider window never runs off this one */
+	max-width: calc(100% - 80px);
 	background: var(--_surface);
 	color: var(--_text);
 	--_fc: var(--_border-strong);
@@ -658,9 +660,60 @@
 	transition: transform 0.2s ease-out, opacity 0.2s ease-out;
 }
 
+.dmt-drawer .pane-header,
+.dmt-drawer .pane-header .pane-header-title {
+	cursor: default;
+}
+
 .dmt-drawer .pane-header {
 	flex: none;
 	position: relative;
+}
+
+/* the left edge widens the drawer: a line shows on hover, focus and while dragging */
+.dmt-drawer-grip {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 0;
+	z-index: 4;
+	width: 10px;
+	cursor: ew-resize;
+	touch-action: none;
+}
+
+.dmt-drawer-grip::after {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 3px;
+	width: 4px;
+	height: 56px;
+	transform: translateY(-50%);
+	background: var(--_border-strong);
+	opacity: 0;
+	transition: opacity 0.15s;
+}
+
+.dmt-drawer-grip:hover::after,
+.dmt-drawer-resizing .dmt-drawer-grip::after {
+	opacity: 1;
+	background: var(--_accent);
+}
+
+.dmt-drawer-grip:focus-visible {
+	outline: none;
+}
+
+.dmt-drawer-grip:focus-visible::after {
+	opacity: 1;
+	background: var(--_focus);
+}
+
+/* no text selection or slide while dragging */
+.dmt-drawer-resizing {
+	user-select: none;
+	transition: none;
 }
 
 .dmt-drawer-body {
@@ -712,7 +765,11 @@
 		top: 8px;
 		bottom: 8px;
 		right: 50px;
-		width: calc(100% - 58px);
+		width: calc(100% - 58px) !important;
+	}
+
+	.dmt-drawer-grip {
+		display: none;
 	}
 }
 

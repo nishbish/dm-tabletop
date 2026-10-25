@@ -4369,6 +4369,7 @@ function toggleTrackerDrawer(button) {
 			'<button type="button" class="pane-close-button" aria-label="Close the tracker"><span class="material-icons" aria-hidden="true">close</span></button></div>' +
 			'<div class="dmt-drawer-body"></div>';
 		root.appendChild(trackerDrawer);
+		addDrawerGrip(trackerDrawer);
 
 		for (const type of ['keydown', 'keyup', 'contextmenu', 'wheel']) {
 			trackerDrawer.addEventListener(type, function(e) { e.stopPropagation(); });
@@ -4396,6 +4397,67 @@ function toggleTrackerDrawer(button) {
 	trackerDrawer.classList.toggle('open', open);
 	root.classList.toggle('dmt-drawer-open', open);
 	button.classList.toggle('active', open);
+}
+
+// The drawer's left edge widens or narrows it (drag, or arrow keys when focused). The width is a
+// per-browser convenience, so it lives in localStorage and is simply forgotten if that fails.
+var DRAWER_WIDTH_KEY = 'dmt.trackerWidth';
+var DRAWER_MIN_WIDTH = 320;
+
+function addDrawerGrip(drawer) {
+	var grip = document.createElement('div');
+	grip.className = 'dmt-drawer-grip';
+	grip.tabIndex = 0;
+	grip.setAttribute('role', 'separator');
+	grip.setAttribute('aria-orientation', 'vertical');
+	grip.setAttribute('aria-label', 'Drag to make the tracker wider or narrower');
+	drawer.appendChild(grip);
+
+	function maxWidth() {
+		return Math.max(DRAWER_MIN_WIDTH, root.clientWidth - 90);
+	}
+
+	function setWidth(width, save) {
+		width = Math.round(Math.min(maxWidth(), Math.max(DRAWER_MIN_WIDTH, width)));
+		drawer.style.width = width + 'px';
+
+		if (save) {
+			try { localStorage.setItem(DRAWER_WIDTH_KEY, String(width)); } catch { /* not kept */ }
+		}
+	}
+
+	try {
+		var saved = Number(localStorage.getItem(DRAWER_WIDTH_KEY));
+		if (saved > 0) { setWidth(saved, false); }
+	} catch { /* default width */ }
+
+	grip.addEventListener('pointerdown', function(e) {
+		if (e.button !== 0) { return; }
+		e.preventDefault();
+		grip.setPointerCapture(e.pointerId);
+		drawer.classList.add('dmt-drawer-resizing');
+		var right = drawer.getBoundingClientRect().right;
+
+		function move(ev) { setWidth(right - ev.clientX, false); }
+		function up(ev) {
+			grip.removeEventListener('pointermove', move);
+			grip.removeEventListener('pointerup', up);
+			grip.removeEventListener('pointercancel', up);
+			drawer.classList.remove('dmt-drawer-resizing');
+			setWidth(right - ev.clientX, true);
+		}
+
+		grip.addEventListener('pointermove', move);
+		grip.addEventListener('pointerup', up);
+		grip.addEventListener('pointercancel', up);
+	});
+
+	grip.addEventListener('keydown', function(e) {
+		var step = e.key === 'ArrowLeft' ? 40 : e.key === 'ArrowRight' ? -40 : 0;
+		if (!step) { return; }
+		e.preventDefault();
+		setWidth(drawer.getBoundingClientRect().width + step, true);
+	});
 }
 
 // Box select: on while Shift is held.
