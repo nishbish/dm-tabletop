@@ -60,6 +60,10 @@ export interface TabletopOptions {
   // Extra buttons for the side rail, below the built-in ones (for example a dice roller).
   // `icon` is a Material Icons ligature name; `help` is the line shown in the tooltip and Help.
   buttons?: SideButtonOptions[];
+  // Room messages the host app handles itself (for example shared dice rolls): incoming updates
+  // with these names go to onAppEvent instead of the viewer; send them with tabletop.sendAppEvent.
+  appEvents?: string[];
+  onAppEvent?: (name: string, args: Record<string, unknown>, from: string | undefined) => void;
   resolveModel?: (
     modelId: string,
   ) => ModelInfo | null | undefined | Promise<ModelInfo | null | undefined>;

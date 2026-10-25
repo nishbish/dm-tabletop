@@ -472,6 +472,19 @@ describe('errors and host-app extension points', () => {
     ]);
   });
 
+  it('hands options.appEvents to onAppEvent with the sender, not to the viewer', async () => {
+    const got: any[] = [];
+    const s = setup({
+      appEvents: ['rollDice'],
+      onAppEvent: (name: string, args: any, from: string) => got.push([name, args, from]),
+    });
+    await join(s);
+    s.socket().receive({ type: 'update', name: 'rollDice', args: { seed: 7 }, from: 'u2' });
+    await flush();
+    expect(got).toEqual([['rollDice', { seed: 7 }, 'u2']]);
+    expect(s.names()).not.toContain('rollDice');
+  });
+
   it('shows server errors such as permission failures as messages', async () => {
     const s = setup();
     await join(s, emptyState(), 'player');

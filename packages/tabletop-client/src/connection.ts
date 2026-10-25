@@ -325,6 +325,10 @@ export function createConnection(options: ResolvedOptions, sink: Sink): Connecti
   }
 
   async function onUpdate(name: string, args: Args, from?: string): Promise<void> {
+    if (options.appEvents && options.appEvents.includes(name)) {
+      if (options.onAppEvent) options.onAppEvent(name, args, from);
+      return;
+    }
     // Make sure the viewer knows the models a message refers to before it gets the message.
     if (name === 'addToken' || name === 'updateTokenModel') {
       const model = await resolver.resolve(String(args.modelId));
