@@ -1491,16 +1491,11 @@ function chooseTokenModel(modelId) {
 function openTokenSettings(e) {
 	const token = map.menuTarget;
 
-	for (const settingName in token.settings) {
-		for (const item of map.panes.token_settings.items) {
-			switch (item.name) {
-				default:
-					var value = parseInt(token.settings[settingName]);
-					console.log('value', value, token.settings[settingName]);
-					item.input[value].checked = true;
-					break;
-			}
-		}
+	// each radio group shows its own setting (the original set every group to the last setting)
+	for (const item of map.panes.token_settings.items) {
+		if (!(item.name in token.settings)) { continue; }
+		var value = token.settings[item.name] ? 1 : 0;
+		if (item.input[value]) { item.input[value].checked = true; }
 	}
 
 	openPane(map.panes.token_settings);
@@ -1758,6 +1753,14 @@ function updateGridSize(local = true) {
 
 		sendMessage('update', 'updateGridSize', args);
 	}
+}
+
+// The server accepts grid sizes from 1 to 1000; the settings pane offers 2 to 1000.
+var MAX_GRID_SIZE = 1000;
+function clampGridSize(value) {
+	var n = Math.round(Number(value));
+	if (!Number.isFinite(n)) { return 100; }
+	return Math.min(MAX_GRID_SIZE, Math.max(2, n));
 }
 
 function createGrid(width, height, squareSize, color) {
@@ -2324,6 +2327,31 @@ function findParentToken(obj, depth = 3) {
 	}
 
 	return null;
+}
+
+// A player sees the table through one of their own tokens. Without one chosen (a new player, or
+// the chosen token was removed or taken away) they would see nothing at all, even a token that was
+// just handed to them, so the viewer picks one of theirs. Returns true when the choice changed.
+function chooseOwnVisionToken() {
+	if (isDM) { return false; }
+
+	var active = map.local.tokenVisionActive;
+	if (active && map.objects.tokens[active.tokenId] === active && checkTokenOwner(active)) { return false; }
+
+	var next = false;
+	for (const token of Object.values(map.objects.tokens)) {
+		if (checkTokenOwner(token)) { next = token; break; }
+	}
+
+	if (next === active) { return false; }
+	map.local.tokenVisionActive = next;
+
+	if (next === false) {
+		// nothing to see through: hide every token until one is assigned again
+		for (const token of Object.values(map.objects.tokens)) { token.visible = false; }
+	}
+
+	return true;
 }
 
 function checkTokenOwner(token, callback = null) {
@@ -4409,9 +4437,11 @@ function buildGui() {
 	//grid width
 	var gridWidth = buildPaneItem(settingsPane, 'Grid Width', 'number', map.settings.gridWidth, true);
 	gridWidth.input.min = 2;
-	gridWidth.input.max = 5000;
+	gridWidth.input.max = MAX_GRID_SIZE;
 	gridWidth.input.onchange = function() {
-		map.settings.gridWidth = gridWidth.input.value;
+		// a whole number in the range the server accepts (the input's value is text)
+		map.settings.gridWidth = clampGridSize(gridWidth.input.value);
+		gridWidth.input.value = map.settings.gridWidth;
 		saveSettings();
 		updateGridSize();
 	};
@@ -4419,9 +4449,11 @@ function buildGui() {
 	//grid height
 	var gridHeight = buildPaneItem(settingsPane, 'Grid Height', 'number', map.settings.gridHeight, true);
 	gridHeight.input.min = 2;
-	gridHeight.input.max = 5000;
+	gridHeight.input.max = MAX_GRID_SIZE;
 	gridHeight.input.onchange = function() {
-		map.settings.gridHeight = gridHeight.input.value;
+		// a whole number in the range the server accepts (the input's value is text)
+		map.settings.gridHeight = clampGridSize(gridHeight.input.value);
+		gridHeight.input.value = map.settings.gridHeight;
 		saveSettings();
 		updateGridSize();
 	};
@@ -5321,6 +5353,11 @@ var updateClient = {
 
 				map.scene.remove(token);
 				delete map.objects.tokens[args.tokenId];
+
+				if (chooseOwnVisionToken()) {
+					updateVisionMeshes();
+					updateTokenVision();
+				}
 			}
 		}
 	},
@@ -5462,6 +5499,11 @@ var updateClient = {
 
 			// only this token changed (the original rebuilt every token)
 			makeTokenInstance(token, map.models[token.modelId]);
+
+			if (chooseOwnVisionToken()) {
+				updateVisionMeshes();
+				updateTokenVision();
+			}
 		}
 	},
 	
@@ -6565,6 +6607,7 @@ function hideLoadScreen() {
 			if (destroyed) { return; }
 
 			map.loadScreen.style.display = 'none';
+			chooseOwnVisionToken();
 			updateVisionMeshes();
 			updateTokenVision();
 		},500);
