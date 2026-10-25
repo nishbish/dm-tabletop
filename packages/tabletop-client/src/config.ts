@@ -52,6 +52,12 @@ export interface TabletopOptions {
   // A picture for the walls (see wall-texture.js): `src` is relative to `assetBaseUrl` unless it is
   // an absolute URL or data URI; one tile covers `tileSize` world units (default 2).
   wallTexture?: { src: string; tileSize?: number };
+  // A 3D model for the walls (glTF, see wall-model.js), used instead of the plain boxes: one copy
+  // per tile of about `tileWidth` world units (default 1), stretched to fill each wall exactly and
+  // to the wall height. `src` resolves like wallTexture's. Doors still cut openings.
+  wallModel?: { src: string; tileWidth?: number };
+  // The big word on the loading screen (default "Tabletop").
+  loadingTitle?: string;
   // Offline demo only: the room to show instead of the built-in two-room building. Same shape as
   // the object createDemoRoom() returns (see demo.ts): name, dm, daylight, grid, clients, tokens,
   // planes, doors, wallPoints, models. It is copied, never modified.

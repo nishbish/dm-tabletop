@@ -157,16 +157,15 @@ export function doorCutKey(points: Point[], doors: DoorSpan[]): string {
   return parts.join('|');
 }
 
-// One box per solid wall piece, merged into flat arrays (no bottom faces: they are never seen).
-// `joints` holds pointKey()s of positions where walls meet; wall ends there are stretched by half
-// the thickness so corners are filled in. Free wall ends stop exactly at their point, as before.
-export function buildWallArrays(
-  points: Point[],
-  doors: DoorSpan[],
-  joints: Set<string>,
-): WallArrays {
+// A solid stretch of wall: from (x0, z0) to (x1, z1), running along the unit vector (ux, uz).
+export type WallPiece = [number, number, number, number, number, number];
+
+// The solid pieces of a wall group once door openings are cut out. `joints` holds pointKey()s of
+// positions where walls meet; wall ends there are stretched by half the thickness so corners are
+// filled in. Free wall ends stop exactly at their point, as before.
+export function wallPieces(points: Point[], doors: DoorSpan[], joints: Set<string>): WallPiece[] {
   const segments = wallSegments(points);
-  const boxes: number[][] = [];
+  const boxes: WallPiece[] = [];
   const half = WALL_THICKNESS / 2;
   const closed =
     points.length > 2 &&
@@ -200,6 +199,20 @@ export function buildWallArrays(
     }
   }
 
+  return boxes;
+}
+
+// One box per solid wall piece, merged into flat arrays (no bottom faces: they are never seen).
+export function buildWallArrays(
+  points: Point[],
+  doors: DoorSpan[],
+  joints: Set<string>,
+): WallArrays {
+  return wallBoxArrays(wallPieces(points, doors, joints));
+}
+
+export function wallBoxArrays(boxes: WallPiece[]): WallArrays {
+  const half = WALL_THICKNESS / 2;
   // 5 faces x 4 corners per box
   const positions = new Float32Array(boxes.length * 20 * 3);
   const normals = new Float32Array(boxes.length * 20 * 3);
@@ -427,4 +440,38 @@ export function corridorWalls(a: Point, b: Point, width: number): [Point[], Poin
       { x: c + offset, z: z1 },
     ],
   ];
+}
+
+// Where wall-model tiles go: each solid piece is split into whole tiles of about `tileWidth`, each
+// stretched a little so the piece is filled exactly. `rotation` turns the model's x axis along
+// the wall (about y, like rotationAlong).
+export interface WallTile {
+  x: number;
+  z: number;
+  rotation: number;
+  length: number;
+}
+
+export function wallTiles(pieces: WallPiece[], tileWidth: number): WallTile[] {
+  const tiles: WallTile[] = [];
+  const width = tileWidth > 0 ? tileWidth : 1;
+
+  for (const [x0, z0, x1, z1, ux, uz] of pieces) {
+    const length = Math.hypot(x1 - x0, z1 - z0);
+
+    if (length < EPSILON) {
+      continue;
+    }
+
+    const count = Math.max(1, Math.round(length / width));
+    const step = length / count;
+    const rotation = rotationAlong(ux, uz);
+
+    for (let i = 0; i < count; i++) {
+      const along = step * (i + 0.5);
+      tiles.push({ x: x0 + ux * along, z: z0 + uz * along, rotation, length: step });
+    }
+  }
+
+  return tiles;
 }
