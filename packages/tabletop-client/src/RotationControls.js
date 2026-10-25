@@ -136,7 +136,9 @@ var RotationControls = function (camera, domElement, scene, renderer, settings =
 
   //pointer up
   this.pointerUp = function(e) {
-    if (scope.object != null)
+    // only the end of an actual turn counts; every other click used to send the transform again
+    // (and rebuild the walls, for a door)
+    if (scope.object != null && scope.isRotating)
     {
       scope.isRotating = false;
       this.dispatchEvent( { type: 'rotateend' } );
