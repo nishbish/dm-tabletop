@@ -6606,12 +6606,34 @@ var loadTimeout = setTimeout(function() {
 	}
 }, 10000);
 
+// The outline effect and the DM's handles compile their shaders the first time they are drawn,
+// which stalled the first grab of a token or map image (about 0.4 s on a GPU, seconds in software
+// WebGL). Draw them once while the load screen still covers the scene.
+function warmUpShaders() {
+	var outlined = [map.objects.plane];
+	var token = Object.values(map.objects.tokens)[0];
+	var plane = Object.values(map.objects.planes)[0];
+	if (token) { outlined.push(token.base || token); }
+	if (plane) { outlined.push(plane); }
+
+	var handles = isDM ? [map.scaleControls.plane.container, map.rotationControls.plane.circle, map.rotationControls.door.circle] : [];
+	var wasVisible = handles.map(function(h) { return h.visible; });
+	handles.forEach(function(h) { h.visible = true; });
+
+	map.outlinePass.selectedObjects = outlined;
+	map.composer.render();
+	map.outlinePass.selectedObjects = [];
+	handles.forEach(function(h, i) { h.visible = wasVisible[i]; });
+}
+
 function hideLoadScreen() {
 	map.loaded = true;
 
 	//wait additional half second for rendering
 	setTimeout(function() {
 		if (destroyed) { return; }
+
+		warmUpShaders();
 
 		map.loadScreen.style.opacity = '0';
 		map.loadScreen.style.pointerEvents = 'none';
