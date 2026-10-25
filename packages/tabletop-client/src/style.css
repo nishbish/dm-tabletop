@@ -35,6 +35,60 @@
 	--_hex: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
 }
 
+/* Edges on cut corners. clip-path cuts a border or inset shadow off at the slants, so framed
+   shapes draw their edge as an overlay instead: the straight sides as an inset shadow and each
+   slant as a thin diagonal stripe exactly inside the cut. An element sets --_fc (edge colour),
+   --_fw (width) and --_fcut (its corner cut). */
+.dmt-popover,
+.dmt-drawer,
+.pane,
+#dmt-tip,
+.context-menu-default,
+.dmt-toast,
+#build-toolbar .build-tools,
+#build-toolbar .build-hint,
+.dmt-popover .popover-segment button,
+.radio-segment label span,
+.dmt-root .button,
+.pane-item.pane-container-image-item .pane-item-image-container {
+	--_fc: transparent;
+	--_fw: 1px;
+	--_fcut: var(--_cut);
+}
+
+.dmt-popover::after,
+.dmt-drawer::after,
+.pane::after,
+#dmt-tip::after,
+.context-menu-default::after,
+.dmt-toast::after,
+#build-toolbar .build-tools::after,
+#build-toolbar .build-hint::after,
+.dmt-popover .popover-segment button::after,
+.radio-segment label span::after,
+.dmt-root .button::after,
+.pane-item.pane-container-image-item .pane-item-image-container::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: 3;
+	pointer-events: none;
+	box-shadow: inset 0 0 0 var(--_fw) var(--_fc);
+	background:
+		linear-gradient(to bottom right, transparent 50%, var(--_fc) 50%, var(--_fc) calc(50% + var(--_fw)), transparent calc(50% + var(--_fw))) top left / var(--_fcut) var(--_fcut) no-repeat,
+		linear-gradient(to bottom left, transparent 50%, var(--_fc) 50%, var(--_fc) calc(50% + var(--_fw)), transparent calc(50% + var(--_fw))) top right / var(--_fcut) var(--_fcut) no-repeat,
+		linear-gradient(to top left, transparent 50%, var(--_fc) 50%, var(--_fc) calc(50% + var(--_fw)), transparent calc(50% + var(--_fw))) bottom right / var(--_fcut) var(--_fcut) no-repeat,
+		linear-gradient(to top right, transparent 50%, var(--_fc) 50%, var(--_fc) calc(50% + var(--_fw)), transparent calc(50% + var(--_fw))) bottom left / var(--_fcut) var(--_fcut) no-repeat;
+}
+
+/* the pane's bottom right corner is square (the resize handle): no stripe there */
+.pane::after {
+	background:
+		linear-gradient(to bottom right, transparent 50%, var(--_fc) 50%, var(--_fc) calc(50% + var(--_fw)), transparent calc(50% + var(--_fw))) top left / var(--_fcut) var(--_fcut) no-repeat,
+		linear-gradient(to bottom left, transparent 50%, var(--_fc) 50%, var(--_fc) calc(50% + var(--_fw)), transparent calc(50% + var(--_fw))) top right / var(--_fcut) var(--_fcut) no-repeat,
+		linear-gradient(to top right, transparent 50%, var(--_fc) 50%, var(--_fc) calc(50% + var(--_fw)), transparent calc(50% + var(--_fw))) bottom left / var(--_fcut) var(--_fcut) no-repeat;
+}
+
 /* The viewer fills whatever element it is created in. */
 .dmt-root {
 	position: relative;
@@ -339,7 +393,8 @@
 	padding: 8px 14px;
 	background: var(--_bar);
 	color: var(--_on-bar);
-	box-shadow: inset 0 0 0 1px var(--_bar-edge);
+	--_fc: var(--_bar-edge);
+	--_fcut: var(--_cut-sm);
 	clip-path: var(--_clip-sm);
 	transform: translate(4px, -50%);
 	opacity: 0;
@@ -402,7 +457,7 @@
 	padding: 14px 16px 16px;
 	background: var(--_surface);
 	color: var(--_text);
-	box-shadow: inset 0 0 0 1px var(--_border-strong);
+	--_fc: var(--_border-strong);
 	clip-path: var(--_clip);
 }
 
@@ -544,13 +599,15 @@
 }
 
 .dmt-popover .popover-segment button {
+	position: relative;
+	--_fc: var(--_border-strong);
+	--_fcut: var(--_cut-sm);
 	flex: 1 1 0;
 	min-height: 36px;
 	padding: 4px 6px;
 	border: 0;
 	background: var(--_surface-sunken);
 	color: var(--_text);
-	box-shadow: inset 0 0 0 1px var(--_border-strong);
 	clip-path: var(--_clip-sm);
 	font: inherit;
 	font-size: 14px;
@@ -559,13 +616,14 @@
 }
 
 .dmt-popover .popover-segment button:hover {
-	box-shadow: inset 0 0 0 2px var(--_accent);
+	--_fc: var(--_accent);
+	--_fw: 2px;
 }
 
 .dmt-popover .popover-segment button[aria-checked='true'] {
 	background: var(--_accent);
 	color: var(--_on-accent);
-	box-shadow: none;
+	--_fc: transparent;
 }
 
 .dmt-popover .popover-segment button:focus-visible {
@@ -585,7 +643,7 @@
 	width: min(500px, calc(100% - 80px));
 	background: var(--_surface);
 	color: var(--_text);
-	box-shadow: inset 0 0 0 1px var(--_border-strong);
+	--_fc: var(--_border-strong);
 	clip-path: var(--_clip);
 	transform: translateX(24px);
 	opacity: 0;
@@ -610,6 +668,32 @@
 	min-height: 0;
 	overflow: auto;
 	overscroll-behavior: contain;
+}
+
+/* The scrolling parts of the drawer and panes: a thin scrollbar in the theme colours (a hover
+   brings the system one up), ending above the cut bottom corners so they stay cut. */
+.dmt-drawer-body,
+.pane-body {
+	margin-bottom: var(--_cut);
+	scrollbar-width: thin;
+	scrollbar-color: var(--_border-strong) transparent;
+}
+
+.dmt-drawer-body::-webkit-scrollbar,
+.pane-body::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+.dmt-drawer-body::-webkit-scrollbar-track,
+.pane-body::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.dmt-drawer-body::-webkit-scrollbar-thumb,
+.pane-body::-webkit-scrollbar-thumb {
+	background: var(--_border-strong);
+	clip-path: var(--_clip-sm);
 }
 
 .dmt-drawer-frame {
@@ -679,18 +763,19 @@
 	transform: translate(-50%, -50%);
 	-webkit-transform: translate(-50%, -50%);
 	resize: both;
-	overflow:auto;
+	overflow: hidden;
+	flex-direction: column;
 	z-index: 105;
-	box-shadow: inset 0 0 0 1px var(--_border-strong);
+	--_fc: var(--_border-strong);
 	/* every corner cut but the bottom right, where the resize handle sits */
 	clip-path: polygon(var(--_cut) 0, calc(100% - var(--_cut)) 0, 100% var(--_cut), 100% 100%, var(--_cut) 100%, 0 calc(100% - var(--_cut)), 0 var(--_cut));
 }
 
 .pane-header {
+	flex: none;
 	background-color: var(--_bar);
 	height:46px;
-	position: sticky;
-	top:0;
+	position: relative;
 	z-index: 1;
 	cursor: move;
 }
@@ -745,6 +830,10 @@
 }
 
 .pane-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
 	padding: 14px 24px 18px;
 	box-sizing:border-box;
 }
@@ -858,10 +947,12 @@
 .pane-item.pane-container-image-item .pane-item-image-container {
 	background: var(--_surface-sunken);
 	clip-path: var(--_clip-sm);
+	--_fcut: var(--_cut-sm);
 }
 
 .pane-item.pane-container-image-item:hover .pane-item-image-container {
-	box-shadow: inset 0 0 0 2px var(--_accent);
+	--_fc: var(--_accent);
+	--_fw: 2px;
 }
 
 .pane-item.pane-container-folder-item .pane-item-folder-container {
@@ -1272,12 +1363,15 @@ input:checked + .slider:before {
 	font-weight: 700;
 	padding:6px 10px;
 	display:block;
-	box-shadow: inset 0 0 0 1px var(--_border-strong);
+	position: relative;
+	--_fc: var(--_border-strong);
+	--_fcut: var(--_cut-sm);
 	clip-path: var(--_clip-sm);
 }
 
 .radio-segment label:hover span {
-	box-shadow: inset 0 0 0 2px var(--_accent);
+	--_fc: var(--_accent);
+	--_fw: 2px;
 }
 
 .radio-segment label input {
@@ -1289,7 +1383,7 @@ input:checked + .slider:before {
 .radio-segment input:checked + span {
 	background-color: var(--_accent);
 	color: var(--_on-accent);
-	box-shadow: none;
+	--_fc: transparent;
 }
 
 .radio-segment input:focus-visible + span {
@@ -1336,16 +1430,19 @@ input:checked + .slider:before {
 	line-height: 1.2;
 	padding: 8px 18px;
 	border: 0;
+	position: relative;
 	background-color: var(--_surface-raised);
 	color: var(--_text);
-	box-shadow: inset 0 0 0 2px var(--_border-strong);
+	--_fc: var(--_border-strong);
+	--_fw: 2px;
+	--_fcut: var(--_cut-sm);
 	clip-path: var(--_clip-sm);
 	font-weight: 700;
 	user-select: none;
 }
 
 .dmt-root .button:hover {
-	box-shadow: inset 0 0 0 2px var(--_accent);
+	--_fc: var(--_accent);
 }
 
 .dmt-root .button:active {
@@ -1360,7 +1457,7 @@ input:checked + .slider:before {
 .dmt-root .button.button-primary {
 	background-color: var(--_accent);
 	color: var(--_on-accent);
-	box-shadow: none;
+	--_fc: transparent;
 }
 
 .dmt-root .button.button-primary:hover {
@@ -1484,7 +1581,9 @@ input:checked + .slider:before {
 	background: var(--_bar);
 	color: var(--_on-bar);
 	padding: 9px 16px;
-	box-shadow: inset 0 0 0 1px var(--_bar-edge);
+	position: relative;
+	--_fc: var(--_bar-edge);
+	--_fcut: var(--_cut-sm);
 	clip-path: var(--_clip-sm);
 	transition: opacity 0.4s;
 }
@@ -1492,7 +1591,7 @@ input:checked + .slider:before {
 .dmt-toast-error {
 	background: var(--_danger);
 	color: #ffffff;
-	box-shadow: none;
+	--_fc: transparent;
 }
 
 .dmt-toast-hide {
@@ -1542,9 +1641,11 @@ input:checked + .slider:before {
 	justify-content: center;
 	align-items: center;
 	gap: 5px;
+	position: relative;
 	padding: 5px;
 	background: var(--_bar);
-	box-shadow: inset 0 0 0 1px var(--_bar-edge);
+	--_fc: var(--_bar-edge);
+	--_fcut: var(--_cut-sm);
 	clip-path: var(--_clip-sm);
 	pointer-events: auto;
 }
@@ -1600,9 +1701,9 @@ input:checked + .slider:before {
 	color: var(--_on-gold);
 }
 
+/* the gold line stops short of the cut corners, so the slants never clip it */
 #build-toolbar .build-wall-tools button.active {
-	background: var(--_bar-raised);
-	box-shadow: inset 0 -3px 0 var(--_gold);
+	background: var(--_bar-raised) linear-gradient(var(--_gold), var(--_gold)) center bottom / calc(100% - 2 * var(--_cut-sm)) 3px no-repeat;
 }
 
 #build-toolbar button.build-done {
@@ -1621,6 +1722,8 @@ input:checked + .slider:before {
 	background: rgba(7, 48, 39, 0.85);
 	background: color-mix(in srgb, var(--_bar) 85%, transparent);
 	color: var(--_on-bar);
+	position: relative;
+	--_fcut: var(--_cut-sm);
 	clip-path: var(--_clip-sm);
 	font-size: 13px;
 	text-align: center;

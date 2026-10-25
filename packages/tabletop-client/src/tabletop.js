@@ -3713,7 +3713,7 @@ function openPane(pane) {
 	if (!pane.open) {
 		pane.open = true;
 		clearTimeout(pane.timer);
-		pane.element.style.display = 'block';
+		pane.element.style.display = 'flex';
 
 		//move pane to front
 		var paneZIndex = 105;
@@ -6490,7 +6490,7 @@ var clientRequest = {
 
 		hideContextMenu();
 		openPane(map.panes.tokens);
-		map.panes.tokens.element.scrollTop = 0;
+		map.panes.tokens.body.scrollTop = 0;
 	},
 
 	getPlaneImages:	function(args) {
@@ -6698,7 +6698,7 @@ var clientRequest = {
 			
 			hideContextMenu();
 			openPane(map.panes.rooms);
-			map.panes.rooms.element.scrollTop = 0;
+			map.panes.rooms.body.scrollTop = 0;
 		}
 	},
 

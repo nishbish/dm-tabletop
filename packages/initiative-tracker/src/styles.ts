@@ -118,6 +118,10 @@ const poly = (c: string) =>
 const CUT = poly('var(--_cut)');
 // the inner shape of a 2px border is cut a little less, so the border keeps its width on the slant
 const CUT_INNER = poly('max(0px, calc(var(--_cut) - 0.83px))');
+// one stripe per corner, exactly inside the cut (the corner order of background-position above)
+const slant = (dir: string) =>
+  `linear-gradient(to ${dir}, transparent 50%, var(--_border-strong) 50%, var(--_border-strong) calc(50% + 1px), transparent calc(50% + 1px))`;
+const SLANTS = ['bottom right', 'bottom left', 'top left', 'top right'].map(slant).join(', ');
 const OCTAGON = 'polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%)';
 const HEXAGON = 'polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)';
 
@@ -138,8 +142,14 @@ export const css: string = `
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
+/* the border is clipped off at the cut corners, so each slant gets a 1px stripe in the background */
 .it-root input, .it-root select {
-  font: inherit; color: var(--_fg); background: var(--_input-bg); min-width: 0;
+  font: inherit; color: var(--_fg); min-width: 0;
+  background-color: var(--_input-bg);
+  background-image: ${SLANTS};
+  background-origin: border-box; background-clip: border-box; background-repeat: no-repeat;
+  background-size: var(--_cut) var(--_cut);
+  background-position: top left, top right, bottom right, bottom left;
   border: 1px solid var(--_border-strong); border-radius: 0; padding: 6px 10px; min-height: var(--_control-height);
   clip-path: ${CUT};
 }

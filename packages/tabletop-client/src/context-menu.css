@@ -13,7 +13,8 @@
   color: var(--_text);
   font-family: var(--_font);
   z-index: 1003;
-  box-shadow: inset 0 0 0 1px var(--_border-strong);
+  --_fc: var(--_border-strong);
+  --_fcut: var(--_cut-sm);
   clip-path: var(--_clip-sm);
   opacity: 0;
   transform: translate(0, 6px);
