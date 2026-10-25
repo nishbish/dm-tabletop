@@ -2441,6 +2441,9 @@ function addDoor(e, doorId = false, position = false, rotation = 0, open = 0, lo
 			position = planeCheck[0].point;
 		}
 
+		//a click off the board (the sky) places nothing
+		if (!position) { return false; }
+
 		//dropped next to a wall: put it in the wall, lined up with it
 		var snap = walls.snapDoorToWalls(position.x, position.z, allWallSegments(), DOOR_SIZE.width, rotation);
 

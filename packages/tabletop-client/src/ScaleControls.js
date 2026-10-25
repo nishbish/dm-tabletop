@@ -95,8 +95,8 @@ var ScaleControls = function (camera, domElement, scene, renderer) {
 
       //raycaster
       raycast.setFromCamera(pointerPos, camera);
-      var rayObjects = scalePoints;
-      rayObjects.push(plane);
+      // a new list each time: pushing onto scalePoints itself grew it by one on every click
+      var rayObjects = scalePoints.concat([plane]);
       var intersects = raycast.intersectObjects(rayObjects, true);
 
       var cubeIntersected = false;
@@ -137,7 +137,9 @@ var ScaleControls = function (camera, domElement, scene, renderer) {
 
   //pointer up
   this.pointerUp = function(e) {
-    if (scope.object != null) {
+    // only the end of an actual scale counts; every other click on the page used to send the
+    // plane's transform again and clear the group selection
+    if (scope.object != null && scope.isScaling) {
       scope.isScaling = false;
 
       this.dispatchEvent( { type: 'scaleend' } );
