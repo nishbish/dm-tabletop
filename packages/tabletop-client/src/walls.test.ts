@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  wallPieces,
+  wallTiles,
   buildWallArrays,
   corridorWalls,
   doorCutKey,
@@ -102,5 +104,35 @@ describe('walls', () => {
       { x: 7.5, z: 2.5 },
     ]);
     expect(right[0].z - left[0].z).toBe(2);
+  });
+
+  it('splits wall pieces into whole model tiles that fill them exactly', () => {
+    const pieces = wallPieces(
+      [
+        { x: 0, z: 0 },
+        { x: 3.5, z: 0 },
+      ],
+      [{ x: 2, z: 0, rotation: 0, width: 1 }],
+      new Set(),
+    );
+    // a door from 1.5 to 2.5 leaves 1.5 and 1 squares
+    expect(pieces.map((p) => [p[0], p[2]])).toEqual([
+      [0, 1.5],
+      [2.5, 3.5],
+    ]);
+    const tiles = wallTiles(pieces, 1);
+    expect(tiles.map((t) => t.length)).toEqual([0.75, 0.75, 1]);
+    expect(tiles.map((t) => t.x)).toEqual([0.375, 1.125, 3]);
+    expect(tiles[0].z).toBe(0);
+    expect(tiles.reduce((sum, t) => sum + t.length, 0)).toBeCloseTo(2.5);
+  });
+
+  it('turns tiles along the wall, like a door in it', () => {
+    const tiles = wallTiles([[0, 0, 0, 2, 0, 1]], 1);
+    expect(tiles).toHaveLength(2);
+    // the model's x axis (cos r, -sin r) must point along the wall (0, 1)
+    expect(Math.cos(tiles[0].rotation)).toBeCloseTo(0);
+    expect(-Math.sin(tiles[0].rotation)).toBeCloseTo(1);
+    expect(wallTiles([[0, 0, 0.2, 0, 1, 0]], 1)).toHaveLength(1);
   });
 });

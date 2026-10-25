@@ -27,6 +27,7 @@ import { createDemoRoom } from './demo';
 import { createSkyboxMaterials } from './skybox';
 import { createFog } from './fog';
 import { addWallUvs, createWallMaterial, wallTileSize } from './wall-texture';
+import { createWallModel } from './wall-model.js';
 import { showToast, createBanner, escapeHtml, hasWebGL } from './ui';
 import * as walls from './walls';
 import { DOOR_SIZE, getDoorParts } from './doors.js';
@@ -329,6 +330,14 @@ function init() {
 	root.appendChild(map.canvas);
 
 	map.scene = new THREE.Scene();
+
+	if (options.wallModel && options.wallModel.src) {
+		map.wallModel = createWallModel(options, map.scene, function() {
+			for (const wallGroup of Object.values(map.wallPointGroups)) {
+				if (wallGroup.mesh) { wallGroup.mesh.visible = false; }
+			}
+		});
+	}
 
 	map.objects.camera = new THREE.PerspectiveCamera( map.settings.fov, viewWidth() / viewHeight(), 1, map.settings.viewDistance );
 
@@ -2740,7 +2749,9 @@ function updateWallGroup(wallGroup, doors = null, joints = null) {
 		var points = wallGroupPoints(wallGroup);
 		doors = doors || doorSpans();
 
-		var arrays = walls.buildWallArrays(points, doors, joints || wallJoints());
+		var pieces = walls.wallPieces(points, doors, joints || wallJoints());
+		var arrays = walls.wallBoxArrays(pieces);
+		wallGroup.pieces = pieces;
 		var geometry = new THREE.BufferGeometry();
 		geometry.setAttribute('position', new THREE.BufferAttribute(arrays.positions, 3));
 		geometry.setAttribute('normal', new THREE.BufferAttribute(arrays.normals, 3));
@@ -2754,6 +2765,7 @@ function updateWallGroup(wallGroup, doors = null, joints = null) {
 		if (!wallGroup.mesh) {
 			var mesh = new THREE.Mesh(geometry, sharedWallMaterial());
 			mesh.name = 'wall mesh';
+			mesh.visible = !(map.wallModel && map.wallModel.ready);
 			wallGroup.mesh = mesh;
 			map.scene.add(mesh);
 		}
@@ -2770,6 +2782,28 @@ function updateWallGroup(wallGroup, doors = null, joints = null) {
 		}
 		delete map.wallPointGroups[wallGroup.wallPointGroupId];
 	}
+
+	scheduleWallModel();
+}
+
+// Wall-model tiles follow the box walls, once per frame however many groups changed.
+var wallModelFrame = 0;
+
+function scheduleWallModel() {
+	if (!map.wallModel || wallModelFrame) { return; }
+
+	wallModelFrame = requestAnimationFrame(function() {
+		wallModelFrame = 0;
+		if (destroyed || !map.wallModel) { return; }
+
+		var pieces = [];
+
+		for (const wallGroup of Object.values(map.wallPointGroups)) {
+			if (wallGroup.pieces) { pieces.push(...wallGroup.pieces); }
+		}
+
+		map.wallModel.update(pieces);
+	});
 }
 
 function removeDoor(doorId = false, local = true) {
@@ -4945,6 +4979,7 @@ function resetRoom() {
 	map.wallPointGroups = {};
 	map.wallPointGroupActive = false;
 	map.models = {};
+	scheduleWallModel();
 	map.users = {};
 	map.visionMeshes = [];
 	map.menuTarget = null;
@@ -6626,6 +6661,18 @@ function warmUpShaders() {
 	handles.forEach(function(h, i) { h.visible = wasVisible[i]; });
 }
 
+// Loading screen: a hexagon whose six slices light up in turn (after the old site's six-slice
+// loader), the title and a short line. The title is the host's text, so it is escaped.
+function loadScreenHtml(title) {
+	return '<div class="load-inner">' +
+		'<svg class="load-hex" viewBox="-44 -44 88 88" aria-hidden="true">' +
+		'<path class="load-slice" d="M0 0L0.0 -40.0L34.64 -20.0Z"/><path class="load-slice" d="M0 0L34.64 -20.0L34.64 20.0Z"/><path class="load-slice" d="M0 0L34.64 20.0L0.0 40.0Z"/><path class="load-slice" d="M0 0L0.0 40.0L-34.64 20.0Z"/><path class="load-slice" d="M0 0L-34.64 20.0L-34.64 -20.0Z"/><path class="load-slice" d="M0 0L-34.64 -20.0L0.0 -40.0Z"/>' +
+		'</svg>' +
+		'<div id="load-text">' + escapeHtml(title) + '</div>' +
+		'<div class="load-sub" role="status">Setting the table</div>' +
+		'</div>';
+}
+
 function hideLoadScreen() {
 	map.loaded = true;
 
@@ -6653,7 +6700,7 @@ function hideLoadScreen() {
 
 map.loadScreen = document.createElement('div');
 map.loadScreen.id = 'load-screen';
-map.loadScreen.innerHTML = '<div id="load-text">Tabletop</div><div class="load-spinner"></div>';
+map.loadScreen.innerHTML = loadScreenHtml(options.loadingTitle || 'Tabletop');
 root.appendChild(map.loadScreen);
 
 init();
@@ -6677,6 +6724,8 @@ return {
 		resetRoom();
 		map.composer.dispose();
 		map.mask.fog.dispose();
+		cancelAnimationFrame(wallModelFrame);
+		if (map.wallModel) { map.wallModel.dispose(); }
 		if (wallMaterial) {
 			if (wallMaterial.map) { wallMaterial.map.dispose(); }
 			wallMaterial.dispose();

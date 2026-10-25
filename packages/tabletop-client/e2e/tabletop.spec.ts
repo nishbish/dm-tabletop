@@ -194,3 +194,79 @@ test('offline demo works with no server', async ({ page }) => {
   expect(s.doors).toBe(2);
   await expect(page.locator('#demo-text')).toHaveText('DEMO');
 });
+
+// A one-box glTF (1 x 2 x 0.2), made here so no third-party model is needed.
+function boxGltf(): string {
+  const p = [
+    [-0.5, 0, -0.1],
+    [0.5, 0, -0.1],
+    [0.5, 2, -0.1],
+    [-0.5, 2, -0.1],
+    [-0.5, 0, 0.1],
+    [0.5, 0, 0.1],
+    [0.5, 2, 0.1],
+    [-0.5, 2, 0.1],
+  ].flat();
+  const idx = [
+    0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 3, 7, 6, 3, 6, 2, 0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5, 0, 4,
+    7, 0, 7, 3,
+  ];
+  const buf = Buffer.concat([
+    Buffer.from(new Float32Array(p).buffer),
+    Buffer.from(new Uint16Array(idx).buffer),
+  ]);
+  return JSON.stringify({
+    asset: { version: '2.0' },
+    scene: 0,
+    scenes: [{ nodes: [0] }],
+    nodes: [{ mesh: 0 }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1, material: 0 }] }],
+    materials: [
+      { pbrMetallicRoughness: { baseColorFactor: [0.6, 0.3, 0.2, 1], metallicFactor: 0 } },
+    ],
+    buffers: [
+      {
+        byteLength: buf.length,
+        uri: 'data:application/octet-stream;base64,' + buf.toString('base64'),
+      },
+    ],
+    bufferViews: [
+      { buffer: 0, byteOffset: 0, byteLength: 96 },
+      { buffer: 0, byteOffset: 96, byteLength: idx.length * 2 },
+    ],
+    accessors: [
+      {
+        bufferView: 0,
+        componentType: 5126,
+        count: 8,
+        type: 'VEC3',
+        min: [-0.5, 0, -0.1],
+        max: [0.5, 2, 0.1],
+      },
+      { bufferView: 1, componentType: 5123, count: idx.length, type: 'SCALAR' },
+    ],
+  });
+}
+
+test('walls drawn with a model, and the loading title', async ({ page }) => {
+  await page.route('**/test-wall.gltf', (route) =>
+    route.fulfill({ contentType: 'model/gltf+json', body: boxGltf() }),
+  );
+  await page.goto('/?demo=1&wallModel=test-wall.gltf&title=Dungeons');
+  await expect(page.locator('#load-text')).toHaveText('Dungeons');
+  await expect(page.locator('.load-slice')).toHaveCount(6);
+  await expect.poll(async () => (await stats(page))?.tokens).toBe(4);
+  const read = () =>
+    page.evaluate(() => {
+      const scene = (window as any).tabletop.debug.map.scene;
+      let tiles = 0;
+      let boxesShown = 0;
+      scene.traverse((o) => {
+        if (o.name === 'wall model') tiles += o.count;
+        if (o.name === 'wall mesh' && o.visible) boxesShown++;
+      });
+      return { tiles, boxesShown };
+    });
+  await expect.poll(async () => (await read()).tiles).toBeGreaterThan(4);
+  expect((await read()).boxesShown).toBe(0);
+});
