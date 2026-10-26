@@ -8,7 +8,7 @@ Open-source code for two things:
 1. **Initiative tracker** — a standalone JS/TS app/library for tracking turn order in tabletop RPG sessions.
 2. **3D tabletop** — a Three.js client plus a Node websocket server that keeps shared world state (token positions, map, etc.) per room.
 
-A separate, PRIVATE repo ("platform") handles accounts, Stripe billing and subscription checks, and consumes the packages here. This repo must work on its own for anyone who self-hosts.
+A separate, PRIVATE repo ("platform") handles accounts and access checks, and consumes the packages here. This repo must work on its own for anyone who self-hosts.
 
 ## Layout (keep this section up to date)
 
@@ -23,7 +23,8 @@ npm workspaces at the root. One shared `tsconfig.base.json`.
 
 ## HARD RULES (never break these, even if asked in passing)
 
-- Nothing in this repo may mention or depend on Stripe, subscriptions, pricing, customer data, or any private URL/domain.
+- Nothing in this repo may mention or depend on payment providers, subscriptions, pricing, customer data, or any private URL/domain.
+- This repo is public. Its only docs are `README.md`, `CONTRIBUTING.md`, `ASSETS.md`, this file and the package READMEs/NOTICEs, all written for outside users and contributors. Plans, roadmaps, marketing, launch notes, decision records and audits go in the private repo's `docs/` (indexed in its `docs/README.md`), never here.
 - Never import from the private platform repo. The dependency only goes one way: platform -> this repo.
 - Never commit secrets: API keys, DB passwords, tokens, `.env` files. Config comes from environment variables, and `.env.example` documents every variable with fake values.
 - Authentication is a pluggable hook, not a built-in paywall. The server exposes something like `authenticate(token) => { userId, roomId, role } | null`. The default implementation allows anyone (for local/self-hosted use). The hosted platform supplies its own implementation that verifies signed tokens.
