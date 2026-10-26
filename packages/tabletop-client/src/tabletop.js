@@ -191,6 +191,7 @@ const map = {
 	settings: {
 		preset: mobileAndTabletCheck() ? 1 : 2,
 		lightingQuality: 2,
+		fogQuality: 1,
 		snapLighting: true,
 		snapTokenPos: true,
 		maskPoints: 160,
@@ -384,6 +385,7 @@ function init() {
 
 		//move skybox to camera pos
 		map.skybox.position.copy(map.objects.camera.position);
+		updateCameraFar();
 	});
 
 	map.orbitControls.mouseButtons = {
@@ -464,6 +466,7 @@ function init() {
 	map.skybox.dayMats = skyboxMaterialsDay;
 	map.skybox.nightMats = skyboxMaterialsNight;
 	map.skybox.scale.set(map.settings.viewDistance, map.settings.viewDistance, map.settings.viewDistance);
+	map.skybox.renderOrder = -1000;	//drawn first; its materials do not write depth (skybox.js)
     map.scene.add(map.skybox);
 
 	//plane
@@ -497,6 +500,7 @@ function init() {
 	map.orbitControls.target = new THREE.Vector3(camPos.x, 0, camPos.z);
 
 	map.orbitControls.update();
+	updateCameraFar();
 
 	// NOTE(port): watch the container, not just the window, so embedding in a resizable element works.
 	if (typeof ResizeObserver !== 'undefined') {
@@ -1132,6 +1136,7 @@ function init() {
 	map.mask = { fog: createFog(map.settings.gridWidth, map.settings.gridHeight) };
 	map.mask.mesh = map.mask.fog.mesh;
 	map.mask.mesh.material.opacity = isDM ? DM_FOG_OPACITY : 1;
+	map.mask.fog.setSimple(map.settings.fogQuality == 0);
 	map.scene.add(map.mask.mesh);
 
 	if (demo) {
@@ -1751,6 +1756,8 @@ function updateGridSize(local = true) {
 		map.mask.fog.setGrid(map.settings.gridWidth, map.settings.gridHeight);
 	}
 
+	updateCameraFar();
+
 	if (local) {
 		var args = {
 			width: map.settings.gridWidth,
@@ -1763,6 +1770,25 @@ function updateGridSize(local = true) {
 
 // The server accepts grid sizes from 1 to 1000; the settings pane offers 2 to 1000.
 var MAX_GRID_SIZE = 1000;
+// The far plane is the View Distance setting, but never so near that zooming out cuts off the
+// map: it always reaches the far corner of the grid from where the camera is. (The low setting
+// used to make zooming out on a phone show nothing past a few dozen squares.)
+function updateCameraFar() {
+	var camera = map.objects.camera;
+	if (!camera) { return; }
+
+	var w = map.settings.gridWidth, h = map.settings.gridHeight;
+	var dx = camera.position.x - (w / 2 - 0.5);
+	var dz = camera.position.z - (h / 2 - 0.5);
+	var toMap = Math.sqrt(dx * dx + camera.position.y * camera.position.y + dz * dz) + Math.sqrt(w * w + h * h) / 2 + 10;
+	var far = Math.max(map.settings.viewDistance, Math.ceil(toMap / 10) * 10);
+
+	if (far != camera.far) {
+		camera.far = far;
+		camera.updateProjectionMatrix();
+	}
+}
+
 function clampGridSize(value) {
 	var n = Math.round(Number(value));
 	if (!Number.isFinite(n)) { return 100; }
@@ -4776,6 +4802,22 @@ function buildGui() {
 		}, false);
 	}
 
+	//fog of war: the soft drifting fog, or a flat one for slow devices (fog.js)
+	var fogQualityOptions = [
+		{ value: 0, name: 'Simple' },
+		{ value: 1, name: 'Soft' }
+	];
+	fogQualityOptions[map.settings.fogQuality == 0 ? 0 : 1].default = true;
+
+	var fogQuality = buildPaneItem(settingsPane, 'Fog of War', 'radio-segment', fogQualityOptions);
+	for (var i=0;i<fogQuality.input.length;i++) {
+		fogQuality.input[i].addEventListener('change', fogQuality.input[i].fn = function() {
+			map.settings.fogQuality = parseInt(this.value);
+			saveSettings();
+			map.mask.fog.setSimple(map.settings.fogQuality == 0);
+		}, false);
+	}
+
 	//vision mask calculation points
 	var maskPointOptions = [
 		{ value: 80, name: 'Low' },
@@ -4863,8 +4905,8 @@ function buildGui() {
 
 	//view distance
 	var viewDistanceOptions = [
-		{ value: 100, name: 'Low' },
-		{ value: 200, name: 'Medium' },		
+		{ value: 200, name: 'Low' },
+		{ value: 300, name: 'Medium' },
 		{ value: 500, name: 'High' }
 	];
 
@@ -4881,8 +4923,7 @@ function buildGui() {
 			map.settings.viewDistance = parseInt(this.value);
 			map.skybox.scale.set(map.settings.viewDistance, map.settings.viewDistance, map.settings.viewDistance);
 			saveSettings();
-			map.objects.camera.far = parseInt(this.value);
-			map.objects.camera.updateProjectionMatrix();
+			updateCameraFar();
 		}, false);
 	}
 
@@ -5008,6 +5049,11 @@ function buildGui() {
 					viewDistance.input[i].fn();					
 				}
 			}
+
+			//the Low preset uses the flat fog, the others the soft one
+			var fogIndex = this.value == 0 ? 0 : 1;
+			fogQuality.input[fogIndex].checked = true;
+			fogQuality.input[fogIndex].fn();
 		}, false);
 	}
 
@@ -5371,6 +5417,7 @@ function buildRoom(room) {
 
 				var target = user.camera.target;
 				map.orbitControls.target.set(target.x, target.y, target.z);
+				updateCameraFar();
 			}
 		}
 	}
@@ -5532,6 +5579,15 @@ function loadSettings() {
 				map.settings[name] = setting;
 			}
 		}
+
+		//settings saved before the Fog of War setting existed: the Low preset means the simple fog
+		if (!('fogQuality' in settings)) {
+			map.settings.fogQuality = map.settings.preset == 0 ? 0 : 1;
+		}
+
+		//the low and medium view distances were raised (100 and 200 cut off too much)
+		if (map.settings.viewDistance == 100) { map.settings.viewDistance = 200; }
+		else if (map.settings.viewDistance == 200) { map.settings.viewDistance = 300; }
 	}
 }
 
