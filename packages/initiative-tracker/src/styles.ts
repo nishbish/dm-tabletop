@@ -178,9 +178,9 @@ export const css: string = `
 .it-enc-name {
   font-size: 1.3rem; font-weight: var(--_weight-strong); min-width: 14rem; max-width: 100%;
   background: transparent !important; border-color: transparent !important; border-bottom-color: var(--_border-strong) !important;
-  /* only an underline, no box: a cut would clip the line short at both ends */
-  clip-path: none;
 }
+/* only an underline, no box: a cut would clip the line short at both ends (beats .it-root input) */
+.it-root .it-enc-name { clip-path: none; }
 .it-turn { margin: 8px 0; font-weight: var(--_weight-strong); min-height: 1.4em; }
 
 /* the creature list: a cream panel with dark cells, as on the first tracker */
