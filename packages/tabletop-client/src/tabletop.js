@@ -5580,6 +5580,11 @@ function loadSettings() {
 			}
 		}
 
+		//settings saved before the Fog of War setting existed: the Low preset means the simple fog
+		if (!('fogQuality' in settings)) {
+			map.settings.fogQuality = map.settings.preset == 0 ? 0 : 1;
+		}
+
 		//the low and medium view distances were raised (100 and 200 cut off too much)
 		if (map.settings.viewDistance == 100) { map.settings.viewDistance = 200; }
 		else if (map.settings.viewDistance == 200) { map.settings.viewDistance = 300; }
