@@ -679,7 +679,6 @@
 	z-index: 4;
 	width: 10px;
 	cursor: ew-resize;
-	touch-action: none;
 }
 
 .dmt-drawer-grip::after {
@@ -1462,14 +1461,19 @@ input:checked + .slider:before {
 
 /*----- radio segment end -----*/
 
+/* a faint watermark only: it must never catch a click or drag meant for the scene */
 #demo-text {
 	position: absolute;
-	top: 100px;
+	top: 12px;
 	left: 20px;
 	font-family: var(--_font-display);
 	font-size: 72px;
+	line-height: 1;
 	opacity: 0.2;
 	z-index: 2;
+	pointer-events: none;
+	user-select: none;
+	-webkit-user-select: none;
 }
 
 /* ---- additions for the packaged viewer ---- */

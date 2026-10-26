@@ -372,6 +372,9 @@ function init() {
 	map.orbitControls.dampingFactor = 0.05;
 	map.orbitControls.maxPolarAngle = Math.PI / 2;
 	map.orbitControls.panSpeed = 1.4;
+	// pan across the ground (map-controls style) instead of the screen plane, so dragging never
+	// changes the camera's height and a whole room can be swept with one drag
+	map.orbitControls.screenSpacePanning = false;
 	map.orbitControls.endTimer = null;
 	
 	map.orbitControls.addEventListener('start', function() {
