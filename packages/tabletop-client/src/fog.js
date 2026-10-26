@@ -14,12 +14,17 @@
 // curl into the edge of the vision, so the edge is never a hard outline.
 // `material.opacity` still sets how strong the fog is (1 for players, 0.6 for the host's
 // translucent view, 0 for the clear view); the rest of the viewer keeps changing it as before.
+//
+// setSimple(true) is for slow devices (the Low graphics setting): the same layers at half the
+// resolution, and a shader with no noise, so the fog is a flat, soft-edged shade that costs about
+// as much as a textured plane.
 
 import * as THREE from 'three';
 
 var FOG_HEIGHT = 1.55;
 var MAX_TEXTURE = 2048;
 var PIXELS_PER_CELL = 16;
+var SIMPLE_PIXELS_PER_CELL = 8;
 var FADE_SECONDS = 0.4;
 
 var vertexShader = [
@@ -73,6 +78,12 @@ var fragmentShader = [
   "	// the memory of explored ground only shows when the fog is translucent (the host's view):",
   '	// at full strength a player sees nothing outside what the token sees now',
   '	float explored = smoothstep(0.0, 1.0, max(texture2D(uExplored, vUv).r, visible)) * (1.0 - smoothstep(0.9, 1.0, uStrength));',
+  '#ifdef FOG_SIMPLE',
+  '	// flat fog: no noise, no glow, the soft edge comes from the blurred layers alone',
+  '	float clear = smoothstep(0.08, 0.92, visible);',
+  '	float alpha = mix(1.0, 0.52, explored) * (1.0 - clear);',
+  '	vec3 col = mix(vec3(0.030, 0.043, 0.067), vec3(0.11, 0.14, 0.18), 0.5 * explored);',
+  '#else',
   '	// two layers of noise drifting in different directions',
   '	float slow = fbm(vWorld * 0.32 + vec2(uTime * 0.035, uTime * 0.021));',
   '	float fast = fbm(vWorld * 0.85 + vec2(-uTime * 0.06, uTime * 0.03) + 7.3);',
@@ -91,6 +102,7 @@ var fragmentShader = [
   '	vec3 col = mix(deep, pale, smoothstep(0.35, 0.8, wisp) * mix(0.8, 0.35, explored));',
   '	// near the edge the fog glows a little where it is thin',
   '	col += vec3(0.05, 0.07, 0.09) * edge * (1.0 - clear) * (0.5 + wisp);',
+  '#endif',
   '	gl_FragColor = vec4(col, alpha * uStrength);',
   '}',
 ].join('\n');
@@ -119,6 +131,7 @@ export function createFog(gridWidth, gridHeight) {
     width: 0,
     height: 0,
     scale: PIXELS_PER_CELL,
+    simple: false,
     layers: null,
     mix: 1,
     start: performance.now(),
@@ -131,6 +144,7 @@ export function createFog(gridWidth, gridHeight) {
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
+    defines: {},
     uniforms: {
       uVisible: { value: null },
       uPrevious: { value: null },
@@ -163,10 +177,6 @@ export function createFog(gridWidth, gridHeight) {
   function setGrid(width, height) {
     fog.width = width;
     fog.height = height;
-    fog.scale = Math.max(
-      2,
-      Math.min(PIXELS_PER_CELL, Math.floor(MAX_TEXTURE / Math.max(width, height, 1))),
-    );
 
     if (geometry) {
       geometry.dispose();
@@ -176,8 +186,24 @@ export function createFog(gridWidth, gridHeight) {
     mesh.position.set(width / 2 - 0.5, FOG_HEIGHT, height / 2 - 0.5);
 
     disposeLayers();
-    var w = Math.max(2, Math.round(width * fog.scale));
-    var h = Math.max(2, Math.round(height * fog.scale));
+    makeLayers();
+    fog.mix = 1;
+    clearLayers();
+  }
+
+  function cellPixels() {
+    var wanted = fog.simple ? SIMPLE_PIXELS_PER_CELL : PIXELS_PER_CELL;
+
+    return Math.max(
+      2,
+      Math.min(wanted, Math.floor(MAX_TEXTURE / Math.max(fog.width, fog.height, 1))),
+    );
+  }
+
+  function makeLayers() {
+    fog.scale = cellPixels();
+    var w = Math.max(2, Math.round(fog.width * fog.scale));
+    var h = Math.max(2, Math.round(fog.height * fog.scale));
     fog.layers = ['visible', 'previous', 'explored'].map(function (name) {
       var canvas = makeCanvas(w, h);
       var texture = makeTexture(canvas);
@@ -187,8 +213,37 @@ export function createFog(gridWidth, gridHeight) {
     material.uniforms.uVisible.value = fog.layers[0].texture;
     material.uniforms.uPrevious.value = fog.layers[1].texture;
     material.uniforms.uExplored.value = fog.layers[2].texture;
-    fog.mix = 1;
-    clearLayers();
+  }
+
+  // Switches between the soft, drifting fog and the cheap flat one. What was seen is kept: the
+  // layers are copied to the new resolution.
+  function setSimple(simple) {
+    simple = !!simple;
+    if (simple === fog.simple) {
+      return;
+    }
+
+    fog.simple = simple;
+    if (simple) {
+      material.defines.FOG_SIMPLE = '';
+    } else {
+      delete material.defines.FOG_SIMPLE;
+    }
+    material.needsUpdate = true;
+
+    if (!fog.layers || cellPixels() === fog.scale) {
+      return;
+    }
+
+    var old = fog.layers;
+    makeLayers();
+    fog.layers.forEach(function (l, i) {
+      l.context.drawImage(old[i].canvas, 0, 0, l.canvas.width, l.canvas.height);
+      l.texture.needsUpdate = true;
+    });
+    old.forEach(function (l) {
+      l.texture.dispose();
+    });
   }
 
   function layer(name) {
@@ -308,6 +363,7 @@ export function createFog(gridWidth, gridHeight) {
     material: material,
     setGrid: setGrid,
     setVision: setVision,
+    setSimple: setSimple,
     reset: reset,
     update: update,
     dispose: dispose,

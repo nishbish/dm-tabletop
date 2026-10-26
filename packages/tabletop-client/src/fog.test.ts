@@ -119,6 +119,26 @@ describe('fog of war', () => {
     expect(canvases[2].context.globalCompositeOperation).toBeDefined();
   });
 
+  it('simple fog uses the flat shader and half-size layers, keeping what was seen', () => {
+    const fog = createFog(10, 10);
+    expect(canvases[0].width).toBe(160);
+    fog.setSimple(true);
+    expect('FOG_SIMPLE' in fog.material.defines).toBe(true);
+    expect(canvases).toHaveLength(6);
+    expect(canvases[3].width).toBe(80);
+    expect(canvases[5].context.calls.some((c: Call) => c.name === 'drawImage')).toBe(true);
+    fog.setVision([
+      { x: 0, z: 0 },
+      { x: 4, z: 0 },
+      { x: 4, z: 4 },
+    ]);
+    const moves = canvases[3].context.calls.filter((c: Call) => c.name === 'moveTo');
+    expect(moves[0].args).toEqual([4, 4]);
+    fog.setSimple(false);
+    expect('FOG_SIMPLE' in fog.material.defines).toBe(false);
+    expect(canvases[6].width).toBe(160);
+  });
+
   it('reset forgets everything seen', () => {
     const fog = createFog(10, 10);
     fog.setVision([

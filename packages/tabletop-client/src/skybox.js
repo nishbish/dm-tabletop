@@ -39,8 +39,14 @@ function proceduralSky(THREE, top, horizon, ground) {
 
   // same face order as the image skybox: ft, bk, up, dn, rt, lf
   return [side, side, up, down, side, side].map(function (texture) {
-    return new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide });
+    return skyMaterial(THREE, texture);
   });
+}
+
+// The sky box follows the camera and is drawn first without writing depth, so it never hides
+// anything: the map stays visible out to the camera's far plane, not just to the box's sides.
+function skyMaterial(THREE, texture) {
+  return new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide, depthWrite: false });
 }
 
 function imageSky(THREE, TGALoader, options, config) {
@@ -52,7 +58,7 @@ function imageSky(THREE, TGALoader, options, config) {
       joinAssetUrl(options.assetBaseUrl, config.path + '_' + side + extension),
     );
 
-    return new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide });
+    return skyMaterial(THREE, texture);
   });
 }
 
