@@ -196,6 +196,76 @@ test('offline demo works with no server', async ({ page }) => {
   await expect(page.locator('#demo-text')).toHaveText('DEMO');
 });
 
+// A token's vision, as the area of the polygon the fog is drawn from, after dragging it along `path`.
+// Walls stop tokens only when the host's light view is off, so it is turned off first.
+async function dragAndLook(page, tokenId: string, path: number[][]) {
+  return page.evaluate(
+    ([tokenId, path]) => {
+      const map = (window as any).tabletop.debug.map;
+      map.local.dmLight = 0;
+      let seen = [];
+      const setVision = map.mask.fog.setVision;
+      map.mask.fog.setVision = (points) => {
+        seen = points || [];
+        return setVision(points);
+      };
+      const token = map.objects.tokens[tokenId];
+      const controls = map.translateControls.token;
+      controls.object = token;
+      controls.translateGroupObjects = [token];
+      controls.translatestart({});
+      for (const [x, z] of path as number[][]) {
+        token.position.x = x;
+        token.position.z = z;
+        controls.translate({});
+      }
+      controls.translateend({});
+      map.mask.fog.setVision = setVision;
+      let area = 0;
+      seen.forEach((p, i) => {
+        const q = seen[(i + 1) % seen.length];
+        area += p.x * q.z - q.x * p.z;
+      });
+      return { x: token.position.x, z: token.position.z, area: Math.abs(area / 2) };
+    },
+    [tokenId, path] as [string, number[][]],
+  );
+}
+
+test('tokens keep out of walls through mid-square and still see in a double doorway', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  // the inner wall runs through the middle of the squares at x = 11: the token stops beside it
+  const atWall = await dragAndLook(page, '1', [
+    [8, 10],
+    [10, 10],
+    [11.6, 10],
+    [12.5, 10],
+  ]);
+  expect(atWall.x).toBe(10);
+  expect(atWall.area).toBeGreaterThan(20);
+
+  // the front wall (z = 18) has a two-square gap: a double door, both leaves open
+  await page.evaluate(() => {
+    const update = (window as any).tabletop.debug.updateClient;
+    update.updateDoorTransform({ doorId: '1', x: 9.5, z: 18, rotation: 0 });
+    update.updateDoorTransform({ doorId: '2', x: 10.5, z: 18, rotation: 0 });
+    update.updateDoorState({ doorId: '1', open: 1 });
+    update.updateDoorState({ doorId: '2', open: 1 });
+  });
+  await page.waitForTimeout(500); // the leaves swing open over 250 ms
+  const inside = await dragAndLook(page, '2', [[10, 17]]);
+  const doorway = await dragAndLook(page, '2', [
+    [10, 17.6],
+    [10, 18],
+  ]);
+  expect([doorway.x, doorway.z]).toEqual([10, 18]);
+  // it sees both rooms, at least as much as from inside the building
+  expect(doorway.area).toBeGreaterThan(inside.area);
+});
+
 // A one-box glTF (1 x 2 x 0.2), made here so no third-party model is needed.
 function boxGltf(): string {
   const p = [

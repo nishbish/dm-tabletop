@@ -2308,6 +2308,27 @@ function handleSelectionBox() {
 var visionRaycaster = new THREE.Raycaster();
 var debugArrows = false;
 
+// Frames, and open panels, of the doors a token stands in. Double doors are two one-square leaves
+// centred on half squares, so the square in the middle of the doorway has its centre exactly where
+// the two frames meet (and often a hinge, so an open panel swings out right beside it): nearly
+// every vision ray started on a frame post or that panel and stopped there, and the token saw
+// nothing. Someone standing in a doorway can look past its frame and around its open leaves; a
+// closed leaf next to them still blocks.
+function doorPartsAround(point) {
+	var parts = new Set();
+
+	for (const door of Object.values(map.objects.doors)) {
+		var span = { x: door.position.x, z: door.position.z, rotation: door.rotation.y, width: door.size.width };
+
+		if (walls.insideBlocker(point, walls.doorBlocker(span, DOOR_SIZE.frameDepth))) {
+			parts.add(door.frame);
+			if (door.open) { parts.add(door.panel); }
+		}
+	}
+
+	return parts;
+}
+
 function updateTokenVision() {
 	var token = map.local.tokenVisionActive;
 
@@ -2334,6 +2355,12 @@ function updateTokenVision() {
 	var firstPoint = false;
 
 	var holePoints = [];
+	var visionMeshes = map.visionMeshes;
+	var standingIn = doorPartsAround(origin);
+
+	if (standingIn.size > 0) {
+		visionMeshes = visionMeshes.filter(function(mesh) { return !standingIn.has(mesh); });
+	}
 
 	if (!isDM || (isDM && map.local.dmLight === 0)) {
 		for (const [tokenId, sToken] of Object.entries(map.objects.tokens)) {
@@ -2347,7 +2374,7 @@ function updateTokenVision() {
 
 		visionRaycaster.set(origin, direction);
 
-		var intersect = visionRaycaster.intersectObjects(map.visionMeshes, false);		
+		var intersect = visionRaycaster.intersectObjects(visionMeshes, false);		
 
 		var validIntersect = false;
 

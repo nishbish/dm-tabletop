@@ -4,6 +4,7 @@ import {
   Blocker,
   WALL_THICKNESS,
   doorBlocker,
+  insideBlocker,
   moveBlocked,
   wallPieces,
   wallTiles,
@@ -231,5 +232,14 @@ describe('moveBlocked', () => {
     expect(moveBlocked({ x: 4, z: 2 }, { x: 4, z: 4 }, [door])).toBe(true);
     expect(moveBlocked({ x: 4, z: 2 }, { x: 4, z: 3 }, [door])).toBe(true);
     expect(moveBlocked({ x: 3, z: 2 }, { x: 3, z: 4 }, [door])).toBe(false);
+  });
+
+  it('puts the middle of a double door in both leaves', () => {
+    // two one-square leaves centred on half squares, in a wall through the middle of the squares
+    const left = doorBlocker({ x: 9.5, z: 18, rotation: 0, width: 1 }, 0.28);
+    const right = doorBlocker({ x: 10.5, z: 18, rotation: 0, width: 1 }, 0.28);
+    expect(insideBlocker({ x: 10, z: 18 }, left)).toBe(true);
+    expect(insideBlocker({ x: 10, z: 18 }, right)).toBe(true);
+    expect(insideBlocker({ x: 10, z: 17 }, left)).toBe(false);
   });
 });
