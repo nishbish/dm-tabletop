@@ -1018,6 +1018,7 @@ function init() {
 
 				var gridCheckSize = 1;
 				var maxStandingSpace = 0.5;
+				var blockers = null;
 
 				if (!isDM || (isDM && map.local.dmLight === 0)) {
 					var collisionMeshes = [];
@@ -1069,6 +1070,15 @@ function init() {
 							break;
 						}
 					}
+
+					//the rays above only look along x and z from the last position, so a diagonal
+					//drag past a wall end could still land in a wall: check the whole move as well
+					blockers = tokenBlockers();
+
+					if (walls.moveBlocked(token.prevPos, token.position, blockers)) {
+						token.position.x = token.prevPos.x;
+						token.position.z = token.prevPos.z;
+					}
 				}
 				//limit token pos to floor
 				if (token.position.y < 0) { token.position.y = 0; }
@@ -1077,7 +1087,7 @@ function init() {
 				if (token.position.y > 6) { token.position.y = 6; }
 
 				if (map.settings.snapTokenPos) {
-					snapPosition(token);
+					snapTokenClear(token, blockers);
 				}
 
 				token.intPos.copy(token.position).roundToZero();
@@ -1116,7 +1126,7 @@ function init() {
 			map.orbitControls.enableRotate = true;
 			var token = map.translateControls.token.object;
 
-			snapPosition(token);
+			snapTokenClear(token, !isDM || map.local.dmLight === 0 ? tokenBlockers() : null);
 			updateTokenPlaceHolder(token);
 
 			if (!map.settings.dragUpdate) {
@@ -1218,6 +1228,59 @@ function snapPosition(object) {
 			object.position[dims[i]] = (object.position[dims[i]] - rounded) >= 0 ? rounded + 0.5 : rounded - 0.5;
 		}
 	}
+}
+
+// Walls and closed doors a token may not stop in or move through (see walls.moveBlocked).
+function tokenBlockers() {
+	var blockers = [];
+	var half = walls.WALL_THICKNESS / 2;
+
+	for (const wallGroup of Object.values(map.wallPointGroups)) {
+		for (const piece of wallGroup.pieces || []) {
+			blockers.push({ piece: piece, half: half });
+		}
+	}
+
+	for (const door of Object.values(map.objects.doors)) {
+		if (!door.open) {
+			var span = { x: door.position.x, z: door.position.z, rotation: door.rotation.y, width: door.size.width };
+			blockers.push(walls.doorBlocker(span, DOOR_SIZE.frameDepth));
+		}
+	}
+
+	return blockers;
+}
+
+// snapPosition() for a token that never snaps into a wall or door: a wall drawn through the middle
+// of squares runs over the squares' centres, and a token snapped there was stuck in the wall,
+// unable to move or see. Then the nearest clear square next to it is used instead, or the token
+// stays unsnapped where it was dropped. `blockers` is null when walls do not stop this user.
+function snapTokenClear(token, blockers) {
+	var from = { x: token.position.x, z: token.position.z };
+
+	snapPosition(token);
+
+	if (!blockers || !walls.moveBlocked(from, token.position, blockers)) { return; }
+
+	//snapping moves a whole square at a time, so the other choice on each axis is one square over
+	var xs = [token.position.x, token.position.x + (from.x >= token.position.x ? 1 : -1)];
+	var zs = [token.position.z, token.position.z + (from.z >= token.position.z ? 1 : -1)];
+	var candidates = [];
+
+	for (const x of xs) {
+		for (const z of zs) {
+			candidates.push({ x: x, z: z });
+		}
+	}
+
+	candidates.sort(function(a, b) {
+		return Math.hypot(a.x - from.x, a.z - from.z) - Math.hypot(b.x - from.x, b.z - from.z);
+	});
+
+	var clear = candidates.find(function(c) { return !walls.moveBlocked(from, c, blockers); }) || from;
+
+	token.position.x = clear.x;
+	token.position.z = clear.z;
 }
 
 function sendTokenMovement(token) {
@@ -2301,7 +2364,9 @@ function updateTokenVision() {
 					}
 
 					var intersectPos = new THREE.Vector3(intersect[j].point.x, 0, intersect[j].point.z);
-					var displacement = new THREE.Vector3().copy(direction).multiplyScalar(0.1);
+					//reveal the wall's top too: rays now stop at a wall's near face, so reach on to its far face
+					var reveal = intersect[j].object.name == 'wall mesh' ? walls.WALL_THICKNESS : 0.1;
+					var displacement = new THREE.Vector3().copy(direction).multiplyScalar(reveal);
 					var targetPoint = new THREE.Vector3().copy(intersectPos).add(displacement);
 					var edgeBuffer = 0;
 

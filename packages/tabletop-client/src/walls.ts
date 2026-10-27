@@ -235,7 +235,10 @@ export function wallBoxArrays(boxes: WallPiece[]): WallArrays {
       v++;
     }
 
-    indices.set([base, base + 1, base + 2, base, base + 2, base + 3], n);
+    // the corners below are listed clockwise seen from outside, so the triangles take them in
+    // reverse: front faces must face out, or a raycast from outside skips the near face and one
+    // from inside a wall hits it (a token in a wall could then neither move nor see)
+    indices.set([base, base + 2, base + 1, base, base + 3, base + 2], n);
     n += 6;
   };
 
@@ -251,7 +254,7 @@ export function wallBoxArrays(boxes: WallPiece[]): WallArrays {
     const er = [x1 - ox, z1 - oz];
     const sr = [x0 - ox, z0 - oz];
 
-    // corners are wound counter-clockwise seen from outside the box
+    // each face lists its corners clockwise seen from outside the box (see face())
     face(
       [
         [sl[0], y0, sl[1]],
@@ -474,4 +477,110 @@ export function wallTiles(pieces: WallPiece[], tileWidth: number): WallTile[] {
   }
 
   return tiles;
+}
+
+// Token movement against walls and closed doors. A blocker is a solid stretch (a WallPiece) with
+// the half thickness it is checked at. Only the token's centre is checked, as the raycasts in the
+// viewer do.
+export interface Blocker {
+  piece: WallPiece;
+  half: number;
+}
+
+// A closed door blocks its whole width, a little deeper than the wall it sits in.
+export function doorBlocker(door: DoorSpan, depth: number): Blocker {
+  const axis = doorAxis(door.rotation);
+  const h = door.width / 2;
+
+  return {
+    piece: [
+      door.x - axis.x * h,
+      door.z - axis.z * h,
+      door.x + axis.x * h,
+      door.z + axis.z * h,
+      axis.x,
+      axis.z,
+    ],
+    half: depth / 2,
+  };
+}
+
+// A point in the blocker's own frame: s along it from its start, t across it.
+function localPoint(p: Point, b: Blocker): Point {
+  const [x0, z0, , , ux, uz] = b.piece;
+  const px = p.x - x0;
+  const pz = p.z - z0;
+
+  return { x: px * ux + pz * uz, z: pz * ux - px * uz };
+}
+
+function blockerLength(b: Blocker): number {
+  const [x0, z0, x1, z1] = b.piece;
+  return Math.hypot(x1 - x0, z1 - z0);
+}
+
+// In the blocker, its faces included: a token whose centre sits on a wall face sees and moves
+// as badly as one inside it.
+export function insideBlocker(p: Point, b: Blocker): boolean {
+  const q = localPoint(p, b);
+
+  return q.x >= -EPSILON && q.x <= blockerLength(b) + EPSILON && Math.abs(q.z) <= b.half + EPSILON;
+}
+
+// Whether the straight move from a to b touches the blocker (clipping the line to its rectangle).
+function crossesBlocker(a: Point, b: Point, blocker: Blocker): boolean {
+  const p = localPoint(a, blocker);
+  const q = localPoint(b, blocker);
+  const ds = q.x - p.x;
+  const dt = q.z - p.z;
+  const half = blocker.half + EPSILON;
+  let t0 = 0;
+  let t1 = 1;
+  // each pair: how far the line moves towards a side, and how far inside that side it starts
+  const sides: [number, number][] = [
+    [-ds, p.x + EPSILON],
+    [ds, blockerLength(blocker) + EPSILON - p.x],
+    [-dt, p.z + half],
+    [dt, half - p.z],
+  ];
+
+  for (const [move, room] of sides) {
+    if (Math.abs(move) < EPSILON) {
+      if (room < 0) {
+        return false;
+      }
+      continue;
+    }
+
+    const t = room / move;
+
+    if (move < 0) {
+      t0 = Math.max(t0, t);
+    } else {
+      t1 = Math.min(t1, t);
+    }
+
+    if (t0 > t1) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// Whether a token may move from `from` to `to`: it must not end up in a blocker or pass through
+// one. Blockers the token already stands in are ignored, so a token that got into a wall some
+// other way (an old save, a wall drawn over it) can always step back out.
+export function moveBlocked(from: Point, to: Point, blockers: Blocker[]): boolean {
+  for (const b of blockers) {
+    if (insideBlocker(from, b)) {
+      continue;
+    }
+
+    if (insideBlocker(to, b) || crossesBlocker(from, to, b)) {
+      return true;
+    }
+  }
+
+  return false;
 }
