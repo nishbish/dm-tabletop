@@ -66,5 +66,6 @@ npm workspaces at the root. One shared `tsconfig.base.json`.
 
 - I am short on time and rely on you for most of the implementation. Work in small steps that I can review as separate commits/PRs.
 - When unsure whether something belongs in this public repo or the private one, assume it belongs in the private one and ask me.
+- The maintainer's to-dos are not tracked in this repo's Issues, and `gh issue create` must not be used here. Follow the "Tasks" rule in the platform repo's `CLAUDE.md`.
 - Before any release, scan git history and files for secrets (e.g. with gitleaks) and report the result.
 - Licence: AGPL-3.0 (`LICENSE`). Outside contributions need the terms in `CONTRIBUTING.md` (contributor grant to the maintainer). Do not change the licence.
