@@ -101,6 +101,13 @@
 	color: var(--_text);
 }
 
+/* a notice's action is a link drawn as a button */
+.pane a.button {
+	display: inline-flex;
+	align-items: center;
+	text-decoration: none;
+}
+
 /* a host page's own button rules (margins, fonts) stay out of the viewer */
 .dmt-root button {
 	margin: 0;

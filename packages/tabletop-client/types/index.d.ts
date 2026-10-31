@@ -20,6 +20,13 @@ export interface ModelInfo {
   baseColor?: number;
 }
 
+export interface TabletopNotice {
+  title: string;
+  description: string;
+  /** A button that opens the link in a new tab. */
+  action?: { label: string; href: string };
+}
+
 export interface TabletopOptions {
   /** WebSocket address of tabletop-server. Default: ws(s)://<this host>:3000 */
   serverUrl?: string;
@@ -39,6 +46,8 @@ export interface TabletopOptions {
   avatarUrl?: (user: { userId: string; name: string }) => string;
   uploadModel?: (formData: FormData) => Promise<unknown>;
   uploadPlane?: (formData: FormData) => Promise<unknown>;
+  /** Shown when the upload buttons are pressed and there is no upload hook (keeps them visible). */
+  uploadLocked?: TabletopNotice;
   inviteLink?: (code: string) => string;
   trackerUrl?: string;
   /** Draws a tracker into the side drawer the first time it opens; wins over trackerUrl. */
@@ -98,6 +107,8 @@ export interface Tabletop {
   getTokenScreenPosition(tokenId: string): { x: number; y: number } | null;
   /** Sends one of options.appEvents to the room; false when not connected. */
   sendAppEvent(name: string, args: Record<string, unknown>): boolean;
+  /** A message that stays until it is closed. */
+  showNotice(notice: TabletopNotice): void;
   /** The camera as plain numbers, for drawing a layer over the scene with the same view. */
   getView(): TabletopView | null;
   /** Puts an element (a transparent canvas) just above the 3D scene, below the viewer's panels. */
