@@ -62,7 +62,7 @@ if (!hasWebGL()) {
 	unsupportedMessage.textContent = 'This viewer needs WebGL, which your browser or device does not provide.';
 	container.appendChild(unsupportedMessage);
 
-	return { destroy: function() { unsupportedMessage.remove(); }, getSceneStats: function() { return null; }, getTokenPosition: function() { return null; }, sendAppEvent: function() { return false; }, getView: function() { return null; }, attachOverlay: function() { return function() {}; } };
+	return { destroy: function() { unsupportedMessage.remove(); }, getSceneStats: function() { return null; }, getTokenPosition: function() { return null; }, sendAppEvent: function() { return false; }, showNotice: function() {}, getView: function() { return null; }, attachOverlay: function() { return function() {}; } };
 }
 
 const demo = options.demo;
@@ -98,6 +98,33 @@ function newLocalId() {
 // Non-blocking message (replaces alert()).
 function notify(message, level) {
 	showToast(root, message, level || 'info');
+}
+
+// A message that stays until it is closed: {title, description, action?: {label, href}}. The
+// action opens in a new tab, so the table stays where it is.
+function showNotice(notice) {
+	var pane = map.panes.alert;
+	pane.body.innerHTML = '';
+
+	buildPaneItem(pane, escapeHtml(notice.title), 'header');
+	buildPaneItem(pane, escapeHtml(notice.description), 'text');
+
+	if (notice.action) {
+		var link = document.createElement('a');
+		link.className = 'button button-3d button-primary';
+		link.href = notice.action.href;
+		link.target = '_blank';
+		link.rel = 'noopener';
+		link.textContent = notice.action.label;
+		buildPaneItem(pane, '', 'text').element.appendChild(link);
+	}
+
+	openPane(pane);
+
+	// Panes opened one after another share a height, and this one was built first: lift it above
+	// whatever is open.
+	var heights = Object.values(map.panes).map(function(p) { return parseInt(p.element.style.zIndex) || 0; });
+	pane.element.style.zIndex = Math.max.apply(null, heights) + 1;
 }
 
 var clock = new THREE.Clock();
@@ -4604,7 +4631,7 @@ function stopVerticalMove() {
 
 function buildGui() {
 	//alert pane
-	var alertPane = buildPane('Alert', 'alert');
+	var alertPane = buildPane('Notice', 'alert');
 	buildPaneItem(alertPane, '', 'text', '');	
 
 	//image pane
@@ -4657,12 +4684,7 @@ function buildGui() {
 				closePane(newPlanePane);
 
 				if (data && data.limit) {
-					alertPane.body.innerHTML = '';
-
-					buildPaneItem(alertPane, escapeHtml(data.limit.title), 'header');
-					buildPaneItem(alertPane, escapeHtml(data.limit.description), 'text');
-
-					openPane(alertPane);
+					showNotice(data.limit);
 				}
 				else {
 					//populate plane images pane
@@ -4759,13 +4781,7 @@ function buildGui() {
 				closePane(newTokenPane);
 
 				if (data && data.limit) {
-					alertPane.body.innerHTML = '';
-
-					buildPaneItem(alertPane, escapeHtml(data.limit.title), 'header');
-					buildPaneItem(alertPane, escapeHtml(data.limit.description), 'text');
-
-					closePane(newTokenPane);
-					openPane(alertPane);
+					showNotice(data.limit);
 				}
 				else if (data && data.model && 'id' in data.model) {
 					var args = {
@@ -6565,9 +6581,11 @@ var clientRequest = {
 		// NOTE(port): uploading tokens needs the host app's uploadModel() hook.
 		var newTokenButton = buildPaneItem(map.panes.tokens, '', 'button', '+ New Token');
 		newTokenButton.element.querySelector('.pane-item-label-text').style.display = 'none';
-		if (!options.uploadModel) { newTokenButton.element.style.display = 'none'; }
+		if (!options.uploadModel && !options.uploadLocked) { newTokenButton.element.style.display = 'none'; }
 
 		newTokenButton.input.addEventListener('click', function() {
+			if (!options.uploadModel) { showNotice(options.uploadLocked); return; }
+
 			closePane(map.panes.tokens);
 
 			map.local.tokenFormData.name.value = map.local.tokenFormDefault.name;
@@ -6711,9 +6729,11 @@ var clientRequest = {
 		//new plane button
 		var newPlaneButton = buildPaneItem(map.panes.plane_images, '', 'button', '+ New Plane');
 		newPlaneButton.element.querySelector('.pane-item-label-text').style.display = 'none';
-		if (!options.uploadPlane) { newPlaneButton.element.style.display = 'none'; }
+		if (!options.uploadPlane && !options.uploadLocked) { newPlaneButton.element.style.display = 'none'; }
 
 		newPlaneButton.input.addEventListener('click', function() {
+			if (!options.uploadPlane) { showNotice(options.uploadLocked); return; }
+
 			closePane(map.panes.plane_images);
 
 			var planeFile = byId('plane_file');
@@ -7229,6 +7249,7 @@ return {
 		sendMessage('update', name, args || {});
 		return true;
 	},
+	showNotice: showNotice,
 	// The camera as plain numbers, so a host app can draw its own layer (dice) with the same view.
 	getView: function() {
 		var camera = map.objects.camera;
