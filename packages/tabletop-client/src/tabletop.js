@@ -28,6 +28,8 @@ import { createSkyboxMaterials } from './skybox';
 import { createFog } from './fog';
 import { addWallUvs, createWallMaterial, wallTileSize } from './wall-texture';
 import { createWallModel } from './wall-model.js';
+import { startPictureMotion, updateTokenMotion, resetTokenMotion } from './token-motion.js';
+import { createAnimatedPictures } from './animated-picture.js';
 import { showToast, createBanner, escapeHtml, hasWebGL } from './ui';
 import * as walls from './walls';
 import { DOOR_SIZE, getDoorParts } from './doors.js';
@@ -66,6 +68,8 @@ if (!hasWebGL()) {
 }
 
 const demo = options.demo;
+// Near the top: tokens can be built while the rest of this function is still being set up.
+const animatedPictures = createAnimatedPictures();
 const dev = !!options.debug;
 // Camera to move to once the room has loaded (set when switching rooms).
 let focus = options.focus ? Object.assign({}, options.focus) : {};
@@ -1536,6 +1540,9 @@ function makeTokenInstance(parent, model) {
 		modelGroup.geoWidth = geoWidth;
 		modelGroup.geoHeight = geoHeight;
 		modelGroup.add(mesh);
+		modelGroup.picture = mesh;
+		startPictureMotion(mesh, geoHeight);
+		animatedPictures.add(mesh, src, options.imageUrl({ kind: 'model', src: model.src, size: Math.min(textureSize, 512), quality: map.settings.maxTokenTextureQuality }));
 
 		tokenBodyReady();
 
@@ -7049,6 +7056,27 @@ var sph = new THREE.Spherical();
 var destroyed = false;
 var animationFrame = 0;
 var resizeObserver = { disconnect: function() {} };
+var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+var tokenMotionRunning = false;
+var tokenMotionTime = performance.now();
+
+// Token pictures that move, and GIFs that play, are for the Medium and High presets only.
+function updateTokenPictures() {
+	var now = performance.now();
+	var seconds = (now - tokenMotionTime) / 1000;
+	var on = map.settings.preset > 0 && !reducedMotion.matches;
+	tokenMotionTime = now;
+
+	if (on) {
+		updateTokenMotion(map.objects.tokens, seconds, now / 1000);
+		animatedPictures.update(now, map.scene);
+	}
+	else if (tokenMotionRunning) {
+		resetTokenMotion(map.objects.tokens);
+	}
+
+	tokenMotionRunning = on;
+}
 
 function animate() {
 	if (destroyed) { return; }
@@ -7069,6 +7097,8 @@ function animate() {
 			token.lookAt(map.objects.camera.position.x, token.position.y, map.objects.camera.position.z);
 		}
 	}
+
+	updateTokenPictures();
 
 	map.objects.camera.getWorldDirection(dir);
   sph.setFromVector3(dir);
@@ -7188,6 +7218,7 @@ return {
 	destroy: function() {
 		destroyed = true;
 		cancelAnimationFrame(animationFrame);
+		animatedPictures.dispose();
 		clearTimeout(loadTimeout);
 		connection.close();
 		cleanups.forEach(function(cleanup) { cleanup(); });
