@@ -4,6 +4,9 @@ Open-source tabletop tools for running tabletop RPG sessions: an initiative trac
 3D tabletop with a websocket server. It is self-hostable, and authentication is a pluggable hook:
 by default anyone can join, and you can supply your own implementation to verify users.
 
+If you would rather not run your own, the hosted version is [DM Tools](https://dm.tools), which has a free plan
+and is built on these packages.
+
 ## Layout
 
 ```
