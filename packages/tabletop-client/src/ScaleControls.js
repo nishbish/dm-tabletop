@@ -219,8 +219,11 @@ var ScaleControls = function (camera, domElement, scene, renderer) {
           }
         }
 
-        var translateX = (this.object.scale.x - prevPos.x) * 2.5;
-        var translateY = (this.object.scale.y - prevPos.y) * 2.5;
+        // map images are 5 wide; a prop is its model's own size
+        var halfWidth = this.object.isProp ? this.object.geometry.parameters.width / 2 : 2.5;
+        var halfHeight = this.object.isProp ? this.object.geometry.parameters.height / 2 : 2.5;
+        var translateX = (this.object.scale.x - prevPos.x) * halfWidth;
+        var translateY = (this.object.scale.y - prevPos.y) * halfHeight;
 
         this.object.translateX(translateX * (-1 + activeScalePointIndex%3));
         this.object.translateY(translateY * (1 - parseInt(activeScalePointIndex/3)));

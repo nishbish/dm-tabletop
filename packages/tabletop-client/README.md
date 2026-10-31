@@ -69,6 +69,7 @@ names are not prefixed), so it is best used on a page of its own or in an iframe
 | `trackerUrl`   | none: tracker button hidden                                    | URL of an initiative tracker page, shown in a frame in the side drawer                                                                                                                                                                                                                                                                                                                       |
 | `mountTracker` | none                                                           | `(element) => void`: draws a tracker (or anything) into the side drawer the first time it opens; wins over `trackerUrl`                                                                                                                                                                                                                                                                      |
 | `buttons`      | none                                                           | Extra side buttons: `[{name, title, icon, help?, hostOnly?, onClick}]`. `icon` is a Material Icons name, `help` the line in the tooltip and Help                                                                                                                                                                                                                                             |
+| `modelLibrary` | none                                                           | Built-in 3D characters and props, see "Built-in 3D models"                                                                                                                                                                                                                                                                                                                                   |
 | `resolveModel` | built-in cylinder tokens                                       | `async (modelId) => {id, name, src, baseColor, ...} \| null`, see "Tokens and models"                                                                                                                                                                                                                                                                                                        |
 | `skybox`       | plain gradient sky                                             | `{day: {path, extension}, night: {...}}`: six face images `<assetBaseUrl>/<path>_<ft\|bk\|up\|dn\|rt\|lf><extension>` (`.tga` works too)                                                                                                                                                                                                                                                     |
 | `wallTexture`  | plain grey walls                                               | `{src, tileSize?}`: a picture repeated on the walls, one tile per `tileSize` world units (default 2). `src` is relative to `assetBaseUrl` unless absolute or a `data:` URI                                                                                                                                                                                                                   |
@@ -133,6 +134,23 @@ The first frame shows until playing starts. Playing needs `ImageDecoder`; a brow
 for now) keeps showing the first frame. Each file is one shared texture however many tokens use it, at
 most 8 files play at once and a GIF plays at no more than about 15 frames per second.
 
+### Built-in 3D models
+
+`options.modelLibrary` offers ready-made 3D models. The viewer ships none: the host app supplies the files, as with `wallModel`, and everything loads on first use, so a room without any downloads nothing.
+
+```js
+modelLibrary: {
+  characterFolder: '3D Characters',
+  characters: [{ id: '3d-orc', name: 'Orc', file: 'models/orc.glb', texture: 'models/orc.png', thumb: 'models/orc-thumb.png', height: 1.2 }],
+  props: [{ name: 'Furniture', items: [{ id: 'table', name: 'Table', file: 'models/table.glb', texture: 'models/colormap.png', thumb: 'models/table-thumb.png', scale: 1 }] }],
+}
+```
+
+Paths resolve against `assetBaseUrl`. Models are glTF binaries without embedded pictures; `texture` paints them, one shared material per texture.
+
+- **Characters** appear as a folder in the Tokens pane. A character is a token like any other, on the usual base and with the usual vision and ownership, drawn as a model instead of a picture. It needs animations named `idle` and `walk`. It turns to face the way it moves, and walks and glides between grid squares on the Medium and High presets; on Low it stands still. `height` is in grid squares.
+- **Props** (furniture and decorations) are added with Add Furniture in the right-click menu. A prop is part of the map, not a token: no base, vision, owner or portrait, and only the host edits it, on the Images & Furniture tab with the same move, turn and resize handles as map images. To the server it is a map image whose `image` is `prop:<id>`, so a server needs no change for it. Props do not block movement or sight. `scale` is grid squares per model unit.
+
 ### Host-app extension points
 
 These events are not part of the core server. A hosting app can implement them as `handlers` in
@@ -180,6 +198,7 @@ is what the "up" button goes back to.
 | `src/ui.js`, `src/skybox.js`                                   | Toasts and banner, the sky                                                                                 |
 | `src/walls.ts`, `src/doors.js`                                 | Wall geometry, door openings and snapping, room/corridor outlines; the shared door and wall look           |
 | `src/token-motion.js`, `src/animated-picture.js`               | How token pictures move, and playing animated pictures (Medium and High graphics only)                     |
+| `src/model-library.js`, `src/character-motion.js`              | The built-in 3D characters and props, and how a character follows its token                                |
 | `src/TranslateControls.js` and the other controls              | The original drag, rotate, scale and hover helpers                                                         |
 | `src/context-menu.js`, `src/style.css`, `src/context-menu.css` | The original menu and styles                                                                               |
 

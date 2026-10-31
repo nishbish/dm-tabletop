@@ -20,6 +20,27 @@ export interface ModelInfo {
   baseColor?: number;
 }
 
+export interface LibraryItem {
+  id: string;
+  name: string;
+  /** glTF binary, relative to assetBaseUrl. */
+  file: string;
+  /** The picture the model is painted with, shared by every model that names it. */
+  texture: string;
+  /** Small picture for the picker. */
+  thumb: string;
+  /** Characters: height in grid squares. */
+  height?: number;
+  /** Props: grid squares per model unit. */
+  scale?: number;
+}
+
+export interface ModelLibrary {
+  characterFolder?: string;
+  characters?: LibraryItem[];
+  props?: { name: string; items: LibraryItem[] }[];
+}
+
 export interface TabletopNotice {
   title: string;
   description: string;
@@ -64,6 +85,8 @@ export interface TabletopOptions {
   /** Room messages the host app handles itself: incoming updates with these names go to onAppEvent. */
   appEvents?: string[];
   onAppEvent?: (name: string, args: Record<string, unknown>, from: string | undefined) => void;
+  /** Built-in 3D characters and props, paths relative to assetBaseUrl. */
+  modelLibrary?: ModelLibrary;
   resolveModel?: (
     modelId: string,
   ) => ModelInfo | null | undefined | Promise<ModelInfo | null | undefined>;

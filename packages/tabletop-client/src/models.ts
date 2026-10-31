@@ -15,6 +15,9 @@ const PALETTE: [string, number][] = [
 
 export const DEFAULT_MODEL_PREFIX = 'default-';
 
+// The base under a 3D character: plain, so the character is what you look at.
+const CHARACTER_BASE_COLOR = 0x3a3a3a;
+
 export function builtInModels(): ModelInfo[] {
   return PALETTE.map(([name, colour]) =>
     makeModel(DEFAULT_MODEL_PREFIX + name.toLowerCase(), name, colour),
@@ -61,7 +64,7 @@ function normalise(modelId: string, raw: Partial<ModelInfo>): ModelInfo {
 // Resolves model ids with caching; never throws and never returns null.
 export class ModelResolver {
   private cache = new Map<string, ModelInfo>();
-  constructor(private options: Pick<TabletopOptions, 'resolveModel'>) {}
+  constructor(private options: Pick<TabletopOptions, 'resolveModel' | 'modelLibrary'>) {}
 
   has(modelId: string): boolean {
     return this.cache.has(modelId);
@@ -75,7 +78,10 @@ export class ModelResolver {
     const cached = this.cache.get(modelId);
     if (cached) return cached;
     let model: ModelInfo | undefined;
-    if (this.options.resolveModel) {
+    const character = this.options.modelLibrary?.characters?.find((c) => c.id === modelId);
+    if (character) {
+      model = normalise(modelId, { name: character.name, baseColor: CHARACTER_BASE_COLOR });
+    } else if (this.options.resolveModel) {
       try {
         const found = await this.options.resolveModel(modelId);
         if (found) model = normalise(modelId, found);
