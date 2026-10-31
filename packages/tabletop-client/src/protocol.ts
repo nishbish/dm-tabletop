@@ -91,6 +91,7 @@ export function toServer(name: string, a: Args): Translated | null {
           tokenId: str(a.tokenId),
           hideAvatar: !!a.hideAvatar,
           disableCamLook: !!a.disableCamLook,
+          iconColor: a.iconColor ?? null,
         },
       };
     case 'assignToken':
@@ -226,6 +227,7 @@ export function fromServerUpdate(name: string, a: Args, from?: string): Translat
             tokenId: str(a.tokenId),
             hideAvatar: bit(a.hideAvatar),
             disableCamLook: bit(a.disableCamLook),
+            iconColor: a.iconColor ?? null,
           },
         },
       ];

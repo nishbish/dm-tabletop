@@ -26,6 +26,8 @@ export interface ModelInfo {
   modelOffset: [number, number];
   viewDistance: number;
   baseColor: number;
+  /** false: this user may not change the model, so the Edit menu leaves its form out. */
+  editable?: boolean;
 }
 
 // The login token, or a function returning one. A function is called before EVERY connection

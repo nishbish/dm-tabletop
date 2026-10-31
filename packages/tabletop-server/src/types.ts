@@ -22,7 +22,8 @@ export interface TokenState {
   scale: Vec3;
   // User ids that may move this token (besides hosts).
   owners: string[];
-  settings: { hideAvatar: boolean; disableCamLook: boolean };
+  // iconColor tints the token's picture (0xRRGGBB); rooms saved before it existed do not have it.
+  settings: { hideAvatar: boolean; disableCamLook: boolean; iconColor?: number | null };
 }
 
 export interface PlaneState {

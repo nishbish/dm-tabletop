@@ -3,6 +3,7 @@ import { Connection, Handler, HandlerContext, Room } from './room';
 import {
   HandlerError,
   bool,
+  color,
   idString,
   int,
   num,
@@ -113,6 +114,7 @@ const handlers: { [name: string]: Handler } = {
     token.settings = {
       hideAvatar: bool(a, 'hideAvatar'),
       disableCamLook: bool(a, 'disableCamLook'),
+      iconColor: color(a, 'iconColor'),
     };
     changed(ctx, { tokenId, ...token.settings });
   },

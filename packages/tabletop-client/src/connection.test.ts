@@ -162,7 +162,16 @@ describe('protocol mapping, viewer -> server', () => {
       tokenId: '1',
       hideAvatar: true,
       disableCamLook: false,
+      iconColor: null,
     });
+    expect(
+      toServer('updateTokenSettings', {
+        tokenId: 1,
+        hideAvatar: 0,
+        disableCamLook: 0,
+        iconColor: 0xd63a2f,
+      })?.args.iconColor,
+    ).toBe(0xd63a2f);
     expect(toServer('addToken', { x: 1, y: 0, z: 2, modelId: 5, tempTokenId: 'l1' })?.args).toEqual(
       {
         modelId: '5',
@@ -286,7 +295,16 @@ describe('protocol mapping, server -> viewer', () => {
       tokenId: '1',
       hideAvatar: 1,
       disableCamLook: 0,
+      iconColor: null,
     });
+    expect(
+      only('updateTokenSettings', {
+        tokenId: '1',
+        hideAvatar: false,
+        disableCamLook: false,
+        iconColor: 0xd63a2f,
+      }).args.iconColor,
+    ).toBe(0xd63a2f);
     // pass-through events
     expect(only('removeToken', { tokenId: '1' })).toEqual({
       name: 'removeToken',
