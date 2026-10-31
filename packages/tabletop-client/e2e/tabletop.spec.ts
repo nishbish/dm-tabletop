@@ -341,3 +341,86 @@ test('walls drawn with a model, and the loading title', async ({ page }) => {
   await expect.poll(async () => (await read()).tiles).toBeGreaterThan(4);
   expect((await read()).boxesShown).toBe(0);
 });
+
+// Two 8 x 8 frames, red then blue, 100 ms each. On every engine but WebKit ImageDecoder plays it.
+const TWO_FRAME_GIF =
+  'R0lGODlhCAAIAIAAAExpcdweHiH/C05FVFNDQVBFMi4wAwEAAAAh+QQFCgAAACwAAAAACAAIAAACB4yPqcvtXQAAIfkEBQoAAAAsAAAAAAgACACATGlxHh7cAgeMj6nL7V0AADs=';
+
+// What the first token's picture looks like now: how it is turned, and which colours it has shown.
+async function samplePicture(page: Page) {
+  return page.evaluate(() => {
+    const map = (window as any).tabletop.debug.map;
+    const token: any = Object.values(map.objects.tokens)[0];
+    const picture = token.meshes.picture;
+    const image = picture?.material.map?.image;
+    let red = null;
+    if (image instanceof HTMLCanvasElement) {
+      red = image.getContext('2d').getImageData(4, 4, 1, 1).data[0];
+    }
+    return {
+      hasPicture: !!picture,
+      angle: picture?.rotation.z,
+      playing: !!picture?.material.map?.isCanvasTexture,
+      red,
+    };
+  });
+}
+
+async function openWithGif(page: Page, preset: number) {
+  await page.route(
+    (url) => url.pathname === '/token.gif',
+    (route) =>
+      route.fulfill({ contentType: 'image/gif', body: Buffer.from(TWO_FRAME_GIF, 'base64') }),
+  );
+  await page.addInitScript((preset) => {
+    localStorage.setItem('settings', JSON.stringify({ preset }));
+  }, preset);
+  await page.goto('/?demo=1&tokenImage=/token.gif');
+  await expect
+    .poll(async () => (await samplePicture(page).catch(() => null))?.hasPicture, {
+      timeout: 30_000,
+    })
+    .toBe(true);
+}
+
+test('on Medium, token pictures sway and GIFs play', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await openWithGif(page, 1);
+
+  await expect.poll(async () => (await samplePicture(page)).playing).toBe(true);
+
+  const angles = new Set();
+  const reds = new Set();
+  await expect
+    .poll(
+      async () => {
+        const sample = await samplePicture(page);
+        angles.add(sample.angle);
+        reds.add(sample.red);
+        return angles.size > 2 && reds.size > 1;
+      },
+      { timeout: 20_000, intervals: [100] },
+    )
+    .toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('on Low, token pictures hold still and GIFs show one frame', async ({ page }) => {
+  await openWithGif(page, 0);
+  await page.waitForTimeout(1500);
+  const sample = await samplePicture(page);
+  expect(sample.angle).toBe(0);
+  expect(sample.playing).toBe(false);
+});
+
+test('the system setting for less motion wins over the graphics preset', async ({ browser }) => {
+  const context = await browser.newContext({ reducedMotion: 'reduce' });
+  const page = await context.newPage();
+  await openWithGif(page, 2);
+  await page.waitForTimeout(1500);
+  const sample = await samplePicture(page);
+  expect(sample.angle).toBe(0);
+  expect(sample.playing).toBe(false);
+  await context.close();
+});

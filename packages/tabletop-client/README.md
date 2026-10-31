@@ -122,6 +122,17 @@ by the viewer: `options.resolveModel(modelId)` may return `{ id, name, src, size
 setup: "Add Token" offers eight built-in coloured tokens (`default-red`, `default-blue`, ...).
 The same applies to map images: without an image library you can add one by URL.
 
+Token pictures sway slightly, lean as they travel and hop when they stop, and animated pictures play.
+All of this only happens on the Medium and High graphics presets, and never when the player's system
+asks for less motion. It changes how a picture looks and nothing else: positions, collisions, vision and
+what is sent to the server stay the same.
+
+A picture counts as animated if it is a GIF, or a WebP whose header says so. The viewer reads the first
+bytes of each picture to find out, so a host needs no extra field, but its image URLs must allow `fetch`.
+The first frame shows until playing starts. Playing needs `ImageDecoder`; a browser without it (Safari
+for now) keeps showing the first frame. Each file is one shared texture however many tokens use it, at
+most 8 files play at once and a GIF plays at no more than about 15 frames per second.
+
 ### Host-app extension points
 
 These events are not part of the core server. A hosting app can implement them as `handlers` in
@@ -168,6 +179,7 @@ is what the "up" button goes back to.
 | `src/config.ts`, `src/models.ts`, `src/demo.ts`                | Options and URL builders, token models and fallbacks, the offline demo room                                |
 | `src/ui.js`, `src/skybox.js`                                   | Toasts and banner, the sky                                                                                 |
 | `src/walls.ts`, `src/doors.js`                                 | Wall geometry, door openings and snapping, room/corridor outlines; the shared door and wall look           |
+| `src/token-motion.js`, `src/animated-picture.js`               | How token pictures move, and playing animated pictures (Medium and High graphics only)                     |
 | `src/TranslateControls.js` and the other controls              | The original drag, rotate, scale and hover helpers                                                         |
 | `src/context-menu.js`, `src/style.css`, `src/context-menu.css` | The original menu and styles                                                                               |
 
