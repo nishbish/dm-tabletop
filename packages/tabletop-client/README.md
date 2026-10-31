@@ -142,14 +142,14 @@ most 8 files play at once and a GIF plays at no more than about 15 frames per se
 modelLibrary: {
   characterFolder: '3D Characters',
   characters: [{ id: '3d-orc', name: 'Orc', file: 'models/orc.glb', texture: 'models/orc.png', thumb: 'models/orc-thumb.png', height: 1.2 }],
-  props: [{ name: 'Furniture', items: [{ id: 'table', name: 'Table', file: 'models/table.glb', texture: 'models/colormap.png', thumb: 'models/table-thumb.png', scale: 1 }] }],
+  props: [{ name: 'Furniture', items: [{ id: 'table', name: 'Table', file: 'models/table.glb', texture: 'models/colormap.png', thumb: 'models/table-thumb.png', size: 1.8 }] }],
 }
 ```
 
 Paths resolve against `assetBaseUrl`. Models are glTF binaries without embedded pictures; `texture` paints them, one shared material per texture.
 
 - **Characters** appear as a folder in the Tokens pane. A character is a token like any other, on the usual base and with the usual vision and ownership, drawn as a model instead of a picture. It needs animations named `idle` and `walk`. It turns to face the way it moves, and walks and glides between grid squares on the Medium and High presets; on Low it stands still. `height` is in grid squares.
-- **Props** (furniture and decorations) are added with Add Furniture in the right-click menu. A prop is part of the map, not a token: no base, vision, owner or portrait, and only the host edits it, on the Images & Furniture tab with the same move, turn and resize handles as map images. To the server it is a map image whose `image` is `prop:<id>`, so a server needs no change for it. Props do not block movement or sight. `scale` is grid squares per model unit.
+- **Props** (furniture and decorations) are added with Add Furniture in the right-click menu. A prop is part of the map, not a token: no base, vision, owner or portrait, and only the host edits it, on the Images & Furniture tab with the same move, turn and resize handles as map images. To the server it is a map image whose `image` is `prop:<id>`, so a server needs no change for it. Props do not block movement or sight. `size` is the longest side in grid squares.
 
 ### Host-app extension points
 

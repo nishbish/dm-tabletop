@@ -31,8 +31,8 @@ export interface LibraryItem {
   thumb: string;
   /** Characters: height in grid squares. */
   height?: number;
-  /** Props: grid squares per model unit. */
-  scale?: number;
+  /** Props: the longest side, in grid squares. */
+  size?: number;
 }
 
 export interface ModelLibrary {

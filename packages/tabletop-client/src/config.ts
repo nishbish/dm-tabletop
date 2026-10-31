@@ -21,7 +21,7 @@ export interface LibraryItem {
   texture: string;
   thumb: string;
   height?: number;
-  scale?: number;
+  size?: number;
 }
 
 export interface ModelLibrary {
@@ -81,8 +81,7 @@ export interface TabletopOptions {
   appEvents?: string[];
   onAppEvent?: (name: string, args: Record<string, unknown>, from: string | undefined) => void;
   // Built-in 3D models (see model-library.js). `file`, `texture` and `thumb` are relative to
-  // `assetBaseUrl`. A character's `height` is in grid squares; a prop's `scale` is grid squares per
-  // model unit.
+  // `assetBaseUrl`. A character's `height` and a prop's `size` (its longest side) are in grid squares.
   modelLibrary?: ModelLibrary;
   resolveModel?: (
     modelId: string,

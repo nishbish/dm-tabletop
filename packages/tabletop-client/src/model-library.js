@@ -75,12 +75,15 @@ export function createModelLibrary(options) {
     });
 
     var geometry = parts.length > 1 ? mergeGeometries(parts) : parts[0];
-    var scale = item.scale || 1;
-    geometry.scale(scale, scale, scale);
     geometry.rotateX(Math.PI / 2);
     geometry.computeBoundingBox();
 
     var box = geometry.boundingBox;
+    var longest = Math.max(box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z);
+    var scale = (item.size || 1) / longest;
+    geometry.scale(scale, scale, scale);
+    geometry.computeBoundingBox();
+
     geometry.translate(-(box.min.x + box.max.x) / 2, -(box.min.y + box.max.y) / 2, -box.min.z);
     geometry.computeBoundingBox();
     geometry.computeBoundingSphere();
