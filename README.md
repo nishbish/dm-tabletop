@@ -37,6 +37,21 @@ Try the initiative tracker: `npm run dev -w @dm-tabletop/initiative-tracker` and
 See [packages/initiative-tracker](packages/initiative-tracker/README.md). Its built-in creature list comes from
 the D&D 5e SRD 5.1 (CC-BY-4.0); the attribution is in [ASSETS.md](ASSETS.md).
 
+## How this is built
+
+The original DM Tools website, including the first version of the 3D tabletop, was written entirely by hand by
+the maintainer. The packages here are a rebuild of that work: the original was recreated and then extended with
+heavy use of [Claude Code](https://claude.com/claude-code), Anthropic's AI coding assistant, which wrote most of
+the code in this repo. Parts of the viewer are ported from the original hand-written code (see
+[packages/tabletop-client](packages/tabletop-client/README.md)).
+
+The maintainer decides what gets built and how it should work, and checks the changes before they are merged.
+Commits made with Claude carry a `Co-Authored-By: Claude` line, and [CLAUDE.md](CLAUDE.md) holds the project
+instructions it works from.
+
+The maintainer has very little time to write code by hand. Without AI, keeping this project updated and
+maintained would not be possible at all.
+
 ## Licence
 
 AGPL-3.0, see [LICENSE](LICENSE). Contributions are welcome under the terms in
