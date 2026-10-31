@@ -15,6 +15,8 @@ var ScaleControls = function (camera, domElement, scene, renderer) {
 
   var scope = this;
 
+  // replaced by the viewer when it switches between the 3D and the 2D view
+  this.camera = camera;
   this.enabled = true;
   this.isScaling = false;
   this.object = null;
@@ -94,7 +96,7 @@ var ScaleControls = function (camera, domElement, scene, renderer) {
       var pointerPos = scope.parsePointerPos(e);
 
       //raycaster
-      raycast.setFromCamera(pointerPos, camera);
+      raycast.setFromCamera(pointerPos, scope.camera);
       // a new list each time: pushing onto scalePoints itself grew it by one on every click
       var rayObjects = scalePoints.concat([plane]);
       var intersects = raycast.intersectObjects(rayObjects, true);
@@ -160,7 +162,7 @@ var ScaleControls = function (camera, domElement, scene, renderer) {
       
       var pointerPos = scope.parsePointerPos(e);
 
-      raycast.setFromCamera(pointerPos, camera);
+      raycast.setFromCamera(pointerPos, scope.camera);
       var intersects = raycast.intersectObjects([plane], false);
 
       if (intersects.length > 0) {

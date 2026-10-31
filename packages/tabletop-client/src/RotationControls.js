@@ -18,6 +18,8 @@ var RotationControls = function (camera, domElement, scene, renderer, settings =
 
   var scope = this;
 
+  // replaced by the viewer when it switches between the 3D and the 2D view
+  this.camera = camera;
   this.enabled = true;
   this.isRotating = false;
   this.angle = 0;  
@@ -113,7 +115,7 @@ var RotationControls = function (camera, domElement, scene, renderer, settings =
       var pointerPos = scope.parsePointerPos(e);
 
       //raycaster
-      raycast.setFromCamera(pointerPos, camera);
+      raycast.setFromCamera(pointerPos, scope.camera);
       var intersects = raycast.intersectObjects([dotMesh], false);      
 
       if (intersects.length > 0)
@@ -161,7 +163,7 @@ var RotationControls = function (camera, domElement, scene, renderer, settings =
       
       var pointerPos = scope.parsePointerPos(e);
 
-      raycast.setFromCamera(pointerPos, camera);
+      raycast.setFromCamera(pointerPos, scope.camera);
       var intersects = raycast.intersectObjects([plane], false);      
       
       if (intersects.length > 0)

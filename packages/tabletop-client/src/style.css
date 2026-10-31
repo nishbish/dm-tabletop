@@ -202,19 +202,75 @@
 	margin-right: 0px !important;
 }
 
+/* Focus Players: the whole table is framed for a moment, like a camera catching focus. Only
+   opacity and transform change, so it costs nothing but the one fullscreen layer. */
 #camFocusIndicator {
 	position: absolute;
-	top: 80px;
-	left: 0px;
-	width: 100%;
-	height: calc(100% - 160px);
-	border: 0px solid #ffffff;
+	inset: 0;
+	overflow: hidden;
 	pointer-events: none;
+	visibility: hidden;
+}
+
+#camFocusIndicator.camFocusIndicatorAnim {
+	visibility: visible;
+}
+
+#camFocusIndicator::before,
+#camFocusIndicator::after {
+	content: '';
+	position: absolute;
 	opacity: 0;
 }
 
-.camFocusIndicatorAnim {
-	animation: camFocusIndicatorAnim 1000ms forwards;
+/* a soft glow in from the edges */
+#camFocusIndicator::before {
+	inset: 0;
+	box-shadow: inset 0 0 140px 10px var(--_accent);
+}
+
+/* four corner brackets */
+#camFocusIndicator::after {
+	inset: 18px;
+	--_len: min(72px, 12vmin);
+	--_w: 3px;
+	background:
+		linear-gradient(var(--_accent), var(--_accent)) top left / var(--_len) var(--_w),
+		linear-gradient(var(--_accent), var(--_accent)) top left / var(--_w) var(--_len),
+		linear-gradient(var(--_accent), var(--_accent)) top right / var(--_len) var(--_w),
+		linear-gradient(var(--_accent), var(--_accent)) top right / var(--_w) var(--_len),
+		linear-gradient(var(--_accent), var(--_accent)) bottom left / var(--_len) var(--_w),
+		linear-gradient(var(--_accent), var(--_accent)) bottom left / var(--_w) var(--_len),
+		linear-gradient(var(--_accent), var(--_accent)) bottom right / var(--_len) var(--_w),
+		linear-gradient(var(--_accent), var(--_accent)) bottom right / var(--_w) var(--_len);
+	background-repeat: no-repeat;
+}
+
+#camFocusIndicator.camFocusIndicatorAnim::before {
+	animation: camFocusGlow 900ms ease-out forwards;
+}
+
+#camFocusIndicator.camFocusIndicatorAnim::after {
+	animation: camFocusFrame 900ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes camFocusGlow {
+	0% { opacity: 0; }
+	25% { opacity: 0.5; }
+	100% { opacity: 0; }
+}
+
+@keyframes camFocusFrame {
+	0% { opacity: 0; transform: scale(1.05); }
+	35% { opacity: 1; transform: scale(1); }
+	70% { opacity: 1; transform: scale(1); }
+	100% { opacity: 0; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	#camFocusIndicator.camFocusIndicatorAnim::after {
+		animation-name: camFocusGlow;
+	}
 }
 
 .selectBox {
@@ -222,23 +278,6 @@
 	background-color: rgba(75, 160, 255, 0.3);
 	position: fixed;
 	display: none;
-}
-
-@keyframes camFocusIndicatorAnim {
-	0% {
-		border-width: 0px;
-		opacity: 0;
-	}
-
-	50% {
-		border-width: 30px;
-		opacity: 0.8;
-	}
-
-	100% {
-		border-width: 0px;
-		opacity: 0;
-	}
 }
 
 /*--user section style--*/
@@ -911,6 +950,43 @@
 	border-bottom: none;	
 }
 
+.pane-group + .pane-group .pane-item-header:first-child {
+	margin-top: 14px;
+}
+
+/* a fold-out part of a pane (Advanced in the token form) */
+.pane-section {
+	border-bottom: 1px solid var(--_border);
+}
+
+.pane-section-title {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 10px 0;
+	line-height: 24px;
+	font-weight: 700;
+	cursor: pointer;
+	list-style: none;
+}
+
+.pane-section-title::-webkit-details-marker {
+	display: none;
+}
+
+.pane-section-title .material-icons {
+	margin-left: -4px;
+	transition: transform 0.12s ease-out;
+}
+
+.pane-section[open] > .pane-section-title .material-icons {
+	transform: rotate(90deg);
+}
+
+.pane-color-reset {
+	margin-top: 8px;
+}
+
 .pane-item label {
 	line-height: 24px;
 	margin-bottom: 0px;
@@ -1217,15 +1293,7 @@
 }
 
 #avatarContainer .avatar-face-plain {
-	display: flex;
-	align-items: center;
-	justify-content: center;
 	background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.28), rgba(0, 0, 0, 0.3));
-	color: #ffffff;
-	font-family: var(--_font-display);
-	font-size: 22px;
-	font-weight: 700;
-	text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
 }
 
 #avatarContainer .avatar:has(.avatar-face-plain) {
@@ -1266,10 +1334,6 @@
 
 	#avatarContainer .avatar-face {
 		inset: 2px;
-	}
-
-	#avatarContainer .avatar-face-plain {
-		font-size: 16px;
 	}
 }
 

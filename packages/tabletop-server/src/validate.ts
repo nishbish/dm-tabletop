@@ -32,6 +32,16 @@ export function int(args: Args, key: string, min: number, max: number): number {
   return value;
 }
 
+// A colour as 0xRRGGBB, or null for "none". Above num()'s limit, so it has its own check.
+export function color(args: Args, key: string): number | null {
+  const value = args[key];
+  if (value === undefined || value === null) return null;
+  if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > 0xffffff) {
+    throw new HandlerError(`${key} must be a colour between 0 and 0xffffff`);
+  }
+  return value as number;
+}
+
 export function str(args: Args, key: string): string {
   const value = args[key];
   if (typeof value !== 'string' || value.length === 0 || value.length > MAX_STRING_LENGTH) {

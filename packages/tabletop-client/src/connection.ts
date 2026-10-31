@@ -6,7 +6,7 @@
 
 import { ResolvedOptions } from './config';
 import { createDemoRoom } from './demo';
-import { builtInModels, ModelResolver, modelToArgs } from './models';
+import { builtInModelList, ModelResolver, modelToArgs } from './models';
 import {
   Args,
   COALESCED,
@@ -127,22 +127,12 @@ export function createConnection(options: ResolvedOptions, sink: Sink): Connecti
 
   // ---------- local answers ----------
 
-  function legacyModelList(): Args[] {
-    return builtInModels().map((m) => ({
-      modelId: m.id,
-      name: m.name,
-      src: '',
-      baseColor: m.baseColor,
-      ownerId: '0',
-    }));
-  }
-
   // Replies the viewer needs to keep working on a server without an asset library.
   function answerLocally(name: string): boolean {
     if (name === 'getModels') {
       sink.request('getModels', {
         folders: [],
-        models: legacyModelList(),
+        models: builtInModelList(),
         folderId: 0,
         parentId: 0,
         showNext: false,

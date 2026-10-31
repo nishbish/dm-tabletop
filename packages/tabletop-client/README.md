@@ -79,7 +79,7 @@ names are not prefixed), so it is best used on a page of its own or in an iframe
 | `debug`        | `false`                                                        | Exposes `tabletop.debug.map`, the internal state object                                                                                                                                                                                                                                                                                                                                      |
 
 `createTabletop` returns `{ destroy(), getSceneStats(), getTokenPosition(id), getTokenScreenPosition(id), sendAppEvent(name, args), showNotice(notice), getView(), attachOverlay(element), debug }`.
-`getView()` gives the camera as plain numbers (position, quaternion, target, fov, near, far, size, `floorY`) and `attachOverlay` puts an element (for example a transparent canvas) just above the 3D scene and below the panels, so a host app can draw its own layer, such as dice, with the same view.
+`getView()` gives the camera as plain numbers (position, quaternion, target, fov, near, far, size, `floorY`; in the 2D view, a camera straight above the same spot that shows the floor at the same size) and `attachOverlay` puts an element (for example a transparent canvas) just above the 3D scene and below the panels, so a host app can draw its own layer, such as dice, with the same view.
 `getSceneStats`, `getTokenPosition` and `getTokenScreenPosition` exist mainly for tests. `getTokenScreenPosition` returns `null` for a token the previewed player cannot see
 (outside the vision of the selected token), so a page that draws its own name tags never shows one in the fog.
 
@@ -119,7 +119,11 @@ The server stores only a `modelId` per token. What a token looks like (picture, 
 by the viewer: `options.resolveModel(modelId)` may return `{ id, name, src, size, scale, baseColor, ... }`
 (missing fields get defaults). If it is absent, returns nothing or throws, the token is drawn as a
 **coloured cylinder**, the colour derived from the id. A plain self-hosted server therefore works with zero
-setup: "Add Token" offers eight built-in coloured tokens (`default-red`, `default-blue`, ...).
+setup: "Add Token" offers eight built-in coloured tokens (`default-red`, `default-blue`, ...). A host app
+with its own library gets them too, in a "Coloured Pawns" folder at the top of the list.
+A token's Edit menu always has what belongs to that token. The form for its model needs `uploadModel` (with
+`uploadLocked` instead it shows, and Submit shows that notice) and a model with a picture, and it is left out
+when `resolveModel` returned `editable: false`.
 The same applies to map images: without an image library you can add one by URL.
 
 ### Host-app extension points
@@ -167,6 +171,7 @@ is what the "up" button goes back to.
 | `src/connection.ts`, `src/protocol.ts`                         | The transport adapter: v2 wire messages to and from the viewer's vocabulary; reconnect, throttle, ordering |
 | `src/config.ts`, `src/models.ts`, `src/demo.ts`                | Options and URL builders, token models and fallbacks, the offline demo room                                |
 | `src/ui.js`, `src/skybox.js`                                   | Toasts and banner, the sky                                                                                 |
+| `src/ping.js`                                                  | The ping: two small shaders on pooled quads                                                                |
 | `src/walls.ts`, `src/doors.js`                                 | Wall geometry, door openings and snapping, room/corridor outlines; the shared door and wall look           |
 | `src/TranslateControls.js` and the other controls              | The original drag, rotate, scale and hover helpers                                                         |
 | `src/context-menu.js`, `src/style.css`, `src/context-menu.css` | The original menu and styles                                                                               |

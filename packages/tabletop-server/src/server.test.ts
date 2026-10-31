@@ -222,7 +222,12 @@ describe('events and roles', () => {
     send('updateWallPoint', { wallPointId: wall.wallPointId, x: 9, z: 9 });
     send('updateGridSize', { width: 30, height: 40 });
     send('updateMoonlight', { moonlight: 7 });
-    send('updateTokenSettings', { tokenId: token.tokenId, hideAvatar: 1, disableCamLook: false });
+    send('updateTokenSettings', {
+      tokenId: token.tokenId,
+      hideAvatar: 1,
+      disableCamLook: false,
+      iconColor: 0xd63a2f,
+    });
     send('updateTokenModel', { tokenId: token.tokenId, modelId: 'elf' });
     await player.next((m) => m.type === 'update' && m.name === 'updateTokenModel');
 
@@ -236,6 +241,7 @@ describe('events and roles', () => {
     expect(state.wallPoints[wall.wallPointId].position).toEqual({ x: 9, z: 9 });
     expect(state.grid).toEqual({ width: 30, height: 40 });
     expect(state.tokens[token.tokenId].settings.hideAvatar).toBe(true);
+    expect(state.tokens[token.tokenId].settings.iconColor).toBe(0xd63a2f);
     expect(state.tokens[token.tokenId].modelId).toBe('elf');
 
     send('removeDoor', { doorId: door.doorId });

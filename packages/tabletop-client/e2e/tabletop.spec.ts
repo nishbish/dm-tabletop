@@ -57,6 +57,26 @@ async function stats(page: Page) {
   return page.evaluate(() => (window as any).tabletop.getSceneStats());
 }
 
+// Where a token is on screen once the camera has finished gliding to it after the load.
+async function steadyScreenPosition(page: Page, tokenId: string) {
+  const at = () =>
+    page.evaluate((id) => (window as any).tabletop.getTokenScreenPosition(id), tokenId);
+  let last = await at();
+  await expect
+    .poll(
+      async () => {
+        await page.waitForTimeout(300);
+        const now = await at();
+        const moved = Math.abs(now.x - last.x) + Math.abs(now.y - last.y);
+        last = now;
+        return moved;
+      },
+      { timeout: 30_000, intervals: [0] },
+    )
+    .toBeLessThan(0.5);
+  return last;
+}
+
 async function waitConnected(page: Page) {
   await expect.poll(async () => (await stats(page))?.status, { timeout: 30_000 }).toBe('connected');
 }
@@ -194,6 +214,121 @@ test('offline demo works with no server', async ({ page }) => {
   expect(s.isHost).toBe(true);
   expect(s.doors).toBe(2);
   await expect(page.locator('#demo-text')).toHaveText('DEMO');
+});
+
+test('2D view: drawn from above, tokens still move, and the choice is remembered', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  const orthographic = () =>
+    page.evaluate(() => {
+      const map = (window as any).tabletop.debug.map;
+      return !!map.objects.camera.isOrthographicCamera;
+    });
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+  await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
+  const tokenId = (await stats(page)).tokenIds[0];
+
+  const turn = () =>
+    page.evaluate(() => (window as any).tabletop.debug.map.orbitControls.getAzimuthalAngle());
+  const turn3d = await turn();
+  expect(Math.abs(turn3d)).toBeGreaterThan(0.01);
+
+  await page.locator('[data-button="view2d"]').click();
+  expect(await orthographic()).toBe(true);
+  expect(await page.evaluate(() => (window as any).tabletop.debug.map.skybox.visible)).toBe(false);
+  // north is up, and right-dragging does not turn it
+  expect(await turn()).toBeCloseTo(0, 5);
+  await page.mouse.move(300, 300);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(420, 300, { steps: 5 });
+  await page.mouse.up({ button: 'right' });
+  expect(await turn()).toBeCloseTo(0, 5);
+  // a host's overlay still gets a camera with perspective, now straight above the same spot
+  const view = await page.evaluate(() => (window as any).tabletop.getView());
+  expect(view.fov).toBeGreaterThan(0);
+  expect(Math.abs(view.position[0] - view.target[0])).toBeLessThan(0.01);
+  expect(view.position[1]).toBeGreaterThan(view.target[1]);
+
+  const before = await page.evaluate(
+    (id) => (window as any).tabletop.getTokenPosition(id),
+    tokenId,
+  );
+  const from = await steadyScreenPosition(page, tokenId);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 120, from.y, { steps: 6 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => {
+      const now = await page.evaluate(
+        (id) => (window as any).tabletop.getTokenPosition(id),
+        tokenId,
+      );
+      return Math.abs(now.x - before.x) + Math.abs(now.z - before.z);
+    })
+    .toBeGreaterThan(0.5);
+
+  await page.reload();
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  expect(await orthographic()).toBe(true);
+  await page.locator('[data-button="view2d"]').click();
+  expect(await orthographic()).toBe(false);
+});
+
+test('ping, and a pane opened from the token menu closes the menu', async ({ page }) => {
+  await page.goto('/?demo=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  const pings = () =>
+    page.evaluate(() => {
+      const map = (window as any).tabletop.debug.map;
+      return map.scene.children.filter((c) => c.name == 'ping' && c.visible).length;
+    });
+  await page.evaluate(() => {
+    const map = (window as any).tabletop.debug.map;
+    map.ping(null, '0xa83232', { x: 3, z: 3 }, false);
+    map.ping(null, 0x3232a8, { x: 6, z: 3 }, false);
+  });
+  expect(await pings()).toBe(4); // ripple and beam each
+  await expect.poll(pings).toBe(0);
+
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+  await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
+  const tokenId = (await stats(page)).tokenIds[0];
+  const at = await steadyScreenPosition(page, tokenId);
+  await page.mouse.click(at.x, at.y, { button: 'right' });
+  const menu = page.locator('.show-context-menu-default');
+  await menu.locator('.context-menu-default-text', { hasText: 'Edit' }).click();
+  await expect(menu).toHaveCount(0);
+  await expect(page.locator('#iconColorInput')).toBeVisible();
+  // no upload hook in this demo, so only what belongs to the token shows
+  await expect(page.locator('.pane:visible .pane-header-title')).toHaveText('Edit Token');
+  await expect(page.getByText('Token Size (grid)')).toBeHidden();
+
+  await page.evaluate(() => {
+    const input = document.querySelector('#iconColorInput') as HTMLInputElement;
+    input.value = '#d63a2f';
+    input.dispatchEvent(new Event('input'));
+  });
+  const colors = () =>
+    page.evaluate((id) => {
+      const token = (window as any).tabletop.debug.map.objects.tokens[id];
+      const face = token.avatar.querySelector('.avatar-face');
+      return [
+        token.meshes.body.material.color.getHex(),
+        token.base.material.color.getHex(),
+        face.style.backgroundColor,
+        face.textContent,
+      ];
+    }, tokenId);
+  // the demo's tokens are plain pawns: the base and the portrait take the colour too
+  expect(await colors()).toEqual([0xd63a2f, 0xd63a2f, 'rgb(214, 58, 47)', '']);
+
+  await page.locator('.pane-color-reset').click();
+  const [body, base] = await colors();
+  expect(body).toBe(base);
+  expect(body).not.toBe(0xd63a2f);
 });
 
 // A token's vision, as the area of the polygon the fog is drawn from, after dragging it along `path`.

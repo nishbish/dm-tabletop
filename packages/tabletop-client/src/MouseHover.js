@@ -8,6 +8,8 @@ var MouseHover = function (camera, domElement, renderer) {
 
   var scope = this;
 
+  // replaced by the viewer when it switches between the 3D and the 2D view
+  this.camera = camera;
   this.enabled = true;
   this.object = null;
   this.targets = [];
@@ -19,7 +21,7 @@ var MouseHover = function (camera, domElement, renderer) {
           
     var pointerPos = scope.parsePointerPos(e);
 
-    raycast.setFromCamera(pointerPos, camera);
+    raycast.setFromCamera(pointerPos, scope.camera);
     var intersects = raycast.intersectObjects(scope.targets, false);
     
     if (intersects.length > 0)

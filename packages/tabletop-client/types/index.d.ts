@@ -18,6 +18,8 @@ export interface ModelInfo {
   viewDistance?: number;
   /** 0xRRGGBB */
   baseColor?: number;
+  /** false: this user may not change the model, so the Edit menu leaves its form out. */
+  editable?: boolean;
 }
 
 export interface TabletopNotice {
@@ -109,7 +111,11 @@ export interface Tabletop {
   sendAppEvent(name: string, args: Record<string, unknown>): boolean;
   /** A message that stays until it is closed. */
   showNotice(notice: TabletopNotice): void;
-  /** The camera as plain numbers, for drawing a layer over the scene with the same view. */
+  /**
+   * The camera as plain numbers, for drawing a layer over the scene with the same view. In the 2D
+   * view it is a camera with perspective straight above the same spot, showing the floor at the
+   * same size.
+   */
   getView(): TabletopView | null;
   /** Puts an element (a transparent canvas) just above the 3D scene, below the viewer's panels. */
   attachOverlay(element: HTMLElement): () => void;
