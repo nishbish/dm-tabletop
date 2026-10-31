@@ -13,6 +13,8 @@ import {
 
 // Hard cap per entity kind so a misbehaving host cannot grow a room's memory without limit.
 const MAX_ENTITIES = 5000;
+// The same for one token's owners, which take a client-chosen string each.
+const MAX_TOKEN_OWNERS = 100;
 
 function newId(room: Room, collection: object): string {
   if (Object.keys(collection).length >= MAX_ENTITIES) {
@@ -27,20 +29,22 @@ function requireHost(ctx: HandlerContext): void {
   if (ctx.user.role !== 'host') throw new HandlerError('only the host can do that');
 }
 
+// Ids come from the client, and a plain object also answers to "__proto__" and "constructor":
+// writing to what those return would change every object in the process. Own keys only.
+function find<T>(collection: { [id: string]: T }, id: string, what: string): T {
+  if (!Object.prototype.hasOwnProperty.call(collection, id)) {
+    throw new HandlerError(`no such ${what}`);
+  }
+  return collection[id];
+}
+
 // Hosts may touch any token; players only tokens that list them as an owner.
 function requireTokenAccess(ctx: HandlerContext, tokenId: string): TokenState {
-  const token = ctx.room.state.tokens[tokenId];
-  if (!token) throw new HandlerError('no such token');
+  const token = find(ctx.room.state.tokens, tokenId, 'token');
   if (ctx.user.role !== 'host' && token.owners.indexOf(ctx.user.userId) === -1) {
     throw new HandlerError('you do not own that token');
   }
   return token;
-}
-
-function find<T>(collection: { [id: string]: T }, id: string, what: string): T {
-  const item = collection[id];
-  if (!item) throw new HandlerError(`no such ${what}`);
-  return item;
 }
 
 // Common shape of "change something, tell the others". Broadcast goes out immediately; we never
@@ -121,6 +125,9 @@ const handlers: { [name: string]: Handler } = {
     // `owned: false` removes the assignment; default is to add it.
     const owned = a.owned === undefined ? true : bool(a, 'owned');
     const without = token.owners.filter((o: string) => o !== userId);
+    if (owned && without.length >= MAX_TOKEN_OWNERS) {
+      throw new HandlerError('that token has too many owners');
+    }
     token.owners = owned ? without.concat(userId) : without;
     changed(ctx, { tokenId, userId, owned, owners: token.owners });
   },

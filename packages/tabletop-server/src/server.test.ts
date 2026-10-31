@@ -305,6 +305,50 @@ describe('events and roles', () => {
 });
 
 describe('bad input', () => {
+  it('never reaches Object.prototype through an id', async () => {
+    const { port } = await setup();
+    const { host, player } = await hostAndPlayer(port);
+    const updates: [string, string, object][] = [
+      ['updateTokenPosition', 'tokenId', { x: 1, y: 2, z: 3 }],
+      ['updateTokenScale', 'tokenId', { x: 1, y: 2, z: 3 }],
+      ['updateTokenModel', 'tokenId', { modelId: 'x' }],
+      ['updateTokenSettings', 'tokenId', { hideAvatar: true, disableCamLook: true }],
+      ['assignToken', 'tokenId', { userId: 'x' }],
+      ['updatePlaneTransform', 'planeId', { x: 1, z: 1, scaleX: 1, scaleY: 1, rotation: 1 }],
+      ['updateDoorTransform', 'doorId', { x: 1, z: 1, rotation: 1 }],
+      ['updateDoorState', 'doorId', { open: true }],
+      ['updateWallPoint', 'wallPointId', { x: 1, z: 1 }],
+    ];
+    let sent = 0;
+    for (const [name, idName, args] of updates) {
+      for (const id of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+        host.send({ type: 'update', name, args: { [idName]: id, ...args } });
+        sent += 1;
+      }
+    }
+    await sleep(200);
+    const probe = {} as any;
+    for (const key of ['position', 'scale', 'rotation', 'open', 'modelId', 'settings', 'owners']) {
+      expect(probe[key], key).toBeUndefined();
+    }
+    expect(host.messages.filter((m) => m.type === 'error').length).toBe(sent);
+    expect(player.messages.filter((m) => m.type === 'update')).toEqual([]);
+  });
+
+  it('limits the owners of one token', async () => {
+    const { port } = await setup();
+    const { host } = await hostAndPlayer(port);
+    host.send({ type: 'update', name: 'addToken', args: { modelId: 'orc', x: 0, y: 0, z: 0 } });
+    const { tokenId } = (await host.nextUpdate('addToken')).args;
+    for (let i = 0; i <= 100; i++) {
+      host.send({ type: 'update', name: 'assignToken', args: { tokenId, userId: 'user-' + i } });
+    }
+    await sleep(200);
+    const errors = host.messages.filter((m) => m.type === 'error');
+    expect(errors.length).toBe(1);
+    expect(errors[0].message || errors[0].error).toMatch(/too many owners/);
+  });
+
   it('rejects bad messages without crashing, and the connection stays usable', async () => {
     const { port } = await setup();
     const { host, player } = await hostAndPlayer(port);
