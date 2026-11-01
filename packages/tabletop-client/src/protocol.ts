@@ -18,6 +18,8 @@ export const ID_KEYS: Record<string, string> = {
   updateTokenScale: 'tokenId',
   updateTokenModel: 'tokenId',
   updateTokenSettings: 'tokenId',
+  updateTokenOverrides: 'tokenId',
+  updateTokenStats: 'tokenId',
   assignToken: 'tokenId',
   removePlane: 'planeId',
   updatePlaneTransform: 'planeId',
@@ -32,6 +34,7 @@ export const ID_KEYS: Record<string, string> = {
 export const COALESCED = [
   'updateTokenPosition',
   'updateTokenScale',
+  'updateTokenStats',
   'updatePlaneTransform',
   'updateDoorTransform',
   'updateWallPoint',
@@ -94,6 +97,10 @@ export function toServer(name: string, a: Args): Translated | null {
           iconColor: a.iconColor ?? null,
         },
       };
+    case 'updateTokenOverrides':
+      return { name, args: { tokenId: str(a.tokenId), overrides: a.overrides } };
+    case 'updateTokenStats':
+      return { name, args: { tokenId: str(a.tokenId), hp: a.hp, maxHp: a.maxHp, ac: a.ac } };
     case 'assignToken':
       return {
         name,

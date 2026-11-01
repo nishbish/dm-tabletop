@@ -32,6 +32,23 @@ export function int(args: Args, key: string, min: number, max: number): number {
   return value;
 }
 
+export function between(args: Args, key: string, min: number, max: number): number {
+  const value = num(args, key);
+  if (value < min || value > max) {
+    throw new HandlerError(`${key} must be between ${min} and ${max}`);
+  }
+  return value;
+}
+
+// Two numbers, as [x, y].
+export function pair(args: Args, key: string, min: number, max: number): [number, number] {
+  const value = args[key];
+  if (!Array.isArray(value) || value.length !== 2) {
+    throw new HandlerError(`${key} must be two numbers`);
+  }
+  return [between({ x: value[0] }, 'x', min, max), between({ y: value[1] }, 'y', min, max)];
+}
+
 // A colour as 0xRRGGBB, or null for "none". Above num()'s limit, so it has its own check.
 export function color(args: Args, key: string): number | null {
   const value = args[key];

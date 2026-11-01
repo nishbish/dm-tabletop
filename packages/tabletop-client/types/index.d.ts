@@ -102,6 +102,16 @@ export interface TabletopView {
   floorY: number;
 }
 
+export interface TokenInfo {
+  tokenId: string;
+  roomId: string;
+  name: string;
+  /** True when the name was given to this token, false when it comes from its picture. */
+  named: boolean;
+  /** Null until someone sets them. */
+  stats: { hp: number; maxHp: number; ac: number } | null;
+}
+
 export interface Tabletop {
   destroy(): void;
   getSceneStats(): SceneStats | null;
@@ -111,6 +121,16 @@ export interface Tabletop {
   sendAppEvent(name: string, args: Record<string, unknown>): boolean;
   /** A message that stays until it is closed. */
   showNotice(notice: TabletopNotice): void;
+  /** The room on the table now. */
+  getRoomId(): string;
+  /** Every token on the table. */
+  getTokens(): TokenInfo[];
+  /** Host only: sets a token's HP and AC for the room. False when it is not on the table. */
+  setTokenStats(tokenId: string, stats: { hp: number; maxHp: number; ac: number }): boolean;
+  /** Moves the camera to a token. False when it is not on the table. */
+  focusToken(tokenId: string): boolean;
+  /** Opens the tracker drawer if it is closed. */
+  openTracker(): void;
   /**
    * The camera as plain numbers, for drawing a layer over the scene with the same view. In the 2D
    * view it is a camera with perspective straight above the same spot, showing the floor at the

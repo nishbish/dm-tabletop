@@ -107,6 +107,28 @@ export function updateRow(
   return { ...state, rows: state.rows.map((r) => (r.id === id ? { ...r, ...patch } : r)) };
 }
 
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/**
+ * Ties `link` to a row, so a prepared encounter can be matched up with what is on the table: the
+ * row that already has the link, else the first unlinked row with the same name, else a new row.
+ * `id` is used for a new row.
+ */
+export function linkRow(
+  state: TrackerState,
+  link: string,
+  fields: Partial<TrackerRow> = {},
+  id: string = makeId(),
+): TrackerState {
+  const target =
+    state.rows.find((r) => r.link === link) ||
+    state.rows.find((r) => !r.link && sameName(r.name, fields.name || ''));
+  if (!target) return addRow(state, { ...fields, link }, id);
+  // A row that already has a name keeps it: that may be how the table knows this creature.
+  const name = target.name.trim() ? target.name : fields.name || '';
+  return updateRow(state, target.id, { ...fields, name, link });
+}
+
 /** Moves a row up (-1) or down (+1). The active creature stays active. */
 export function moveRow(state: TrackerState, id: string, delta: number): TrackerState {
   const from = state.rows.findIndex((r) => r.id === id);
@@ -176,6 +198,7 @@ export function migrate(input: unknown): TrackerState {
         ac: Math.max(0, int(r.ac, 10)),
       };
       if (typeof r.monsterId === 'string' && r.monsterId) row.monsterId = r.monsterId;
+      if (typeof r.link === 'string' && r.link) row.link = r.link;
       return row;
     });
   const turn = Math.min(Math.max(int(raw.turn, 0), 0), Math.max(rows.length - 1, 0));

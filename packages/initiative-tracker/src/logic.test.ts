@@ -11,6 +11,7 @@ import {
   resetRound,
   rollInitiative,
   sortByInitiative,
+  linkRow,
 } from './logic';
 import { TrackerState } from './types';
 
@@ -266,5 +267,39 @@ describe('migrate', () => {
 
   it('accepts a state with no version', () => {
     expect(migrate({ name: 'Old', rows: [] }).name).toBe('Old');
+  });
+});
+
+describe('linkRow', () => {
+  const base = () =>
+    addRow(addRow(createState(), { name: 'Goblin', hp: 7 }, 'a'), { name: 'Orc' }, 'b');
+
+  it('adds a row when nothing matches', () => {
+    const state = linkRow(base(), 'r:1', { name: 'Troll', hp: 84, maxHp: 84 }, 'c');
+    expect(state.rows.map((r) => r.name)).toEqual(['Goblin', 'Orc', 'Troll']);
+    expect(state.rows[2]).toMatchObject({ link: 'r:1', hp: 84 });
+  });
+
+  it('takes the first unlinked row of that name, whatever its case, and keeps its numbers', () => {
+    const state = linkRow(base(), 'r:1', { name: 'goblin' });
+    expect(state.rows).toHaveLength(2);
+    expect(state.rows[0]).toMatchObject({ name: 'Goblin', hp: 7, link: 'r:1' });
+  });
+
+  it('skips rows linked to something else', () => {
+    const one = linkRow(base(), 'r:1', { name: 'Goblin' });
+    const two = linkRow(one, 'r:2', { name: 'Goblin' }, 'c');
+    expect(two.rows.map((r) => r.link)).toEqual(['r:1', undefined, 'r:2']);
+  });
+
+  it('does nothing new for a link it already has', () => {
+    const one = linkRow(base(), 'r:1', { name: 'Goblin' });
+    expect(linkRow(one, 'r:1', { name: 'Goblin' }).rows).toHaveLength(2);
+  });
+
+  it('survives saving, and old saved rows need nothing', () => {
+    const state = linkRow(base(), 'r:1', { name: 'Goblin' });
+    expect(migrate(JSON.parse(JSON.stringify(state))).rows[0].link).toBe('r:1');
+    expect('link' in migrate(JSON.parse(JSON.stringify(base()))).rows[0]).toBe(false);
   });
 });

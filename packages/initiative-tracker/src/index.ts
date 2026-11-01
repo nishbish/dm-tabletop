@@ -11,6 +11,7 @@ export {
   removeRow,
   clear,
   updateRow,
+  linkRow,
   moveRow,
   moveRowTo,
   sortByInitiative,

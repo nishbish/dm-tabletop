@@ -44,6 +44,22 @@ export interface SideButtonOptions {
   onClick: () => void;
 }
 
+export interface TokenInfo {
+  tokenId: string;
+  roomId: string;
+  name: string;
+  // True when the name was given to this token, false when it comes from its picture.
+  named: boolean;
+  // Null until someone sets them.
+  stats: { hp: number; maxHp: number; ac: number } | null;
+}
+
+export interface TokenAction {
+  name: string;
+  icon: string;
+  onClick: (token: TokenInfo) => void;
+}
+
 export interface TabletopOptions {
   serverUrl?: string;
   token?: TokenSource;
@@ -59,6 +75,13 @@ export interface TabletopOptions {
   // Draws an initiative tracker (or anything else) into the side drawer the Tracker button opens,
   // once, the first time it opens. Wins over trackerUrl (which frames a page instead).
   mountTracker?: (element: HTMLElement) => void;
+  // Extra items for the host's right-click menu on a token, for example "Add to Initiative".
+  // `icon` is a Material Icons ligature name.
+  tokenActions?: TokenAction[];
+  // A token's name, HP or AC changed, by anyone. `removed` is set when the token left the table.
+  onTokenChange?: (token: TokenInfo & { removed?: boolean }) => void;
+  // A room's tokens are on the table: after joining, after a reconnect and after a room switch.
+  onRoomLoad?: (roomId: string) => void;
   // Extra buttons for the side rail, below the built-in ones (for example a dice roller).
   // `icon` is a Material Icons ligature name; `help` is the line shown in the tooltip and Help.
   buttons?: SideButtonOptions[];

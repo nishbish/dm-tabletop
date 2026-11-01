@@ -4,6 +4,7 @@ import {
   applyHpInput,
   clear,
   createState,
+  linkRow,
   migrate,
   moveRowTo,
   nextTurn,
@@ -224,6 +225,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       '[data-action="roll"]': 'Roll initiative for ' + label,
       '[data-grip]': 'Reorder ' + label + '. Drag, or press the up and down arrow keys',
       '[data-action="remove"]': 'Remove ' + label,
+      '[data-action="link"]': 'Show ' + label + ' on the table',
     };
     Object.keys(names).forEach((sel) => {
       const node = tr.querySelector(sel);
@@ -242,6 +244,12 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     dirty = true;
     scheduleAutosave();
     if (options.onChange) options.onChange(getState());
+  }
+
+  // The user changed something a linked row shares with what it is linked to.
+  function edited(id: string) {
+    const row = state.rows.find((r) => r.id === id);
+    if (row && row.link && options.onRowEdit) options.onRowEdit({ ...row });
   }
 
   function getState(): TrackerState {
@@ -313,6 +321,16 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     nameField.value = row.name;
     wrap.append(nameField);
     nameCell.append(wrap);
+    if (row.link && options.onLinkClick) {
+      nameCell.append(
+        el(
+          doc,
+          'button',
+          { type: 'button', class: 'it-link', 'data-action': 'link', title: 'Show on the table' },
+          '\u25CE',
+        ),
+      );
+    }
 
     const hpCell = cellOf('hp', 'HP');
     const hpInput = el(doc, 'input', {
@@ -543,6 +561,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     const row = state.rows.find((r) => r.id === id);
     if (tr && row) syncInputs(tr, row);
     relabelRow(id);
+    edited(id);
     input.focus();
     say(`Filled in ${c.name}: AC ${c.ac}, HP ${c.hp}`);
   }
@@ -598,6 +617,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     currentId = id;
     commit(migrate(loaded));
     renderRows();
+    if (options.onLoad) options.onLoad(getState());
     say(`Opened "${state.name}"`);
   }
 
@@ -726,6 +746,11 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
           (toolbar.querySelector('[data-action="add"]') as HTMLElement).focus();
         }
         break;
+      case 'link': {
+        const row = state.rows.find((r) => r.id === id);
+        if (row && options.onLinkClick) options.onLinkClick({ ...row });
+        break;
+      }
       case 'save':
         void saveNamed();
         break;
@@ -761,12 +786,14 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       commit(updateRow(state, id, { initiativeBonus: intOr(input.value, 0) }));
     } else if (field === 'ac') {
       commit(updateRow(state, id, { ac: Math.max(0, intOr(input.value, 0)) }));
+      edited(id);
     } else if (field === 'maxhp') {
       commit(updateRow(state, id, { maxHp: Math.max(0, intOr(input.value, 0)) }));
       refreshDown(
         rowEl(id),
         state.rows.find((r) => r.id === id),
       );
+      edited(id);
     }
   }
 
@@ -782,6 +809,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     commit(updateRow(state, id, { hp: result.hp, maxHp: result.maxHp }));
     const next = state.rows.find((r) => r.id === id);
     syncInputs(rowEl(id), next);
+    edited(id);
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -979,6 +1007,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
         if (last && !dirty && !destroyed) {
           state = migrate(last);
           renderRows();
+          if (options.onLoad) options.onLoad(getState());
         }
       } catch {
         // No usable last session: start empty.
@@ -992,6 +1021,25 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     getState,
     setState(next: TrackerState) {
       state = migrate(next);
+      dirty = true;
+      renderRows();
+      scheduleAutosave();
+    },
+    linkRow(link: string, fields: Partial<TrackerRow> = {}) {
+      state = linkRow(state, link, fields);
+      dirty = true;
+      renderRows();
+      scheduleAutosave();
+      return { ...state.rows.find((r) => r.link === link) };
+    },
+    updateLinked(link: string, patch: Partial<TrackerRow>) {
+      const rows = state.rows.filter((r) => r.link === link);
+      const changes = (r: TrackerRow) =>
+        Object.keys(patch).some((key) => r[key as keyof TrackerRow] !== patch[key]);
+      if (!rows.some(changes)) return;
+      rows.forEach((r) => {
+        state = updateRow(state, r.id, patch);
+      });
       dirty = true;
       renderRows();
       scheduleAutosave();

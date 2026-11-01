@@ -16,6 +16,25 @@ export interface Vec3 {
   z: number;
 }
 
+// What one token changes from its picture's settings. Only the changed fields are stored, so the
+// token follows its picture for the rest.
+export interface TokenOverrides {
+  name?: string;
+  size?: number;
+  scale?: number;
+  viewDistance?: number;
+  baseColor?: number;
+  textureRepeat?: [number, number];
+  textureOffset?: [number, number];
+  modelOffset?: [number, number];
+}
+
+export interface TokenStats {
+  hp: number;
+  maxHp: number;
+  ac: number;
+}
+
 export interface TokenState {
   modelId: string;
   position: Vec3;
@@ -24,6 +43,10 @@ export interface TokenState {
   owners: string[];
   // iconColor tints the token's picture (0xRRGGBB); rooms saved before it existed do not have it.
   settings: { hideAvatar: boolean; disableCamLook: boolean; iconColor?: number | null };
+  // Both are optional and kept beside `settings`, so rooms saved before they existed need no
+  // migration and an older server leaves them alone.
+  overrides?: TokenOverrides;
+  stats?: TokenStats;
 }
 
 export interface PlaneState {

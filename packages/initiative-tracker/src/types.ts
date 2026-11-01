@@ -12,6 +12,11 @@ export interface TrackerRow {
   ac: number;
   /** Id of the creature template this row was filled from, if any. */
   monsterId?: string;
+  /**
+   * Ties the row to something outside the tracker, such as a token on a map. The tracker only
+   * stores it; the host app decides what it means (see `linkRow` and `onRowEdit`).
+   */
+  link?: string;
 }
 
 export interface TrackerState {
@@ -65,6 +70,12 @@ export interface TrackerOptions {
   rng?: () => number;
   /** Called after every change the user makes (not after `setState`). */
   onChange?: (state: TrackerState) => void;
+  /** Called when the user changes the HP, max HP or AC of a linked row. */
+  onRowEdit?: (row: TrackerRow) => void;
+  /** Called after an encounter was opened or the last session restored. */
+  onLoad?: (state: TrackerState) => void;
+  /** When given, linked rows show a button that calls this. */
+  onLinkClick?: (row: TrackerRow) => void;
   /** Called when `storage.save` rejects with `code === 'LIMIT'`. */
   onLimit?: (reason: string) => void;
   /** State to start with, instead of restoring the last session. */
@@ -77,6 +88,13 @@ export interface Tracker {
   getState(): TrackerState;
   /** Replaces the whole state (migrated first) and re-renders. Does not call `onChange`. */
   setState(state: TrackerState): void;
+  /**
+   * Ties `link` to a row and returns that row: the row that already has it, else the first unlinked
+   * row with the same name, else a new one. `fields` fill the row in. Does not call `onChange`.
+   */
+  linkRow(link: string, fields?: Partial<TrackerRow>): TrackerRow;
+  /** Changes every row with this link (`link: undefined` unties it). Does not call `onRowEdit`. */
+  updateLinked(link: string, patch: Partial<TrackerRow>): void;
   destroy(): void;
   /** Resolves once the last session has been restored (or there was nothing to restore). */
   ready: Promise<void>;

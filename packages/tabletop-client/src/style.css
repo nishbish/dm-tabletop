@@ -1296,6 +1296,20 @@
 	background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.28), rgba(0, 0, 0, 0.3));
 }
 
+#avatarContainer .avatar-hp {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 13px;
+	padding: 1px 0;
+	background: rgba(0, 0, 0, 0.7);
+	color: #fff;
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 1.2;
+	text-align: center;
+}
+
 #avatarContainer .avatar:has(.avatar-face-plain) {
 	background: var(--_on-bar-muted);
 }
@@ -1334,6 +1348,10 @@
 
 	#avatarContainer .avatar-face {
 		inset: 2px;
+	}
+
+	#avatarContainer .avatar-hp {
+		display: none;
 	}
 }
 
