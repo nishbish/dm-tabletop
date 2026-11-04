@@ -197,6 +197,59 @@ describe('rendering and actions', () => {
     expect(tracker.getState().rows[0].hp).toBe(0);
     expect(rows()[0].querySelector('.it-down').hasAttribute('hidden')).toBe(false);
   });
+
+  it('changes HP with the - / + buttons by the amount, within 0 and max', async () => {
+    await make().ready;
+    click(action('add'));
+    type(field(rows()[0], 'hp'), '20', 'change');
+    const row = rows()[0];
+    const cell = row.querySelector('.it-c-hp');
+    const down = row.querySelector('[data-action="hp-down"]') as HTMLButtonElement;
+    const up = row.querySelector('[data-action="hp-up"]') as HTMLButtonElement;
+    expect(down.getAttribute('aria-label')).toMatch(/^Subtract the amount from hit points/);
+    expect(field(row, 'hpstep').value).toBe('1');
+
+    // focus on the HP field opens the box; focus elsewhere closes it
+    field(row, 'hp').focus();
+    expect(cell.classList.contains('it-c-hp--open')).toBe(true);
+
+    click(down);
+    expect(tracker.getState().rows[0].hp).toBe(19);
+    expect(field(rows()[0], 'hp').value).toBe('19');
+    type(field(row, 'hpstep'), '7');
+    click(down);
+    expect(tracker.getState().rows[0].hp).toBe(12);
+    click(up);
+    click(up);
+    expect(tracker.getState().rows[0].hp).toBe(20); // capped at max
+    type(field(row, 'hpstep'), '50');
+    click(down);
+    expect(tracker.getState().rows[0].hp).toBe(0);
+    expect(row.querySelector('.it-down').hasAttribute('hidden')).toBe(false);
+    expect($('.it-message').textContent).toBe('creature 1: 0 HP');
+
+    field(row, 'ac').focus();
+    expect(cell.classList.contains('it-c-hp--open')).toBe(false);
+  });
+
+  it('closes the HP box on Escape and on a press outside it', async () => {
+    await make().ready;
+    click(action('add'));
+    const row = rows()[0];
+    const cell = row.querySelector('.it-c-hp');
+    const up = row.querySelector('[data-action="hp-up"]') as HTMLButtonElement;
+    field(row, 'hp').focus();
+    up.focus();
+    expect(cell.classList.contains('it-c-hp--open')).toBe(true);
+    up.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(cell.classList.contains('it-c-hp--open')).toBe(false);
+    expect(document.activeElement).toBe(field(row, 'hp'));
+
+    click(field(row, 'hp'));
+    expect(cell.classList.contains('it-c-hp--open')).toBe(true);
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(cell.classList.contains('it-c-hp--open')).toBe(false);
+  });
 });
 
 describe('autocomplete', () => {

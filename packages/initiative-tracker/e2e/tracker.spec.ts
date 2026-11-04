@@ -74,3 +74,56 @@ test('dragging a row moves it under the pointer while the others slide, then reo
   await expect(rows.nth(0).locator('input.it-name')).toHaveValue('Ogre', { timeout: 3000 });
   await expect(rows.nth(2).locator('input.it-name')).toHaveValue('Goblin');
 });
+
+test('HP - / + buttons change HP by the amount, from mouse and keyboard', async ({ page }) => {
+  await page.goto('/');
+  await addCreature(page, 'gobl', 'Goblin');
+  const hp = page.getByLabel(/^Hit points, Goblin/);
+  const down = page.getByRole('button', { name: /^Subtract the amount from hit points, Goblin/ });
+  const up = page.getByRole('button', { name: /^Add the amount to hit points, Goblin/ });
+  await expect(down).toBeHidden();
+  await hp.click();
+  await expect(down).toBeVisible();
+  await down.click();
+  await expect(hp).toHaveValue('6');
+  await page.getByLabel(/^Amount to add or subtract, Goblin/).fill('3');
+  await down.click();
+  await expect(hp).toHaveValue('3');
+  await up.click();
+  await up.click();
+  await expect(hp).toHaveValue('7'); // the goblin's max HP
+  await page.screenshot({ path: 'e2e/.results/hp-box.png' });
+
+  // keyboard: Tab from HP reaches the box, Enter / Space press the buttons, Escape closes it
+  await hp.focus();
+  await page.keyboard.press('Tab'); // max HP
+  await page.keyboard.press('Tab');
+  await expect(down).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(hp).toHaveValue('4');
+  await page.keyboard.press('Escape');
+  await expect(down).toBeHidden();
+  await expect(hp).toBeFocused();
+  await page.locator('.it-enc-name').click();
+  await expect(down).toBeHidden();
+});
+
+test.describe('on a phone', () => {
+  test.use({ viewport: { width: 375, height: 740 }, hasTouch: true, isMobile: true });
+
+  test('tapping the HP field shows the box and taps change HP', async ({ page }) => {
+    await page.goto('/');
+    await addCreature(page, 'gobl', 'Goblin');
+    const hp = page.getByLabel(/^Hit points, Goblin/);
+    await hp.tap();
+    const down = page.getByRole('button', { name: /^Subtract the amount from hit points, Goblin/ });
+    await expect(down).toBeVisible();
+    await down.tap();
+    await down.tap();
+    await expect(hp).toHaveValue('5');
+    // the box stays inside the screen
+    const box = await page.locator('.it-c-hp--open .it-hp-pop').boundingBox();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(375);
+    await page.screenshot({ path: 'e2e/.results/hp-box-phone.png' });
+  });
+});

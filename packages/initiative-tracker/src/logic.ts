@@ -130,17 +130,24 @@ export interface HpResult {
 }
 
 /**
- * Applies what was typed in the HP field. "-5" and "+3" change the current value (never below 0,
- * and never above max HP when a max is set). A plain number sets the value; it also raises max
- * HP if it is higher. Anything else leaves HP unchanged.
+ * Adds `delta` (negative for damage) to HP: never below 0, and never above max HP when a max is
+ * set. Used by both the typed "-5" / "+3" and the - / + buttons, so they follow the same rules.
+ */
+export function changeHp(hp: number, maxHp: number, delta: number): number {
+  let next = Math.max(0, hp + (Number(delta) || 0));
+  if (maxHp > 0) next = Math.min(next, maxHp);
+  return next;
+}
+
+/**
+ * Applies what was typed in the HP field. "-5" and "+3" change the current value (see
+ * `changeHp`). A plain number sets the value; it also raises max HP if it is higher. Anything
+ * else leaves HP unchanged.
  */
 export function applyHpInput(text: string, hp: number, maxHp: number): HpResult {
   const t = String(text).trim().replace(/−/g, '-');
   if (/^[+-]\s*\d+$/.test(t)) {
-    let next = hp + parseInt(t.replace(/\s+/g, ''), 10);
-    next = Math.max(0, next);
-    if (maxHp > 0) next = Math.min(next, maxHp);
-    return { hp: next, maxHp };
+    return { hp: changeHp(hp, maxHp, parseInt(t.replace(/\s+/g, ''), 10)), maxHp };
   }
   if (/^\d+$/.test(t)) {
     const next = parseInt(t, 10);
