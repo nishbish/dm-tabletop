@@ -277,6 +277,120 @@ test('2D view: drawn from above, tokens still move, and the choice is remembered
   expect(await orthographic()).toBe(false);
 });
 
+test('camera slides across the floor at one height, like a strategy game', async ({ page }) => {
+  await page.goto('/?demo=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+  await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
+  // skip the glide to the first token, and no easing, so each move has finished by the next frame
+  await expect
+    .poll(() => page.evaluate(() => (window as any).tabletop.debug.map.orbitControls.animating))
+    .toBe(true);
+  await page.evaluate(() => {
+    const map = (window as any).tabletop.debug.map;
+    const c = map.orbitControls;
+    map.objects.camera.position.copy(c.newPosition);
+    c.target.copy(c.newTarget);
+    c.animating = false;
+    map.settings.cameraDamping = 0;
+    c.enableDamping = false;
+  });
+  const camera = () =>
+    page.evaluate(() => {
+      const map = (window as any).tabletop.debug.map;
+      const c = map.orbitControls;
+      return {
+        y: map.objects.camera.position.y,
+        target: c.target.toArray(),
+        tilt: c.getPolarAngle(),
+        turn: c.getAzimuthalAngle(),
+      };
+    });
+  const steady = async () => {
+    let last = await camera();
+    await expect
+      .poll(
+        async () => {
+          await page.waitForTimeout(200);
+          const now = await camera();
+          const moved = Math.abs(now.y - last.y) + Math.abs(now.target[0] - last.target[0]);
+          last = now;
+          return moved;
+        },
+        { timeout: 30_000, intervals: [0] },
+      )
+      .toBeLessThan(1e-4);
+    return last;
+  };
+  const across = (a: number[], b: number[]) => Math.hypot(b[0] - a[0], b[2] - a[2]);
+
+  // left drag on the sky above the room: the view slides, its height stays put
+  let before = await steady();
+  await page.mouse.move(400, 40);
+  await page.mouse.down();
+  await page.mouse.move(250, 120, { steps: 6 });
+  await page.mouse.up();
+  let after = await camera();
+  expect(across(before.target, after.target)).toBeGreaterThan(0.5);
+  expect(after.y).toBeCloseTo(before.y, 4);
+  expect(after.target[1]).toBeCloseTo(before.target[1], 4);
+
+  // W slides forward, the way the camera faces, at the same height
+  before = after;
+  // held until it has gone some way: software WebGL on CI draws only a few frames a second
+  await page.keyboard.down('KeyW');
+  await expect
+    .poll(async () => across(before.target, (await camera()).target), { timeout: 20_000 })
+    .toBeGreaterThan(0.5);
+  await page.keyboard.up('KeyW');
+  after = await camera();
+  const forward = [-Math.sin(before.turn), -Math.cos(before.turn)];
+  const moved = [after.target[0] - before.target[0], after.target[2] - before.target[2]];
+  expect(moved[0] * forward[0] + moved[1] * forward[1]).toBeGreaterThan(0.5);
+  expect(after.y).toBeCloseTo(before.y, 4);
+
+  // Q turns the view round the spot it looks at, without tilting or lifting it
+  before = after;
+  await page.keyboard.down('KeyQ');
+  await expect
+    .poll(async () => Math.abs((await camera()).turn - before.turn), { timeout: 20_000 })
+    .toBeGreaterThan(0.2);
+  await page.keyboard.up('KeyQ');
+  after = await camera();
+  expect(after.tilt).toBeCloseTo(before.tilt, 4);
+  expect(after.y).toBeCloseTo(before.y, 4);
+
+  // the keys do nothing while typing in a text box
+  before = after;
+  await page.evaluate(() => {
+    const input = document.createElement('input');
+    input.id = 'typing-test';
+    document.body.appendChild(input);
+    input.focus();
+  });
+  await page.keyboard.down('KeyW');
+  await page.waitForTimeout(300);
+  await page.keyboard.up('KeyW');
+  after = await camera();
+  expect(across(before.target, after.target)).toBeLessThan(1e-6);
+  await page.evaluate(() => document.getElementById('typing-test')!.remove());
+
+  // the wheel changes the height
+  before = after;
+  await page.mouse.move(400, 300);
+  await page.mouse.wheel(0, 400);
+  after = await steady();
+  expect(after.y).toBeGreaterThan(before.y + 0.5);
+
+  // right drag tilts, but never down to level with the floor
+  await page.mouse.move(400, 300);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(400, 20, { steps: 10 });
+  await page.mouse.up({ button: 'right' });
+  after = await steady();
+  expect(after.tilt).toBeLessThanOrEqual((80 * Math.PI) / 180 + 1e-6);
+});
+
 test('ping, and a pane opened from the token menu closes the menu', async ({ page }) => {
   await page.goto('/?demo=1');
   await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
