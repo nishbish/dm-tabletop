@@ -707,8 +707,10 @@ test('map images: the floor and image menus, and Change Image keeps the place', 
   await page.mouse.click(floor.x + 300, floor.y - 300, { button: 'right' });
   expect(await items()).toEqual(['Add Image']);
 
-  // an image offers Change Image, Add Image (to layer another) and Remove Image
+  // an image offers Change Image, Add Image (to layer another) and Remove Image; selected first,
+  // so its handles show
   const at = await imageAt();
+  await page.mouse.click(at.x, at.y);
   await page.mouse.click(at.x, at.y, { button: 'right' });
   expect(await items()).toEqual(['Change Image', 'Add Image', 'Remove Image']);
   const before = (await planes())[0];
