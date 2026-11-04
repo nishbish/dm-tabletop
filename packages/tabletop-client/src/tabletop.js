@@ -64,6 +64,26 @@ const ORTHO_HEIGHT = 300;
 const FLAT_TOKEN_Y = -0.4;
 const FLAT_TOKEN_FIT = 0.95;
 
+// The 3D view's tilt, from straight down: it stops short of level so the view never runs flat
+// along the floor or under it.
+const MIN_TILT = 0;
+const MAX_TILT = 80 * Math.PI / 180;
+// The camera keys (keyCamera()). By key position, so they sit under the same fingers on any layout.
+const CAMERA_KEYS = {
+	KeyW: 'forward', ArrowUp: 'forward',
+	KeyS: 'back', ArrowDown: 'back',
+	KeyA: 'left', ArrowLeft: 'left',
+	KeyD: 'right', ArrowRight: 'right',
+	KeyQ: 'turnLeft', KeyE: 'turnRight'
+};
+// A held key slides the view this many screen heights a second, and turns it this many radians.
+const CAMERA_KEY_PAN = 0.8;
+const CAMERA_KEY_TURN = 1.6;
+const cameraKeyMove = new THREE.Vector3();
+const cameraKeyForward = new THREE.Vector3();
+const cameraKeyRight = new THREE.Vector3();
+const cameraKeyOffset = new THREE.Vector3();
+
 export function createTabletop(container, userOptions) {
 const options = resolveOptions(userOptions);
 installIconFont();
@@ -171,6 +191,9 @@ var parseData = {
 
 //default map
 const map = {
+	cameraKeys: new Set(),
+	cameraKeyVelocity: new THREE.Vector3(),
+	cameraKeyTime: 0,
 	objects: {
 		tokens: {},
 		planes: {},
@@ -404,7 +427,10 @@ function init() {
 	map.orbitControls.enablePan = true;
 	map.orbitControls.enableDamping = map.settings.cameraDamping ? true : false;
 	map.orbitControls.dampingFactor = 0.05;
-	map.orbitControls.maxPolarAngle = Math.PI / 2;
+	map.orbitControls.minPolarAngle = MIN_TILT;
+	map.orbitControls.maxPolarAngle = MAX_TILT;
+	//strategy-game panning: a drag slides the view across the floor at the same height
+	map.orbitControls.screenSpacePanning = false;
 	map.orbitControls.panSpeed = 1.4;
 	map.orbitControls.endTimer = null;
 	
@@ -431,10 +457,22 @@ function init() {
 	map.orbitControls.touches.ONE = THREE.TOUCH.PAN;
 	map.orbitControls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;	
 
-	// NOTE(port): newer three.js no longer listens to the keyboard unless asked to (and uses
-	// string key names, whose defaults are the arrow keys we want).
-	map.orbitControls.listenToKeyEvents(window);
-	map.orbitControls.keyPanSpeed = 15;
+	// WASD and the arrow keys slide the view, Q and E turn it (see keyCamera()). The controls' own
+	// key handling moved one step per key repeat and also ran while typing in a text box.
+	listen(window, 'keydown', function(e) {
+		var key = CAMERA_KEYS[e.code];
+		if (!key || e.defaultPrevented || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) { return; }
+		e.preventDefault();
+		map.cameraKeys.add(key);
+	});
+
+	listen(window, 'keyup', function(e) {
+		var key = CAMERA_KEYS[e.code];
+		if (key) { map.cameraKeys.delete(key); }
+	});
+
+	//a key let go while the page was in the background never sends its keyup
+	listen(window, 'blur', function() { map.cameraKeys.clear(); });
 
 	//modifier key
 	var ctrlPressed = false;
@@ -1984,8 +2022,8 @@ function setView2d(on) {
 	}
 	else {
 		persp.position.setFromSphericalCoords(distanceForFloorHeight(height), map.local.polarAngle, map.local.azimuthAngle).add(controls.target);
-		controls.minPolarAngle = 0;
-		controls.maxPolarAngle = Math.PI / 2;
+		controls.minPolarAngle = MIN_TILT;
+		controls.maxPolarAngle = MAX_TILT;
 		controls.minAzimuthAngle = -Infinity;
 		controls.maxAzimuthAngle = Infinity;
 		useCamera(persp);
@@ -5608,8 +5646,10 @@ function buildGui() {
 	var helpPane = buildPane('Help');
 
 	buildPaneItem(helpPane, 'Controls', 'header');
-	buildPaneItem(helpPane, 'Left Drag / 1 Touch Drag', 'text', 'Pan');
-	buildPaneItem(helpPane, 'Right Drag / 2 Touch Drag', 'text', 'Rotate the camera, or raise and lower a token');
+	buildPaneItem(helpPane, 'Left Drag / 1 Touch Drag', 'text', 'Move the camera across the map');
+	buildPaneItem(helpPane, 'W A S D / Arrow Keys', 'text', 'Move the camera across the map');
+	buildPaneItem(helpPane, 'Right Drag / 2 Touch Drag', 'text', 'Turn and tilt the camera, or raise and lower a token');
+	buildPaneItem(helpPane, 'Q / E', 'text', 'Turn the camera');
 	buildPaneItem(helpPane, 'Scroll Wheel / 2 Touch Pinch', 'text', 'Zoom Camera');
 	buildPaneItem(helpPane, 'Double Click', 'text', 'Ping Location');
 	buildPaneItem(helpPane, 'Right-click / Long Press', 'text', 'Menu: add tokens and images, resize, raise or lower a token');
@@ -7385,7 +7425,8 @@ function animate() {
 		map.objects.camera.position.lerp(map.orbitControls.newPosition, delta * speed);
 		map.orbitControls.target.lerp(map.orbitControls.newTarget, delta * speed);
 	}
-	
+
+	keyCamera();
 	map.orbitControls.update();
 	map.mask.fog.update(performance.now());
 	
@@ -7404,6 +7445,58 @@ function animate() {
 
 	animationFrame = requestAnimationFrame(animate);
 	render();
+}
+
+// Moves the view for the camera keys held down: across the floor relative to where the camera faces,
+// at the same height, and round the point it looks at. The pace follows how much floor shows, so a
+// zoomed-out view crosses the room as quickly as a close one crosses a corridor. With camera damping
+// on, the view eases in and out instead of starting and stopping dead.
+function keyCamera() {
+	var now = performance.now();
+	var seconds = Math.min((now - (map.cameraKeyTime || now)) / 1000, 0.1);
+	map.cameraKeyTime = now;
+
+	var controls = map.orbitControls;
+	var keys = map.cameraKeys;
+	var free = controls.enabled && !controls.animating;
+	var wanted = cameraKeyMove.set(0, 0, 0);
+
+	if (free && controls.enablePan) {
+		wanted.x = (keys.has('right') ? 1 : 0) - (keys.has('left') ? 1 : 0);
+		wanted.y = (keys.has('forward') ? 1 : 0) - (keys.has('back') ? 1 : 0);
+	}
+	if (free && controls.enableRotate && !map.settings.view2d) {
+		wanted.z = (keys.has('turnLeft') ? 1 : 0) - (keys.has('turnRight') ? 1 : 0);
+	}
+
+	var velocity = map.cameraKeyVelocity;
+	if (map.settings.cameraDamping) {
+		velocity.lerp(wanted, Math.min(1, seconds * 8));
+		if (velocity.lengthSq() < 1e-6) { velocity.set(0, 0, 0); }
+	}
+	else {
+		velocity.copy(wanted);
+	}
+
+	if (seconds === 0 || velocity.lengthSq() === 0) { return; }
+
+	var camera = map.objects.camera;
+	var target = controls.target;
+	var azimuth = controls.getAzimuthalAngle();
+
+	if (velocity.x || velocity.y) {
+		var step = floorViewHeight() * CAMERA_KEY_PAN * seconds;
+		var forward = cameraKeyForward.set(-Math.sin(azimuth), 0, -Math.cos(azimuth));
+		var right = cameraKeyRight.set(Math.cos(azimuth), 0, -Math.sin(azimuth));
+		var offset = forward.multiplyScalar(velocity.y * step).addScaledVector(right, velocity.x * step);
+		camera.position.add(offset);
+		target.add(offset);
+	}
+
+	if (velocity.z) {
+		cameraKeyOffset.copy(camera.position).sub(target).applyAxisAngle(camera.up, velocity.z * CAMERA_KEY_TURN * seconds);
+		camera.position.copy(target).add(cameraKeyOffset);
+	}
 }
 
 function render() {
@@ -7516,7 +7609,6 @@ return {
 		connection.close();
 		cleanups.forEach(function(cleanup) { cleanup(); });
 		resizeObserver.disconnect();
-		map.orbitControls.stopListenToKeyEvents();
 		map.orbitControls.dispose();
 		map.selectionHelper.dispose();
 		resetRoom();

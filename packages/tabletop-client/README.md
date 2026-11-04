@@ -207,6 +207,11 @@ The side buttons: **Menu** (Help, Settings, Rooms, Invite Link), and for the hos
 focus, and for a moment after a tap. Box select is Shift + drag; a token is raised or lowered with a right
 drag or with **Raise or Lower** in its menu.
 
+The camera works like a strategy game's: a left drag (one finger on a touch screen), WASD or the arrow keys
+slide it across the map at the same height and angle, the wheel (or a pinch) zooms, and a right drag (two
+fingers) or Q and E turn it. Its tilt stops at 80° from straight down, so it never lies level with the floor.
+The keys do nothing while typing in a text box. **Camera Damping** in Settings eases every move in and out.
+
 ## Building maps
 
 **Edit Map** opens a bar at the top: what to edit (**Walls**, **Doors**, **Images**), **Done**, and for walls
