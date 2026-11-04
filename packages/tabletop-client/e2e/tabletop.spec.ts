@@ -645,3 +645,95 @@ test('box select: the rectangle goes away however the drag ends', async ({ page 
     false,
   );
 });
+
+test('map images: the floor and image menus, and Change Image keeps the place', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+  await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
+  await steadyScreenPosition(page, (await stats(page)).tokenIds[0]);
+
+  const square =
+    "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20'><rect width='20' height='20' fill='green'/></svg>";
+  const wide =
+    "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='20'><rect width='40' height='20' fill='red'/></svg>";
+  const items = () =>
+    page.locator('.show-context-menu-default .context-menu-default-text').allTextContents();
+  const planes = () =>
+    page.evaluate(() =>
+      Object.entries<any>((window as any).tabletop.debug.map.objects.planes).map(([id, p]) => ({
+        id,
+        src: p.src,
+        x: p.position.x,
+        z: p.position.z,
+        scale: p.scale.x,
+        rotation: p.rotation.z,
+        renderOrder: p.renderOrder,
+        width: p.geometry.parameters ? p.geometry.parameters.width : 0,
+        height: p.geometry.parameters ? p.geometry.parameters.height : 0,
+      })),
+    );
+  // the floor: a spot left of the demo building, away from tokens and the image
+  const floor = { x: 260, y: 520 };
+  const imageAt = async () =>
+    page.evaluate(() => {
+      const map = (window as any).tabletop.debug.map;
+      const p: any = Object.values(map.objects.planes)[0];
+      const v = p.position.clone().project(map.objects.camera);
+      const r = map.canvas.getBoundingClientRect();
+      return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
+    });
+  const pickUrl = async (url: string) => {
+    const pane = page
+      .locator('.pane:visible')
+      .filter({ has: page.locator('.pane-header-title', { hasText: 'Images' }) });
+    await pane.locator('.pane-item', { hasText: 'Image URL' }).locator('input').fill(url);
+    await pane.getByText('Add image from URL', { exact: true }).click();
+  };
+
+  // outside Edit Map the floor offers tokens and images
+  await page.mouse.click(floor.x, floor.y, { button: 'right' });
+  expect(await items()).toEqual(['Add Token', 'Add Image']);
+  await page.locator('.show-context-menu-default').getByText('Add Image', { exact: true }).click();
+  await pickUrl(square);
+  await expect.poll(async () => (await planes()).length).toBe(1);
+  await expect.poll(async () => (await planes())[0].width).toBe(5);
+
+  // editing images: the floor offers images only
+  await page.locator('[data-button="editMap"]').click();
+  await page.locator('[data-button="planeMode"]').click();
+  await page.mouse.click(floor.x + 300, floor.y - 300, { button: 'right' });
+  expect(await items()).toEqual(['Add Image']);
+
+  // an image offers Change Image, Add Image (to layer another) and Remove Image
+  const at = await imageAt();
+  await page.mouse.click(at.x, at.y, { button: 'right' });
+  expect(await items()).toEqual(['Change Image', 'Add Image', 'Remove Image']);
+  const before = (await planes())[0];
+  await page
+    .locator('.show-context-menu-default')
+    .getByText('Change Image', { exact: true })
+    .click();
+  await pickUrl(wide);
+  // the same image, a new picture: id, place, turn and layer stay, the shape follows the picture
+  await expect.poll(async () => (await planes())[0].height).toBe(2.5);
+  const after = await planes();
+  expect(after).toEqual([{ ...before, src: wide, width: 5, height: 2.5 }]);
+
+  // and Add Image from an image's menu still adds a second one
+  await page.mouse.click(at.x, at.y, { button: 'right' });
+  await page.locator('.show-context-menu-default').getByText('Add Image', { exact: true }).click();
+  await pickUrl(square);
+  await expect.poll(async () => (await planes()).length).toBe(2);
+
+  // Remove Image
+  const top = await imageAt();
+  await page.mouse.click(top.x, top.y, { button: 'right' });
+  await page
+    .locator('.show-context-menu-default')
+    .getByText('Remove Image', { exact: true })
+    .click();
+  await expect.poll(async () => (await planes()).length).toBe(1);
+});

@@ -235,6 +235,19 @@ const handlers: { [name: string]: Handler } = {
     delete ctx.room.state.planes[planeId];
     changed(ctx, { planeId });
   },
+  // Another picture for the same plane: it keeps its id, place, size, turn and layer.
+  updatePlaneImage(ctx) {
+    requireHost(ctx);
+    const a = requireObject(ctx.args);
+    const planeId = idString(a, 'planeId');
+    const plane = find(ctx.room.state.planes, planeId, 'plane');
+    // both checked before either is stored
+    const planeUploadId = idString(a, 'planeUploadId');
+    const image = a.image === undefined ? '' : str(a, 'image');
+    plane.planeUploadId = planeUploadId;
+    plane.image = image;
+    changed(ctx, { planeId, planeUploadId: plane.planeUploadId, image: plane.image });
+  },
   updatePlaneTransform(ctx) {
     requireHost(ctx);
     const a = requireObject(ctx.args);

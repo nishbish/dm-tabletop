@@ -129,6 +129,17 @@ describe('protocol mapping, viewer -> server', () => {
       args: { planeId: '4', x: 1, z: 2, scaleX: 3, scaleY: 4, rotation: 5 },
     });
     expect(
+      toServer('updatePlaneImage', { planeId: 4, planeUploadId: 8, image: 'cave.png' }),
+    ).toEqual({
+      name: 'updatePlaneImage',
+      args: { planeId: '4', planeUploadId: '8', image: 'cave.png' },
+    });
+    expect(
+      fromServerUpdate('updatePlaneImage', { planeId: '4', planeUploadId: '8', image: 'c' }),
+    ).toEqual([
+      { name: 'updatePlaneImage', args: { planeId: '4', planeUploadId: '8', image: 'c' } },
+    ]);
+    expect(
       toServer('addWallPoint', { tempWallPointId: 9, wallPointGroupId: 7, x: 1, z: 2 })?.args,
     ).toEqual({
       wallGroupId: '7',
