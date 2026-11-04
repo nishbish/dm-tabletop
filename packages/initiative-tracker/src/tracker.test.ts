@@ -389,3 +389,60 @@ describe('state and destroy', () => {
     tracker = createTracker(container, { storage: null });
   });
 });
+
+describe('linked rows', () => {
+  const linked = () => {
+    const onRowEdit = vi.fn();
+    const onLinkClick = vi.fn();
+    const onChange = vi.fn();
+    make({ storage: null, onRowEdit, onLinkClick, onChange });
+    tracker.linkRow('r:1', { name: 'Grik', hp: 10, maxHp: 10 });
+    return { onRowEdit, onLinkClick, onChange };
+  };
+  const type = (field: string, value: string, event: string) => {
+    const input = $(`[data-field="${field}"]`) as HTMLInputElement;
+    input.value = value;
+    input.dispatchEvent(new Event(event, { bubbles: true }));
+  };
+
+  it('tells the host app about HP and AC edits on a linked row only', () => {
+    const { onRowEdit } = linked();
+    type('hp', '-3', 'change');
+    expect(onRowEdit).toHaveBeenLastCalledWith(expect.objectContaining({ link: 'r:1', hp: 7 }));
+    type('ac', '15', 'input');
+    expect(onRowEdit).toHaveBeenLastCalledWith(expect.objectContaining({ ac: 15 }));
+    onRowEdit.mockClear();
+    type('name', 'Grak', 'input');
+    expect(onRowEdit).not.toHaveBeenCalled();
+    $('[data-action="add"]').click();
+    (container.querySelectorAll('[data-field="ac"]')[1] as HTMLInputElement).value = '3';
+    container
+      .querySelectorAll('[data-field="ac"]')[1]
+      .dispatchEvent(new Event('input', { bubbles: true }));
+    expect(onRowEdit).not.toHaveBeenCalled();
+  });
+
+  it('updateLinked changes the row without telling the host app back', () => {
+    const { onRowEdit, onChange } = linked();
+    onChange.mockClear();
+    tracker.updateLinked('r:1', { hp: 2 });
+    expect(($('[data-field="hp"]') as HTMLInputElement).value).toBe('2');
+    expect(onRowEdit).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('the link button calls the host app, and untying removes it', () => {
+    const { onLinkClick } = linked();
+    $('[data-action="link"]').click();
+    expect(onLinkClick).toHaveBeenCalledWith(expect.objectContaining({ name: 'Grik' }));
+    tracker.updateLinked('r:1', { link: undefined });
+    expect($('[data-action="link"]')).toBeNull();
+    expect(JSON.parse(JSON.stringify(tracker.getState())).rows[0].link).toBeUndefined();
+  });
+
+  it('shows no link button without onLinkClick', () => {
+    make({ storage: null });
+    tracker.linkRow('r:1', { name: 'Grik' });
+    expect($('[data-action="link"]')).toBeNull();
+  });
+});

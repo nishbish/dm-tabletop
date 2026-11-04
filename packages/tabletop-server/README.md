@@ -98,31 +98,33 @@ String arguments are limited to 256 characters, numbers must be finite. Ids (`to
 
 "Host" means the room's host; "owner" means the token lists you in `owners`. "+self" means the update is also sent to the sender (it carries the server-assigned id and echoes your `tempId`).
 
-| Event                  | Who           | Args                                                        | Broadcast args (to others)                                         |
-| ---------------------- | ------------- | ----------------------------------------------------------- | ------------------------------------------------------------------ |
-| `addToken` (+self)     | host          | `modelId, x, y, z, tempId?`                                 | `tokenId, tempId, modelId, position, scale, owners, settings`      |
-| `removeToken`          | host          | `tokenId`                                                   | `tokenId`                                                          |
-| `updateTokenPosition`  | host or owner | `tokenId, x, y, z`                                          | same                                                               |
-| `updateTokenScale`     | host          | `tokenId, x, y, z`                                          | same                                                               |
-| `updateTokenModel`     | host          | `tokenId, modelId`                                          | same                                                               |
-| `updateTokenSettings`  | host or owner | `tokenId, hideAvatar, disableCamLook` (booleans or 0/1)     | same                                                               |
-| `assignToken`          | host          | `tokenId, userId, owned?` (default `true`; `false` removes) | `tokenId, userId, owned, owners`                                   |
-| `updateDaylight`       | host          | `daylight`                                                  | same                                                               |
-| `updateMoonlight`      | host          | `moonlight`                                                 | same                                                               |
-| `updateGridSize`       | host          | `width, height` (integers 1-1000)                           | same                                                               |
-| `addPlane` (+self)     | host          | `planeUploadId, x, z, image?, tempId?`                      | `planeId, tempId, position, scale, rotation, image, planeUploadId` |
-| `removePlane`          | host          | `planeId`                                                   | `planeId`                                                          |
-| `updatePlaneTransform` | host          | `planeId, x, z, scaleX, scaleY, rotation`                   | same                                                               |
-| `addDoor` (+self)      | host          | `x, z, tempId?`                                             | `doorId, tempId, position, rotation, open`                         |
-| `removeDoor`           | host          | `doorId`                                                    | `doorId`                                                           |
-| `updateDoorTransform`  | host          | `doorId, x, z, rotation`                                    | same                                                               |
-| `updateDoorState`      | host          | `doorId, open` (boolean or 0/1)                             | same                                                               |
-| `addWallPoint` (+self) | host          | `wallGroupId, x, z, tempId?`                                | `wallPointId, tempId, wallGroupId, position`                       |
-| `removeWallPoint`      | host          | `wallPointId`                                               | `wallPointId`                                                      |
-| `updateWallPoint`      | host          | `wallPointId, x, z`                                         | same                                                               |
-| `ping`                 | everyone      | `x, z`                                                      | `x, z` (the sender is in `from`; never saved)                      |
-| `assignHost` (+self)   | host          | `userId` (must be in the room)                              | `userId`                                                           |
-| `getState` (request)   | everyone      | none                                                        | reply `args: { state }`                                            |
+| Event                  | Who           | Args                                                                                                                                                                                   | Broadcast args (to others)                                         |
+| ---------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `addToken` (+self)     | host          | `modelId, x, y, z, tempId?`                                                                                                                                                            | `tokenId, tempId, modelId, position, scale, owners, settings`      |
+| `removeToken`          | host          | `tokenId`                                                                                                                                                                              | `tokenId`                                                          |
+| `updateTokenPosition`  | host or owner | `tokenId, x, y, z`                                                                                                                                                                     | same                                                               |
+| `updateTokenScale`     | host          | `tokenId, x, y, z`                                                                                                                                                                     | same                                                               |
+| `updateTokenModel`     | host          | `tokenId, modelId`                                                                                                                                                                     | same                                                               |
+| `updateTokenSettings`  | host or owner | `tokenId, hideAvatar, disableCamLook` (booleans or 0/1)                                                                                                                                | same                                                               |
+| `updateTokenOverrides` | host          | `tokenId, overrides` (`name`, `size`, `scale`, `viewDistance`, `baseColor`, `textureRepeat`, `textureOffset`, `modelOffset`; all optional, the whole set is replaced, `{}` removes it) | same, to the sender too                                            |
+| `updateTokenStats`     | host          | `tokenId, hp, maxHp, ac` (whole numbers, 0 or more)                                                                                                                                    | same                                                               |
+| `assignToken`          | host          | `tokenId, userId, owned?` (default `true`; `false` removes)                                                                                                                            | `tokenId, userId, owned, owners`                                   |
+| `updateDaylight`       | host          | `daylight`                                                                                                                                                                             | same                                                               |
+| `updateMoonlight`      | host          | `moonlight`                                                                                                                                                                            | same                                                               |
+| `updateGridSize`       | host          | `width, height` (integers 1-1000)                                                                                                                                                      | same                                                               |
+| `addPlane` (+self)     | host          | `planeUploadId, x, z, image?, tempId?`                                                                                                                                                 | `planeId, tempId, position, scale, rotation, image, planeUploadId` |
+| `removePlane`          | host          | `planeId`                                                                                                                                                                              | `planeId`                                                          |
+| `updatePlaneTransform` | host          | `planeId, x, z, scaleX, scaleY, rotation`                                                                                                                                              | same                                                               |
+| `addDoor` (+self)      | host          | `x, z, tempId?`                                                                                                                                                                        | `doorId, tempId, position, rotation, open`                         |
+| `removeDoor`           | host          | `doorId`                                                                                                                                                                               | `doorId`                                                           |
+| `updateDoorTransform`  | host          | `doorId, x, z, rotation`                                                                                                                                                               | same                                                               |
+| `updateDoorState`      | host          | `doorId, open` (boolean or 0/1)                                                                                                                                                        | same                                                               |
+| `addWallPoint` (+self) | host          | `wallGroupId, x, z, tempId?`                                                                                                                                                           | `wallPointId, tempId, wallGroupId, position`                       |
+| `removeWallPoint`      | host          | `wallPointId`                                                                                                                                                                          | `wallPointId`                                                      |
+| `updateWallPoint`      | host          | `wallPointId, x, z`                                                                                                                                                                    | same                                                               |
+| `ping`                 | everyone      | `x, z`                                                                                                                                                                                 | `x, z` (the sender is in `from`; never saved)                      |
+| `assignHost` (+self)   | host          | `userId` (must be in the room)                                                                                                                                                         | `userId`                                                           |
+| `getState` (request)   | everyone      | none                                                                                                                                                                                   | reply `args: { state }`                                            |
 
 Permissions are enforced on the server: a player can only move or change settings of tokens that list them in `owners`, and can ping; everything else needs the host role. Rooms can hold at most 5000 objects of each kind.
 
@@ -260,6 +262,8 @@ myHttpServer.on('upgrade', (req, socket, head) => {
   else socket.destroy();
 });
 ```
+
+**`checkName` option.** Looks at a name a user gave something everyone in the room sees (a token's name). Return a sentence to refuse it, which the sender is shown, or `null` to accept it. Without it every name is accepted. Handlers reach it as `ctx.server.checkName(name)`.
 
 **`onJoin` / `onLeave` options.** Called after a connection has joined (the `joined` message is already sent) and after a joined
 connection has closed. Use them for presence, usage counters and the like.

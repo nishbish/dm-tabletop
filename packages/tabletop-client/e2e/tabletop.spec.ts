@@ -302,9 +302,10 @@ test('ping, and a pane opened from the token menu closes the menu', async ({ pag
   await menu.locator('.context-menu-default-text', { hasText: 'Edit' }).click();
   await expect(menu).toHaveCount(0);
   await expect(page.locator('#iconColorInput')).toBeVisible();
-  // no upload hook in this demo, so only what belongs to the token shows
+  // no upload hook in this demo: the form saves to the token, and there is no saving to a picture
   await expect(page.locator('.pane:visible .pane-header-title')).toHaveText('Edit Token');
-  await expect(page.getByText('Token Size (grid)')).toBeHidden();
+  await expect(page.getByText('Token Size (grid)')).toBeVisible();
+  await expect(page.locator('#token-picture-button')).toBeHidden();
 
   await page.evaluate(() => {
     const input = document.querySelector('#iconColorInput') as HTMLInputElement;

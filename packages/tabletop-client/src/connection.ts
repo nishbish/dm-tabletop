@@ -357,7 +357,7 @@ export function createConnection(options: ResolvedOptions, sink: Sink): Connecti
       return;
     }
     // permission problems, vanished objects, rate limits...: tell the player, keep going
-    note(message.charAt(0).toUpperCase() + message.slice(1) + '.', 'error');
+    note(message.charAt(0).toUpperCase() + message.slice(1).replace(/\.$/, '') + '.', 'error');
   }
 
   function handleMessage(msg: Args): Promise<void> | void {

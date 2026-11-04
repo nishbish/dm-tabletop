@@ -232,6 +232,9 @@ export const css: string = `
 .it-row--active .it-marker { color: var(--_row-fg); }
 .it-c-name { padding-left: 4px; }
 .it-name-wrap { position: relative; flex: 1 1 auto; min-width: 0; align-self: stretch; }
+.it-root button.it-link { --edge: transparent; --fill: transparent; --ink: var(--_row-fg); flex: none; width: 1.75rem; min-height: 2rem; padding: 0; clip-path: none; opacity: 0.8; }
+.it-root button.it-link::before { display: none; }
+.it-root button.it-link:hover:not(:disabled) { --edge: transparent; opacity: 1; --ink: var(--_row-fg); }
 .it-name { min-width: 0; }
 .it-c-hp { gap: 0; }
 .it-c-hp .it-hp { width: 3.4rem; flex: 0 1 3.4rem; }

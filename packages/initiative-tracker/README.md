@@ -89,6 +89,9 @@ start with `it-`; they are not a stable API, the variables are.
 | `creatures`     | `CreatureTemplate[]`       | `srdCreatures` | Autocomplete list. It replaces the built-in list; spread `srdCreatures` into yours to extend. |
 | `rng`           | `() => number` in [0, 1)   | `Math.random`  | Random source for rolls (inject a fake one in tests).                                         |
 | `onChange`      | `(state) => void`          | none           | Called after every change the user makes (not after `setState`).                              |
+| `onRowEdit`     | `(row) => void`            | none           | Called when the user changes the HP, max HP or AC of a linked row.                            |
+| `onLoad`        | `(state) => void`          | none           | Called after an encounter was opened or the last session restored.                            |
+| `onLinkClick`   | `(row) => void`            | none           | When given, linked rows show a button that calls this.                                        |
 | `onLimit`       | `(reason: string) => void` | none           | Called when `storage.save` rejects with `code === 'LIMIT'`.                                   |
 | `initialState`  | `TrackerState`             | last session   | Start from this state instead of restoring the last session.                                  |
 | `autosaveDelay` | `number` (ms)              | `400`          | Wait after the last change before the working state is autosaved.                             |
@@ -117,6 +120,10 @@ interface TrackerState {
 `migrate(anything)` turns old or damaged saved data into a valid current state. The pure
 functions the UI uses (`sortByInitiative`, `nextTurn`, `resetRound`, `rollInitiative`, `addRow`,
 `removeRow`, `clear`, `moveRow`, `applyHpInput`) are exported too.
+
+### Linking rows
+
+A row can carry a `link`, a string the tracker only stores, to tie it to something outside it such as a token on a map. `tracker.linkRow(link, fields)` finds the row that has the link, else the first unlinked row with the same name, else adds one, and returns it. `tracker.updateLinked(link, patch)` changes the linked row (`link: undefined` unties it) without calling `onRowEdit`, so two sides can follow each other without a loop.
 
 ### Using it
 

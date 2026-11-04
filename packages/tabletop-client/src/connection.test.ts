@@ -140,6 +140,14 @@ describe('protocol mapping, viewer -> server', () => {
       name: 'removeWallPoint',
       args: { wallPointId: '3' },
     });
+    expect(toServer('updateTokenOverrides', { tokenId: 4, overrides: { size: 2 } })).toEqual({
+      name: 'updateTokenOverrides',
+      args: { tokenId: '4', overrides: { size: 2 } },
+    });
+    expect(toServer('updateTokenStats', { tokenId: 4, hp: 1, maxHp: 2, ac: 3 })).toEqual({
+      name: 'updateTokenStats',
+      args: { tokenId: '4', hp: 1, maxHp: 2, ac: 3 },
+    });
     expect(toServer('assignDM', { user_id: 'bob' })).toEqual({
       name: 'assignHost',
       args: { userId: 'bob' },

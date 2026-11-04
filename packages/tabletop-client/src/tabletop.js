@@ -280,6 +280,14 @@ var tokenMenuItems = [
 	{'icon': 'person_remove', 'name': 'Shrink',  action: (e) => resizeToken(e, -1)  },
 	{'icon': 'height', 'name': 'Raise or Lower',  action: (e) => startVerticalMove()  },
 	{'icon': 'edit', 'name': 'Edit',  action: (e) => editToken(e)  },
+	...(options.tokenActions || []).map((item) => ({
+		'icon': item.icon,
+		'name': item.name,
+		action: () => {
+			hideContextMenu();
+			item.onClick(tokenInfo(map.menuTarget));
+		}
+	})),
 	{'icon': 'assignment_ind', 'name': 'Assign Token',  action: (e) => assignTokenMenu(e)  },
 	{'icon': 'remove_circle', 'name': 'Remove Token',  action: (e) => removeToken(e)  }
 ];
@@ -1251,6 +1259,7 @@ function tokenScaleReposition(token) {
 	}
 
 	token.meshes.position.y = newPos;
+	updateTokenBar(token);
 }
 
 function snapPosition(object) {
@@ -1343,7 +1352,7 @@ function updateTokenSettings(token) {
 	sendMessage('update', 'updateTokenSettings', args);
 }
 
-function createToken(pos, scale, modelId, local = true, owners = [], tokenId = false, settings = {}) {
+function createToken(pos, scale, modelId, local = true, owners = [], tokenId = false, settings = {}, overrides = null, stats = null) {
 	if (!(modelId in map.models)) {
 		return false;
 	}
@@ -1362,6 +1371,8 @@ function createToken(pos, scale, modelId, local = true, owners = [], tokenId = f
 	token.scale.set(scale.x, scale.y, scale.z);
 	token.prevScale = new THREE.Vector3(1, 1, 1);
 	token.modelName = map.models[modelId].name;
+	token.overrides = overrides;
+	token.stats = stats;
 	token.settings = {
 		hideAvatar: 0,
 		disableCamLook: 0,
@@ -1417,7 +1428,143 @@ function createToken(pos, scale, modelId, local = true, owners = [], tokenId = f
 	}
 }
 
+// What a token looks like: its picture's settings with this token's own on top.
+function tokenModel(token, model = map.models[token.modelId]) {
+	return token.overrides ? Object.assign({}, model, token.overrides) : model;
+}
+
+function pictureName(token) {
+	// a built-in pawn can be recoloured, so its colour's name would not stay true
+	return String(token.modelId).startsWith(DEFAULT_MODEL_PREFIX) ? 'Pawn' : map.models[token.modelId].name || 'Token';
+}
+
+function tokenName(token) {
+	return (token.overrides && token.overrides.name) || pictureName(token);
+}
+
+// A token as the host app sees it.
+function tokenInfo(token) {
+	return {
+		tokenId: token.tokenId,
+		roomId: connection.roomId,
+		name: tokenName(token),
+		named: !!(token.overrides && token.overrides.name),
+		stats: token.stats ? Object.assign({}, token.stats) : null
+	};
+}
+
+function tokenChanged(token) {
+	if (options.onTokenChange) { options.onTokenChange(tokenInfo(token)); }
+}
+
+function tokenRemoved(token) {
+	if (options.onTokenChange) { options.onTokenChange(Object.assign(tokenInfo(token), { removed: true })); }
+}
+
+// The fields of a model that change what is drawn; a new name or view distance needs no rebuild.
+var TOKEN_LOOK_FIELDS = ['size', 'scale', 'baseColor', 'textureRepeat', 'textureOffset', 'modelOffset'];
+
+function setTokenOverrides(token, overrides) {
+	var before = tokenModel(token);
+
+	token.overrides = overrides && Object.keys(overrides).length > 0 ? overrides : null;
+
+	var after = tokenModel(token);
+
+	if (TOKEN_LOOK_FIELDS.some(function(field) { return String(before[field]) != String(after[field]); })) {
+		makeTokenInstance(token, map.models[token.modelId]);
+	}
+
+	if (before.viewDistance != after.viewDistance) { updateTokenVision(); }
+
+	updateAvatar(token);
+	tokenChanged(token);
+}
+
+function setTokenStats(token, stats) {
+	token.stats = {
+		hp: Math.min(Math.max(Math.round(stats.hp) || 0, 0), MAX_TOKEN_HP),
+		maxHp: Math.min(Math.max(Math.round(stats.maxHp) || 0, 0), MAX_TOKEN_HP),
+		ac: Math.min(Math.max(Math.round(stats.ac) || 0, 0), MAX_TOKEN_AC)
+	};
+
+	updateTokenBar(token);
+	updateAvatar(token);
+	sendMessage('update', 'updateTokenStats', Object.assign({ tokenId: token.tokenId }, token.stats));
+	tokenChanged(token);
+}
+
+var MAX_TOKEN_HP = 1000000;
+var MAX_TOKEN_AC = 1000;
+
+// The HP bar above a token, seen by the host and the token's owners. It is a child of the token, so
+// it hides with it. All bars share one plane and four materials: a bar costs two draw calls and
+// redrawing it only moves a mesh.
+var tokenBarParts = null;
+
+function getTokenBarParts() {
+	if (!tokenBarParts) {
+		var material = function(color) { return new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide }); };
+
+		tokenBarParts = {
+			geometry: new THREE.PlaneGeometry(1, 1),
+			back: material(0x14201c),
+			high: material(0x2f9e5a),
+			middle: material(0xd6b02a),
+			low: material(0xc0392b)
+		};
+	}
+
+	return tokenBarParts;
+}
+
+function updateTokenBar(token) {
+	var stats = token.stats;
+	var group = token.meshes;
+
+	if (!stats || !stats.maxHp || !group || !(isDM || checkTokenOwner(token))) {
+		if (token.hpBar) { token.hpBar.visible = false; }
+		return;
+	}
+
+	var parts = getTokenBarParts();
+
+	if (!token.hpBar) {
+		var bar = new THREE.Group();
+
+		bar.name = 'hpBar';
+		bar.back = new THREE.Mesh(parts.geometry, parts.back);
+		bar.fill = new THREE.Mesh(parts.geometry, parts.high);
+		bar.fill.position.z = 0.005;
+		bar.add(bar.back, bar.fill);
+		token.add(bar);
+		token.hpBar = bar;
+	}
+
+	var width = Math.max(0.6, group.placeHolder.size * 0.8);
+	var height = 0.1;
+	var ratio = Math.min(stats.hp / stats.maxHp, 1);
+
+	token.hpBar.visible = true;
+	token.hpBar.back.scale.set(width, height, 1);
+	token.hpBar.fill.scale.set(Math.max(width * ratio, 0.001), height * 0.7, 1);
+	token.hpBar.fill.position.x = -(width * (1 - ratio)) / 2;
+	token.hpBar.fill.material = ratio > 0.5 ? parts.high : ratio > 0.25 ? parts.middle : parts.low;
+
+	if (map.settings.view2d) {
+		//lying on the table, below the flat picture
+		token.hpBar.rotation.x = -Math.PI / 2;
+		token.hpBar.position.set(0, FLAT_TOKEN_Y, (group.placeHolder.size / 2) + 0.1);
+	}
+	else {
+		token.hpBar.rotation.x = 0;
+		token.hpBar.position.set(0, group.position.y + (group.geoHeight || group.placeHolder.size) - group.baseOffset + 0.15, 0);
+	}
+}
+
 function makeTokenInstance(parent, model) {
+	model = tokenModel(parent, model);
+
 	var size = model.size;
 	var textureSize = map.settings.maxTokenTextureSize * size * parent.scale.y;
 	var src = model.src ? options.imageUrl({ kind: 'model', src: model.src, size: textureSize, quality: map.settings.maxTokenTextureQuality }) : null;
@@ -1652,20 +1799,28 @@ function chooseTokenModel(modelId) {
 	}
 }
 
-// The token pane has two parts: what belongs to this token, which applies at once, and the form
-// for its model (shared by every token using it), which is saved with Submit. New Token only has
-// the form; a token whose model cannot be changed here only has the first part.
-function setTokenPaneParts(showOptions, showForm) {
+// The token pane has two parts: what applies at once to this token, and the form, saved with its
+// button. Editing a token, the form saves to that token only; whoever created the picture can also
+// save it to the picture, which reaches every token using it. New Token only has the form.
+function setTokenPaneParts(editing, canSaveToPicture, hasPicture = true) {
 	var pane = map.panes.new_token;
 
-	pane.options.element.style.display = showOptions ? '' : 'none';
-	pane.form.element.style.display = showForm ? '' : 'none';
+	pane.advanced.element.style.display = hasPicture ? '' : 'none';
+
+	pane.options.element.style.display = editing ? '' : 'none';
 
 	for (const heading of pane.headings) {
-		heading.element.style.display = showOptions && showForm ? '' : 'none';
+		heading.element.style.display = editing ? '' : 'none';
 	}
 
-	pane.header.title.textContent = showOptions ? 'Edit Token' : 'New Token';
+	for (const part of pane.editOnly) {
+		part.element.style.display = editing ? '' : 'none';
+	}
+
+	pane.pictureButton.element.style.display = canSaveToPicture ? '' : 'none';
+	map.local.tokenFormData.file.element.style.display = editing ? 'none' : '';
+	pane.submit.textContent = editing ? 'Save to This Token' : 'Submit';
+	pane.header.title.textContent = editing ? 'Edit Token' : 'New Token';
 }
 
 function fillTokenOptions(token) {
@@ -1677,6 +1832,12 @@ function fillTokenOptions(token) {
 	}
 
 	map.local.iconColorInput.value = hexColor(token.settings.iconColor === null ? 0xffffff : token.settings.iconColor);
+
+	var stats = token.stats || { hp: 0, maxHp: 0, ac: 0 };
+
+	for (const field in map.local.tokenStatInputs) {
+		map.local.tokenStatInputs[field].value = stats[field];
+	}
 }
 
 function assignTokenMenu(e) {
@@ -1998,6 +2159,7 @@ function setView2d(on) {
 
 	for (const token of Object.values(map.objects.tokens)) {
 		layTokenFlat(token);
+		updateTokenBar(token);
 		token.rotation.y = 0;
 	}
 
@@ -2545,7 +2707,7 @@ function updateTokenVision() {
 		var viewDistance = 100;
 	}
 	else {
-		var viewDistance = map.models[token.modelId].viewDistance / 5;
+		var viewDistance = tokenModel(token).viewDistance / 5;
 	}
 
 	visionRaycaster.near = 0;
@@ -3823,40 +3985,70 @@ function canEditModel(model) {
 
 function editToken(e) {
 	var token = map.menuTarget;
-	var model = map.models[token.modelId];
-	var showForm = canEditModel(model);
+	var model = tokenModel(token);
 
 	// kept apart from menuTarget: the pane stays open while other menus are used
 	map.local.editedToken = token;
 	fillTokenOptions(token);
-	setTokenPaneParts(true, showForm);
+	setTokenPaneParts(true, canEditModel(map.models[token.modelId]), !!model.src);
 
-	if (showForm) {
-		map.local.tokenFormData.name.value = model.name;
-		map.local.tokenFormData.id.value = map.menuTarget.modelId;
-		map.local.tokenFormData.src.value = model.src;
-		map.local.tokenFormData.textureRepeatX.value = model.textureRepeat[0];
-		map.local.tokenFormData.textureRepeatY.value = model.textureRepeat[1];
-		map.local.tokenFormData.textureOffsetX.value = model.textureOffset[0];
-		map.local.tokenFormData.textureOffsetY.value = model.textureOffset[1];
-		map.local.tokenFormData.size.value = model.size;
-		map.local.tokenFormData.scale.value = model.scale;
-		map.local.tokenFormData.modelOffsetX.value = model.modelOffset[0];
-		map.local.tokenFormData.modelOffsetY.value = model.modelOffset[1];
-		map.local.tokenFormData.viewDistance.value = model.viewDistance;
-		map.local.tokenFormData.baseColor.value = hexColor(model.baseColor);
+	map.local.tokenFormData.name.value = tokenName(token);
+	map.local.tokenFormData.id.value = token.modelId;
+	map.local.tokenFormData.src.value = model.src;
+	map.local.tokenFormData.textureRepeatX.value = model.textureRepeat[0];
+	map.local.tokenFormData.textureRepeatY.value = model.textureRepeat[1];
+	map.local.tokenFormData.textureOffsetX.value = model.textureOffset[0];
+	map.local.tokenFormData.textureOffsetY.value = model.textureOffset[1];
+	map.local.tokenFormData.size.value = model.size;
+	map.local.tokenFormData.scale.value = model.scale;
+	map.local.tokenFormData.modelOffsetX.value = model.modelOffset[0];
+	map.local.tokenFormData.modelOffsetY.value = model.modelOffset[1];
+	map.local.tokenFormData.viewDistance.value = model.viewDistance;
+	map.local.tokenFormData.baseColor.value = hexColor(model.baseColor);
 
-		var fileLabel = map.local.tokenFormData.file.element.querySelector('.pane-item-label-text');
-		fileLabel.innerHTML = 'Image File (Leave blank if unchanged)';
+	var tokenFile = byId('token_file');
 
-		var tokenFile = byId('token_file');
-
-		if (tokenFile != null) {
-			tokenFile.value = '';
-		}
+	if (tokenFile != null) {
+		tokenFile.value = '';
 	}
 
 	openPane(map.panes.new_token);
+}
+
+// What the form says, as far as it differs from the picture: only that is stored, so the token
+// keeps following its picture for everything else.
+function tokenFormOverrides(token) {
+	var form = map.local.tokenFormData;
+	var model = map.models[token.modelId];
+	var number = function(input) { return parseFloat(input.value); };
+	var wanted = {
+		name: form.name.value.trim(),
+		size: number(form.size),
+		scale: number(form.scale),
+		viewDistance: number(form.viewDistance),
+		baseColor: parseInt(form.baseColor.value.slice(1), 16),
+		textureRepeat: [number(form.textureRepeatX), number(form.textureRepeatY)],
+		textureOffset: [number(form.textureOffsetX), number(form.textureOffsetY)],
+		modelOffset: [number(form.modelOffsetX), number(form.modelOffsetY)]
+	};
+	var overrides = {};
+
+	for (const field in wanted) {
+		if (String(wanted[field]) != String(model[field])) { overrides[field] = wanted[field]; }
+	}
+
+	// an empty box or the picture's own name means no name of its own
+	if (!wanted.name || wanted.name == pictureName(token)) { delete overrides.name; }
+
+	return overrides;
+}
+
+// The server answers everyone, the sender too, so nothing shows that it refused. Without a server
+// there is nobody to ask.
+function saveTokenOverrides(token, overrides) {
+	sendMessage('update', 'updateTokenOverrides', { tokenId: token.tokenId, overrides: overrides });
+
+	if (options.demo) { setTokenOverrides(token, overrides); }
 }
 
 function hexColor(color) {
@@ -3954,6 +4146,7 @@ function removeToken(e) {
 		map.scene.remove(map.menuTarget)
 		delete map.objects.tokens[map.menuTarget.tokenId];
 		removeAvatar(map.menuTarget);
+		tokenRemoved(map.menuTarget);
 		
 		sendMessage('update', 'removeToken', { tokenId: map.menuTarget.tokenId });
 	}
@@ -4256,13 +4449,13 @@ function buildPaneItem(pane, text, type, value = false, dmOnly = false, name = '
 		inputNumberIncrement.addEventListener('click', function() {
 			input.value++;
 			inputMinMax();
-			input.onchange();
+			if (input.onchange) { input.onchange(); }
 		}, false);
 
 		inputNumberDecrement.addEventListener('click', function() {
 			input.value--;
 			inputMinMax();
-			input.onchange();
+			if (input.onchange) { input.onchange(); }
 		}, false);
 	}
 
@@ -4777,6 +4970,12 @@ function toggleTrackerDrawer(button) {
 	button.classList.toggle('active', open);
 }
 
+function openTrackerDrawer() {
+	var button = map.sideButtons.tracker.element;
+
+	if (!trackerDrawer || !trackerDrawer.classList.contains('open')) { toggleTrackerDrawer(button); }
+}
+
 // The drawer's left edge widens or narrows it (drag, or arrow keys when focused). The width is a
 // per-browser convenience, so it lives in localStorage and is simply forgotten if that fails.
 var DRAWER_WIDTH_KEY = 'dmt.trackerWidth';
@@ -4950,8 +5149,26 @@ function buildGui() {
 	newTokenPane.form = tokenForm;
 	newTokenPane.headings = [
 		buildPaneItem(tokenOptions, 'This Token', 'header'),
-		buildPaneItem(tokenForm, 'Every Token With This Picture', 'header')
+		buildPaneItem(tokenForm, 'Name and Look', 'header')
 	];
+
+	//hit points and armour class: this token only, applied at once and shown in the tracker
+	map.local.tokenStatInputs = {
+		hp: buildPaneItem(tokenOptions, 'Hit Points', 'number', 0).input,
+		maxHp: buildPaneItem(tokenOptions, 'Max Hit Points', 'number', 0).input,
+		ac: buildPaneItem(tokenOptions, 'Armour Class', 'number', 0).input
+	};
+
+	for (const field in map.local.tokenStatInputs) {
+		map.local.tokenStatInputs[field].onchange = function() {
+			var token = editedToken();
+			var inputs = map.local.tokenStatInputs;
+
+			if (token) {
+				setTokenStats(token, { hp: parseInt(inputs.hp.value), maxHp: parseInt(inputs.maxHp.value), ac: parseInt(inputs.ac.value) });
+			}
+		};
+	}
 
 	map.local.tokenFormData = {
 		name: buildPaneItem(tokenForm, 'Name', 'text-input', map.local.tokenFormDefault.name).input,
@@ -4978,6 +5195,7 @@ function buildGui() {
 
 	//fine tuning of the picture, out of the way until someone needs it
 	var tokenAdvanced = buildPaneSection(tokenForm, 'Advanced');
+	newTokenPane.advanced = tokenAdvanced;
 	var tokenDefaults = map.local.tokenFormDefault;
 	Object.assign(map.local.tokenFormData, {
 		textureRepeatX: buildPaneItem(tokenAdvanced, 'Texture Repeat X', 'number', tokenDefaults.textureRepeatX).input,
@@ -4992,8 +5210,41 @@ function buildGui() {
 	var tokenFormButton = '<div id="new-token-form-button" class="button button-3d button-primary">Submit</div>';
 	var formButton = buildPaneItem(tokenForm, '', 'text', tokenFormButton);
 	var formButtonElem = formButton.element.querySelector('#new-token-form-button');
+	newTokenPane.submit = formButtonElem;
 
-	formButtonElem.addEventListener('click', async function() {
+	var tokenResetButton = '<div id="token-reset-button" class="button button-3d">Back to the Picture\'s Settings</div>';
+	var resetButton = buildPaneItem(tokenForm, '', 'text', tokenResetButton);
+	newTokenPane.editOnly = [resetButton];
+
+	var tokenPictureButton = '<div id="token-picture-button" class="button button-3d">Save to Every Token With This Picture</div>';
+	newTokenPane.pictureButton = buildPaneItem(tokenForm, '', 'text', tokenPictureButton);
+
+	formButtonElem.addEventListener('click', function() {
+		var token = editedToken();
+
+		if (token) {
+			saveTokenOverrides(token, tokenFormOverrides(token));
+			closePane(newTokenPane);
+		}
+		else {
+			saveTokenPicture();
+		}
+	}, false);
+
+	resetButton.element.querySelector('#token-reset-button').addEventListener('click', function() {
+		var token = editedToken();
+
+		if (token) {
+			saveTokenOverrides(token, {});
+			closePane(newTokenPane);
+		}
+	}, false);
+
+	newTokenPane.pictureButton.element.querySelector('#token-picture-button').addEventListener('click', function() {
+		saveTokenPicture();
+	}, false);
+
+	async function saveTokenPicture() {
 
 		var fd = new FormData();
 		var files = byId('token_file').files;
@@ -5064,7 +5315,7 @@ function buildGui() {
 		else {
 			notify('No file selected.');
 		}
-	}, false);
+	}
 	
 	//the token being edited, while it is still on the table
 	function editedToken() {
@@ -5947,7 +6198,7 @@ function buildRoom(room) {
 				owners.push(parseData.id(token.owners[j]));
 			}
 
-			createToken(pos, scale, parseData.id(token.modelId), false, owners, parseData.id(tokenId), token.settings);
+			createToken(pos, scale, parseData.id(token.modelId), false, owners, parseData.id(tokenId), token.settings, token.overrides || null, token.stats || null);
 		}
 
 		// Look at our first token, but only when the room is first shown: after a reconnect the
@@ -5979,6 +6230,8 @@ function buildRoom(room) {
 	if (map.loadItemCount === 0) {
 		loadStateUpdate();
 	}
+
+	if (options.onRoomLoad) { options.onRoomLoad(connection.roomId); }
 }
 
 function saveSettings() {
@@ -6020,14 +6273,10 @@ function addAvatar(token, owner = true) {
 		var avatar = document.createElement('button');
 		avatar.type = 'button';
 		avatar.className = 'avatar';
-		var avatarModel = map.models[token.modelId];
-		// a built-in pawn can be recoloured, so its colour's name would not stay true
-		var builtInPawn = String(token.modelId).startsWith(DEFAULT_MODEL_PREFIX);
+		var avatarModel = tokenModel(token);
 		var pawnColor = token.settings.iconColor === null ? avatarModel.baseColor : token.settings.iconColor;
 		var borderColor = hexColor(avatarModel.src ? avatarModel.baseColor : pawnColor);
-		var avatarName = builtInPawn ? 'Pawn' : avatarModel.name || 'Token';
 		avatar.style.setProperty('--avatar-edge', borderColor);
-		avatar.setAttribute('aria-label', 'Look through ' + avatarName + '\u2019s eyes');
 
 		var face = document.createElement('span');
 		face.className = 'avatar-face';
@@ -6038,7 +6287,7 @@ function addAvatar(token, owner = true) {
 				lookAtObject(token);
 			}, false);
 			avatar.addEventListener('pointerenter', function(e) {
-				if (e.pointerType == 'mouse') { showSideTip(avatar, avatarName, 'Click to see through its eyes.', 0, 'top'); }
+				if (e.pointerType == 'mouse') { showSideTip(avatar, tokenName(token), statsLine(token) + 'Click to see through its eyes.', 0, 'top'); }
 			});
 			avatar.addEventListener('pointerleave', hideSideTip);
 		}());
@@ -6055,9 +6304,31 @@ function addAvatar(token, owner = true) {
 			face.classList.add('avatar-face-plain');
 		}
 
+		var hp = document.createElement('span');
+		hp.className = 'avatar-hp';
+		avatar.appendChild(hp);
+
 		avatarInnerContainer.appendChild(avatar);
 		token.avatar = avatar;
+		updateAvatar(token);
 	}
+}
+
+function statsLine(token) {
+	return token.stats ? 'HP ' + token.stats.hp + ' of ' + token.stats.maxHp + ', AC ' + token.stats.ac + '. ' : '';
+}
+
+function updateAvatar(token) {
+	if (!token.avatar) { return; }
+
+	var model = tokenModel(token);
+	var color = token.settings.iconColor === null ? model.baseColor : token.settings.iconColor;
+	var hp = token.avatar.querySelector('.avatar-hp');
+
+	token.avatar.style.setProperty('--avatar-edge', hexColor(model.src ? model.baseColor : color));
+	token.avatar.setAttribute('aria-label', statsLine(token) + 'Look through ' + tokenName(token) + '\u2019s eyes');
+	hp.textContent = token.stats && token.stats.maxHp ? token.stats.hp + '/' + token.stats.maxHp : '';
+	hp.hidden = !hp.textContent;
 }
 
 function removeAvatar(token) {
@@ -6181,6 +6452,7 @@ var updateClient = {
 
 				map.scene.remove(token);
 				delete map.objects.tokens[args.tokenId];
+				tokenRemoved(token);
 
 				if (chooseOwnVisionToken()) {
 					updateVisionMeshes();
@@ -6304,6 +6576,36 @@ var updateClient = {
 			if (token.settings.disableCamLook) {
 				token.rotation.y = 0;
 			}
+		}
+	},
+
+	updateTokenOverrides: function(args) {
+		var overrides = args.overrides && typeof args.overrides === 'object' ? args.overrides : null;
+
+		args = validateArguments(args, {
+			tokenId: 'id'
+		});
+
+		if (args !== false && args.tokenId in map.objects.tokens) {
+			setTokenOverrides(map.objects.tokens[args.tokenId], overrides);
+		}
+	},
+
+	updateTokenStats: function(args) {
+		args = validateArguments(args, {
+			tokenId: 'id',
+			hp: 'int',
+			maxHp: 'int',
+			ac: 'int'
+		});
+
+		if (args !== false && args.tokenId in map.objects.tokens) {
+			var token = map.objects.tokens[args.tokenId];
+
+			token.stats = { hp: args.hp, maxHp: args.maxHp, ac: args.ac };
+			updateTokenBar(token);
+			updateAvatar(token);
+			tokenChanged(token);
 		}
 	},
 
@@ -6903,6 +7205,7 @@ var clientRequest = {
 
 			closePane(map.panes.tokens);
 
+			map.local.editedToken = null;
 			map.local.tokenFormData.name.value = map.local.tokenFormDefault.name;
 			map.local.tokenFormData.id.value = '';
 			map.local.tokenFormData.src.value = '';
@@ -6916,7 +7219,7 @@ var clientRequest = {
 			map.local.tokenFormData.modelOffsetY.value = map.local.tokenFormDefault.modelOffsetY;
 			map.local.tokenFormData.viewDistance.value = map.local.tokenFormDefault.viewDistance;
 			map.local.tokenFormData.baseColor.value = map.local.tokenFormDefault.baseColor;
-			setTokenPaneParts(false, true);
+			setTokenPaneParts(false, false);
 
 			var fileLabel = map.local.tokenFormData.file.element.querySelector('.pane-item-label-text');
 			fileLabel.innerHTML = 'Image File';
@@ -7575,6 +7878,29 @@ return {
 		return true;
 	},
 	showNotice: showNotice,
+	getRoomId: function() {
+		return connection.roomId;
+	},
+	getTokens: function() {
+		return Object.values(map.objects.tokens).map(tokenInfo);
+	},
+	setTokenStats: function(tokenId, stats) {
+		var token = map.objects.tokens[tokenId];
+
+		if (!token) { return false; }
+
+		setTokenStats(token, stats);
+		return true;
+	},
+	focusToken: function(tokenId) {
+		var token = map.objects.tokens[tokenId];
+
+		if (!token) { return false; }
+
+		flyCamera(new THREE.Vector3(token.position.x - 2, 8, token.position.z + 12), token.position.clone());
+		return true;
+	},
+	openTracker: openTrackerDrawer,
 	// The camera as plain numbers, so a host app can draw its own layer (dice) with the same view.
 	getView: function() {
 		var camera = map.objects.camera;
