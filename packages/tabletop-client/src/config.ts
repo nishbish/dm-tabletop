@@ -106,6 +106,16 @@ export interface TabletopOptions {
   // the object createDemoRoom() returns (see demo.ts): name, dm, daylight, grid, clients, tokens,
   // planes, doors, wallPoints, models. It is copied, never modified.
   demoRoom?: Record<string, unknown>;
+  // Offline demo only: lists the token or map library in the Add Token / Add Image panes instead
+  // of the plain pawns and the "Image URL" box. Called with the pane's request (`folderId`,
+  // `parentId`, `limit`, `offset`); returns what a server would reply to getModels
+  // (`{folders: [{folderId, parentId, name}], models: [{modelId, name, src, baseColor}], folderId,
+  // parentId, showNext}`) or getPlaneImages (`planes: [{planeUploadId, name, src}]` instead of
+  // `models`). `src` goes through `imageUrl`. Nothing is saved in the demo.
+  demoLibrary?: (
+    kind: 'model' | 'plane',
+    args: Record<string, unknown>,
+  ) => Promise<Record<string, unknown>>;
   focus?: object;
   debug?: boolean;
   // Test hooks.
