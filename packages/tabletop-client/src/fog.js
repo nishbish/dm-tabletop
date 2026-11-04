@@ -15,6 +15,15 @@
 // `material.opacity` still sets how strong the fog is (1 for players, 0.6 for the host's
 // translucent view, 0 for the clear view); the rest of the viewer keeps changing it as before.
 //
+// The fog is a slab, not a sheet: besides the top at FOG_HEIGHT it has vertical sides, so it cannot
+// be seen under from a low camera. A skirt runs round the edge of the map, and a curtain stands just
+// outside the edge of what the token sees now, so looking out of the visible area sideways meets a
+// wall of fog instead of the floor and walls under the top. The sides use the same shader: each side
+// fragment reads the layers a little way into the fog behind it (`aSample`), so a side is solid
+// where that ground is unseen, a veil where it was explored (host's view) and clear where it is
+// visible. It is all one mesh in world coordinates, one draw call; the curtains are rebuilt (a quad
+// per polygon edge) with each new view.
+//
 // setSimple(true) is for slow devices (the Low graphics setting): the same layers at half the
 // resolution, and a shader with no noise, so the fog is a flat, soft-edged shade that costs about
 // as much as a textured plane.
@@ -26,21 +35,29 @@ var MAX_TEXTURE = 2048;
 var PIXELS_PER_CELL = 16;
 var SIMPLE_PIXELS_PER_CELL = 8;
 var FADE_SECONDS = 0.4;
+// the sides reach down below the floor (walls stand on y = -0.5)
+var FOG_BOTTOM = -0.6;
+// how far outside the edge of the view the curtain stands, and how far further out it looks to
+// decide how thick it is there (in grid cells)
+var CURTAIN_OFFSET = 0.3;
+var SIDE_SAMPLE = 0.4;
 
 var vertexShader = [
-  'varying vec2 vUv;',
-  'varying vec2 vWorld;',
+  'attribute vec2 aSample;',
+  'varying vec3 vWorld;',
+  'varying vec2 vSample;',
   'void main() {',
-  '	vUv = uv;',
   '	vec4 world = modelMatrix * vec4(position, 1.0);',
-  '	vWorld = world.xz;',
+  '	vWorld = world.xyz;',
+  '	vSample = aSample;',
   '	gl_Position = projectionMatrix * viewMatrix * world;',
   '}',
 ].join('\n');
 
 var fragmentShader = [
-  'varying vec2 vUv;',
-  'varying vec2 vWorld;',
+  'varying vec3 vWorld;',
+  'varying vec2 vSample;',
+  'uniform vec2 uGrid;',
   'uniform sampler2D uVisible;',
   'uniform sampler2D uPrevious;',
   'uniform sampler2D uExplored;',
@@ -74,6 +91,11 @@ var fragmentShader = [
   '	return v;',
   '}',
   'void main() {',
+  '	// the top has no sample offset; a side reads the ground a little way into the fog behind it',
+  '	float side = step(0.0001, dot(vSample, vSample));',
+  '	vec2 at = vWorld.xz + vSample;',
+  '	// grid cell centres are whole numbers, the map starts half a cell before cell 0',
+  '	vec2 vUv = vec2((at.x + 0.5) / uGrid.x, 1.0 - (at.y + 0.5) / uGrid.y);',
   '	float visible = mix(texture2D(uPrevious, vUv).r, texture2D(uVisible, vUv).r, smoothstep(0.0, 1.0, uMix));',
   "	// the memory of explored ground only shows when the fog is translucent (the host's view):",
   '	// at full strength a player sees nothing outside what the token sees now',
@@ -85,11 +107,14 @@ var fragmentShader = [
   '	vec3 col = mix(vec3(0.030, 0.043, 0.067), vec3(0.11, 0.14, 0.18), 0.5 * explored);',
   '#else',
   '	// two layers of noise drifting in different directions',
-  '	float slow = fbm(vWorld * 0.32 + vec2(uTime * 0.035, uTime * 0.021));',
-  '	float fast = fbm(vWorld * 0.85 + vec2(-uTime * 0.06, uTime * 0.03) + 7.3);',
+  '	// (on a side the noise runs along the side and up it, so it drifts across the face)',
+  '	vec2 across = vSample / max(length(vSample), 0.0001);',
+  '	vec2 np = mix(vWorld.xz, vec2(dot(vWorld.xz, vec2(-across.y, across.x)), vWorld.y * 1.4), side);',
+  '	float slow = fbm(np * 0.32 + vec2(uTime * 0.035, uTime * 0.021));',
+  '	float fast = fbm(np * 0.85 + vec2(-uTime * 0.06, uTime * 0.03) + 7.3);',
   '	float wisp = slow * 0.65 + fast * 0.35;',
-  '	// along the edge of what is visible the wisps push the boundary in and out',
-  '	float edge = 4.0 * visible * (1.0 - visible);',
+  '	// along the edge of what is visible the wisps push the boundary in and out (on the top only)',
+  '	float edge = 4.0 * visible * (1.0 - visible) * (1.0 - side);',
   '	float v = clamp(visible + (wisp - 0.5) * 0.9 * edge, 0.0, 1.0);',
   '	float clear = smoothstep(0.08, 0.92, v);',
   '	// deep fog over the never-seen, a thin dim veil over what was seen before',
@@ -152,13 +177,13 @@ export function createFog(gridWidth, gridHeight) {
       uMix: { value: 1 },
       uTime: { value: 0 },
       uStrength: { value: 1 },
+      uGrid: { value: new THREE.Vector2(1, 1) },
     },
   });
   material.opacity = 1;
 
   var mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
   mesh.name = 'fog';
-  mesh.rotation.x = -Math.PI * 0.5;
   mesh.renderOrder = 100;
   mesh.frustumCulled = false;
 
@@ -178,17 +203,115 @@ export function createFog(gridWidth, gridHeight) {
     fog.width = width;
     fog.height = height;
 
-    if (geometry) {
-      geometry.dispose();
-    }
-    geometry = new THREE.PlaneGeometry(width, height);
-    mesh.geometry = geometry;
-    mesh.position.set(width / 2 - 0.5, FOG_HEIGHT, height / 2 - 0.5);
+    material.uniforms.uGrid.value.set(Math.max(1, width), Math.max(1, height));
+    buildGeometry(null);
 
     disposeLayers();
     makeLayers();
     fog.mix = 1;
     clearLayers();
+  }
+
+  // The top, the skirt round the map and (for a view polygon) its curtains, as one geometry in
+  // world coordinates. `aSample` is where each fragment reads the layers, relative to itself.
+  function buildGeometry(points) {
+    var positions = [];
+    var samples = [];
+    var x0 = -0.5;
+    var z0 = -0.5;
+    var x1 = fog.width - 0.5;
+    var z1 = fog.height - 0.5;
+
+    function vertex(x, y, z, sx, sz) {
+      positions.push(x, y, z);
+      samples.push(sx, sz);
+    }
+
+    // a vertical quad from (ax, az) to (bx, bz), reading the layers at (sx, sz) from itself
+    function side(ax, az, bx, bz, sx, sz) {
+      vertex(ax, FOG_BOTTOM, az, sx, sz);
+      vertex(bx, FOG_BOTTOM, bz, sx, sz);
+      vertex(bx, FOG_HEIGHT, bz, sx, sz);
+      vertex(ax, FOG_BOTTOM, az, sx, sz);
+      vertex(bx, FOG_HEIGHT, bz, sx, sz);
+      vertex(ax, FOG_HEIGHT, az, sx, sz);
+    }
+
+    // the skirt, reading the ground just inside the map
+    side(x0, z0, x1, z0, 0, SIDE_SAMPLE);
+    side(x1, z0, x1, z1, -SIDE_SAMPLE, 0);
+    side(x1, z1, x0, z1, 0, -SIDE_SAMPLE);
+    side(x0, z1, x0, z0, SIDE_SAMPLE, 0);
+
+    curtains(points, function (ax, az, bx, bz, nx, nz) {
+      side(ax, az, bx, bz, nx * SIDE_SAMPLE, nz * SIDE_SAMPLE);
+    });
+
+    // the top, last: the fog writes no depth, so triangles blend in buffer order, and the camera
+    // is always above the top (orbit controls keep it at y >= 2.1), so the top is always in front
+    vertex(x0, FOG_HEIGHT, z0, 0, 0);
+    vertex(x0, FOG_HEIGHT, z1, 0, 0);
+    vertex(x1, FOG_HEIGHT, z1, 0, 0);
+    vertex(x0, FOG_HEIGHT, z0, 0, 0);
+    vertex(x1, FOG_HEIGHT, z1, 0, 0);
+    vertex(x1, FOG_HEIGHT, z0, 0, 0);
+
+    var next = new THREE.BufferGeometry();
+    next.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    next.setAttribute('aSample', new THREE.Float32BufferAttribute(samples, 2));
+    if (geometry) {
+      geometry.dispose();
+    }
+    geometry = next;
+    mesh.geometry = geometry;
+  }
+
+  // One curtain per edge of the view polygon, moved CURTAIN_OFFSET outwards (so it stands behind a
+  // wall the token sees, not in its face) and stretched by as much at both ends, so the corners
+  // leave no gaps. Edges along the edge of the map are left to the skirt.
+  function curtains(points, add) {
+    if (!points || points.length < 3) {
+      return;
+    }
+
+    var area = 0;
+    points.forEach(function (p, i) {
+      var q = points[(i + 1) % points.length];
+      area += p.x * q.z - q.x * p.z;
+    });
+    var turn = area >= 0 ? 1 : -1;
+
+    function onEdge(p) {
+      var e = 0.05;
+      return (
+        p.x <= -0.5 + e ||
+        p.z <= -0.5 + e ||
+        p.x >= fog.width - 0.5 - e ||
+        p.z >= fog.height - 0.5 - e
+      );
+    }
+
+    points.forEach(function (a, i) {
+      var b = points[(i + 1) % points.length];
+      var dx = b.x - a.x;
+      var dz = b.z - a.z;
+      var length = Math.sqrt(dx * dx + dz * dz);
+
+      if (length < 1e-6 || (onEdge(a) && onEdge(b))) {
+        return;
+      }
+
+      var ux = dx / length;
+      var uz = dz / length;
+      // outwards: to the right of the edge when the polygon winds anticlockwise (x right, z up)
+      var nx = uz * turn;
+      var nz = -ux * turn;
+      var ox = nx * CURTAIN_OFFSET;
+      var oz = nz * CURTAIN_OFFSET;
+      var ex = ux * CURTAIN_OFFSET;
+      var ez = uz * CURTAIN_OFFSET;
+      add(a.x + ox - ex, a.z + oz - ez, b.x + ox + ex, b.z + oz + ez, nx, nz);
+    });
   }
 
   function cellPixels() {
@@ -319,6 +442,7 @@ export function createFog(gridWidth, gridHeight) {
     } else {
       clearLayer(visible);
     }
+    buildGeometry(points);
   }
 
   // Nothing seen yet (a new room, or a reconnect).
@@ -329,6 +453,7 @@ export function createFog(gridWidth, gridHeight) {
 
     clearLayers();
     fog.mix = 1;
+    buildGeometry(null);
   }
 
   var last = performance.now();
