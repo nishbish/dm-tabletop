@@ -492,6 +492,18 @@ function init() {
 	map.selectionHelper = new SelectionHelper( map.renderer, 'selectBox' );
 	map.selectionHelper.enabled = false;
 
+	// A box drag can end away from the canvas: the button let go over a pane or outside the
+	// window, the window losing focus, or the browser taking the pointer. Finish or drop the box
+	// there too, so its rectangle is never left on screen.
+	listen(window, 'pointerup', function() { endBoxSelect(true); });
+	listen(window, 'pointercancel', function() { endBoxSelect(false); });
+	listen(window, 'blur', function() {
+		ctrlPressed = false;
+		shiftPressed = false;	// the Shift keyup goes to another window
+		endBoxSelect(false);
+		setSelectMode(false);
+	});
+
 	//ambient light
 	map.objects.light = new THREE.HemisphereLight( 0xffffff, 0x777777, lightLevel(1) );
 	map.scene.add(map.objects.light);
@@ -2407,15 +2419,14 @@ function canvasClick(event) {
 	}
 
 	//box select
-	if (map.selectModeActive) {
+	if (map.selectModeActive && map.selectionHelper.isDown) {
 		map.selectionBox.endPoint.set(
 			ndcX(event.clientX),
 			ndcY(event.clientY),
 			0.5
 		);
 
-		setSelectMode(false); 	//turn off select once done
-		handleSelectionBox();
+		endBoxSelect(true);
 		return;
 	}
 
@@ -5037,14 +5048,29 @@ function addDrawerGrip(drawer) {
 	});
 }
 
-// Box select: on while Shift is held.
+// Box select: on while Shift is held. Letting go of Shift in the middle of a drag keeps it on
+// until the button comes up, so that drag still selects and its rectangle is still taken away
+// (three.js's helper ignores the pointer while it is turned off).
 function setSelectMode(on) {
+	if (!on && map.selectionHelper.isDown) { return; }	// endBoxSelect turns it off
 	if (map.selectModeActive == on) { return; }
 
 	map.selectModeActive = on;
 	map.orbitControls.enablePan = !on;
 	map.orbitControls.enableRotate = !on;
 	map.selectionHelper.enabled = on;
+}
+
+// Ends a box drag: `finish` selects what is inside the box (up to where the pointer last was),
+// otherwise the drag is dropped and whatever it had selected so far stays selected. Select mode
+// turns off afterwards, as it always has once a box is done; holding Shift turns it back on.
+function endBoxSelect(finish) {
+	if (!map.selectionHelper.isDown) { return; }
+
+	map.selectionHelper.isDown = false;
+	map.selectionHelper.element.remove();
+	if (finish) { handleSelectionBox(); }
+	setSelectMode(false);
 }
 
 // "Raise or Lower" in the token menu: the next drag of a token moves it up and down (a right drag
