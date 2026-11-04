@@ -1,0 +1,16 @@
+# Dependabot version updates (free for public repositories). npm workspaces are covered by the
+# root entry; github-actions keeps the workflow's action versions current.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
