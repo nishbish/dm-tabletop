@@ -4117,7 +4117,10 @@ function getModel(modelId) {
 	sendMessage('request', 'getModel', args);
 }
 
+// The page shown is remembered, so Next and Previous count from it; a folder or Up starts at 0.
 function changeTokenPage(folderId, parentId, offset) {
+	map.local.tokenListOffset = offset;
+
 	var args = {
 		parentId: parentId,
 		folderId: folderId,
@@ -4129,6 +4132,8 @@ function changeTokenPage(folderId, parentId, offset) {
 }
 
 function changePlanePage(folderId, parentId, offset) {
+	map.local.planeListOffset = offset;
+
 	var args = {
 		parentId: parentId,
 		folderId: folderId,
@@ -4140,15 +4145,8 @@ function changePlanePage(folderId, parentId, offset) {
 }
 
 function addPlaneImage(e) {
-	//populate images pane
-	var args = {
-		parentId: 0,
-		folderId: 0,
-		limit: map.local.planeListLimit,
-		offset: map.local.planeListOffset
-	};
-
-	sendMessage('request', 'getPlaneImages', args);
+	//populate images pane, from the first page
+	changePlanePage(0, 0, 0);
 }
 
 function removePlaneImage(e) {
@@ -5184,14 +5182,7 @@ function buildGui() {
 				}
 				else {
 					//populate plane images pane
-					var args = {
-						parentId: 0,
-						folderId: 0,
-						limit: map.local.planeListLimit,
-						offset: 0
-					};
-
-					sendMessage('request', 'getPlaneImages', args);
+					changePlanePage(0, 0, 0);
 					notify('New image uploaded.');
 				}
 			}
@@ -7318,16 +7309,8 @@ var clientRequest = {
 					var folderId = args.folders[j].folderId;
 					var parentId = args.folders[j].parentId;
 					
-					folder.element.addEventListener('click', function() {															
-
-						var args = {
-							parentId: parentId,
-							folderId: folderId,
-							limit: map.local.tokenListLimit,
-							offset: map.local.tokenListOffset
-						};
-
-						sendMessage('request', 'getModels', args);
+					folder.element.addEventListener('click', function() {
+						changeTokenPage(folderId, parentId, 0);
 					});
 				}());
 			}
@@ -7396,8 +7379,7 @@ var clientRequest = {
 			if ((args.folders.length > 0 || args.models.length > 0) && 'showNext' in args && args.showNext) {
 				paginaiton.input.next.style.display = 'inline-block';
 				paginaiton.input.next.addEventListener('click', function() {
-					map.local.tokenListOffset += map.local.tokenListLimit;
-					changeTokenPage(args.folderId, args.parentId, map.local.tokenListOffset);
+					changeTokenPage(args.folderId, args.parentId, map.local.tokenListOffset + map.local.tokenListLimit);
 				}, false);
 			}
 			
@@ -7405,8 +7387,7 @@ var clientRequest = {
 			if (map.local.tokenListOffset > 0) {
 				paginaiton.input.prev.style.display = 'inline-block';
 				paginaiton.input.prev.addEventListener('click', function() {
-					map.local.tokenListOffset -= map.local.tokenListLimit;
-					changeTokenPage(args.folderId, args.parentId, map.local.tokenListOffset);
+					changeTokenPage(args.folderId, args.parentId, Math.max(0, map.local.tokenListOffset - map.local.tokenListLimit));
 				}, false);
 			}
 		}
@@ -7474,16 +7455,8 @@ var clientRequest = {
 					var folderId = args.folders[j].folderId;
 					var parentId = args.folders[j].parentId;
 					
-					folder.element.addEventListener('click', function() {															
-
-						var args = {
-							parentId: parentId,
-							folderId: folderId,
-							limit: map.local.tokenListLimit,
-							offset: map.local.tokenListOffset
-						};
-
-						sendMessage('request', 'getPlaneImages', args);
+					folder.element.addEventListener('click', function() {
+						changePlanePage(folderId, parentId, 0);
 					});
 				}());
 			}
@@ -7555,8 +7528,7 @@ var clientRequest = {
 			if ((args.folders.length > 0 || args.planes.length > 0) && 'showNext' in args && args.showNext) {
 				paginaiton.input.next.style.display = 'inline-block';
 				paginaiton.input.next.addEventListener('click', function() {
-					map.local.planeListOffset += map.local.planeListLimit;
-					changePlanePage(args.folderId, args.parentId, map.local.planeListOffset);
+					changePlanePage(args.folderId, args.parentId, map.local.planeListOffset + map.local.planeListLimit);
 				}, false);
 			}
 			
@@ -7564,14 +7536,14 @@ var clientRequest = {
 			if (map.local.planeListOffset > 0) {
 				paginaiton.input.prev.style.display = 'inline-block';
 				paginaiton.input.prev.addEventListener('click', function() {
-					map.local.planeListOffset -= map.local.planeListLimit;
-					changePlanePage(args.folderId, args.parentId, map.local.planeListOffset);
+					changePlanePage(args.folderId, args.parentId, Math.max(0, map.local.planeListOffset - map.local.planeListLimit));
 				}, false);
 			}
 		}
 		
 		hideContextMenu();
 		openPane(map.panes.plane_images);
+		map.panes.plane_images.body.scrollTop = 0;
 	},
 
 	getRooms: function(args) {
