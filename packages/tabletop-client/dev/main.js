@@ -5,9 +5,11 @@
 //   &demo=1                       offline demo, no server needed
 //   &wallModel=walls/wall.gltf    draw the walls with this glTF model
 //   &title=Dungeons               the loading screen's title
+//   &tokenImage=/token.gif        every token shows this picture
 import { createTabletop } from '../src/index.js';
 
 const params = new URLSearchParams(location.search);
+const tokenImage = params.get('tokenImage');
 
 window.tabletop = createTabletop(document.getElementById('app'), {
   serverUrl: params.get('server') || undefined,
@@ -19,4 +21,5 @@ window.tabletop = createTabletop(document.getElementById('app'), {
   trackerUrl: params.get('tracker') || undefined,
   wallModel: params.get('wallModel') ? { src: params.get('wallModel') } : undefined,
   loadingTitle: params.get('title') || undefined,
+  resolveModel: tokenImage ? (id) => ({ id, name: 'Token', src: tokenImage }) : undefined,
 });
