@@ -7387,7 +7387,7 @@ function animate() {
 	}
 	
 	map.orbitControls.update();
-	map.mask.fog.update(performance.now());
+	map.mask.fog.update(performance.now(), map.objects.camera);
 	
 	if (map.settings.lookAtCam && !map.settings.view2d) {
 		for (const [tokenId, token] of Object.entries(map.objects.tokens)) {

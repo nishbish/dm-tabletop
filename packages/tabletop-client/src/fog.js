@@ -24,6 +24,13 @@
 // visible. It is all one mesh in world coordinates, one draw call; the curtains are rebuilt (a quad
 // per polygon edge) with each new view.
 //
+// The camera does not draw anything nearer than its near plane (1 unit), so close to the fog the
+// near plane slices the top off and the ground under it would show (zoomed right in, the camera sits
+// at y = 2.1, closer than that to the top at 1.55). A cap fixes that, and also the camera being
+// inside the fog: a quad laid on the near plane every frame, drawn over everything, that shows the
+// same fog wherever the near plane is inside the slab and nothing elsewhere. It is only drawn while
+// the near plane dips below the top.
+//
 // setSimple(true) is for slow devices (the Low graphics setting): the same layers at half the
 // resolution, and a shader with no noise, so the fog is a flat, soft-edged shade that costs about
 // as much as a textured plane.
@@ -41,6 +48,8 @@ var FOG_BOTTOM = -0.6;
 // decide how thick it is there (in grid cells)
 var CURTAIN_OFFSET = 0.3;
 var SIDE_SAMPLE = 0.4;
+// the cap sits just past the near plane (normalised device depth -1 is the near plane itself)
+var CAP_DEPTH = -0.999;
 
 var vertexShader = [
   'attribute vec2 aSample;',
@@ -96,6 +105,14 @@ var fragmentShader = [
   '	vec2 at = vWorld.xz + vSample;',
   '	// grid cell centres are whole numbers, the map starts half a cell before cell 0',
   '	vec2 vUv = vec2((at.x + 0.5) / uGrid.x, 1.0 - (at.y + 0.5) / uGrid.y);',
+  '#ifdef FOG_CAP',
+  '	// the cap only shows where the near plane is inside the slab over the map',
+  '	if (vWorld.y > ' +
+    FOG_HEIGHT.toFixed(3) +
+    ' || vWorld.y < ' +
+    FOG_BOTTOM.toFixed(3) +
+    ' || at.x < -0.5 || at.y < -0.5 || at.x > uGrid.x - 0.5 || at.y > uGrid.y - 0.5) discard;',
+  '#endif',
   '	float visible = mix(texture2D(uPrevious, vUv).r, texture2D(uVisible, vUv).r, smoothstep(0.0, 1.0, uMix));',
   "	// the memory of explored ground only shows when the fog is translucent (the host's view):",
   '	// at full strength a player sees nothing outside what the token sees now',
@@ -186,6 +203,57 @@ export function createFog(gridWidth, gridHeight) {
   mesh.name = 'fog';
   mesh.renderOrder = 100;
   mesh.frustumCulled = false;
+
+  // the cap (see the top of the file): a child of the fog, so it hides with it; same uniforms
+  var capMaterial = new THREE.ShaderMaterial({
+    vertexShader: vertexShader,
+    fragmentShader: fragmentShader,
+    transparent: true,
+    depthWrite: false,
+    depthTest: false,
+    side: THREE.DoubleSide,
+    defines: { FOG_CAP: '' },
+    uniforms: material.uniforms,
+  });
+  var capGeometry = new THREE.BufferGeometry();
+  capGeometry.setAttribute('position', new THREE.Float32BufferAttribute(new Array(12).fill(0), 3));
+  capGeometry.setAttribute('aSample', new THREE.Float32BufferAttribute(new Array(8).fill(0), 2));
+  capGeometry.setIndex([0, 1, 2, 0, 2, 3]);
+  var cap = new THREE.Mesh(capGeometry, capMaterial);
+  cap.name = 'fog cap';
+  cap.renderOrder = 101;
+  cap.frustumCulled = false;
+  cap.visible = false;
+  mesh.add(cap);
+  var capCorners = [
+    [-1.01, -1.01],
+    [1.01, -1.01],
+    [1.01, 1.01],
+    [-1.01, 1.01],
+  ];
+  var corner = new THREE.Vector3();
+
+  // Lays the cap on the camera's near plane; shown only when some of it is below the top.
+  function placeCap(camera) {
+    cap.visible = false;
+    if (!camera || !camera.projectionMatrixInverse) {
+      return;
+    }
+
+    camera.updateMatrixWorld();
+    var position = capGeometry.getAttribute('position');
+    var lowest = Infinity;
+    capCorners.forEach(function (c, i) {
+      corner
+        .set(c[0], c[1], CAP_DEPTH)
+        .applyMatrix4(camera.projectionMatrixInverse)
+        .applyMatrix4(camera.matrixWorld);
+      position.setXYZ(i, corner.x, corner.y, corner.z);
+      lowest = Math.min(lowest, corner.y);
+    });
+    position.needsUpdate = true;
+    cap.visible = lowest < FOG_HEIGHT;
+  }
 
   function disposeLayers() {
     if (!fog.layers) {
@@ -347,12 +415,14 @@ export function createFog(gridWidth, gridHeight) {
     }
 
     fog.simple = simple;
-    if (simple) {
-      material.defines.FOG_SIMPLE = '';
-    } else {
-      delete material.defines.FOG_SIMPLE;
-    }
-    material.needsUpdate = true;
+    [material, capMaterial].forEach(function (m) {
+      if (simple) {
+        m.defines.FOG_SIMPLE = '';
+      } else {
+        delete m.defines.FOG_SIMPLE;
+      }
+      m.needsUpdate = true;
+    });
 
     if (!fog.layers || cellPixels() === fog.scale) {
       return;
@@ -458,8 +528,8 @@ export function createFog(gridWidth, gridHeight) {
 
   var last = performance.now();
 
-  // Called every frame.
-  function update(now) {
+  // Called every frame, after the camera has moved for this frame.
+  function update(now, camera) {
     var dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
 
@@ -471,6 +541,9 @@ export function createFog(gridWidth, gridHeight) {
     material.uniforms.uTime.value = (now - fog.start) / 1000;
     material.uniforms.uStrength.value = material.opacity;
     mesh.visible = material.opacity > 0.001;
+    if (mesh.visible) {
+      placeCap(camera);
+    }
   }
 
   function dispose() {
@@ -479,6 +552,8 @@ export function createFog(gridWidth, gridHeight) {
       geometry.dispose();
     }
     material.dispose();
+    capGeometry.dispose();
+    capMaterial.dispose();
   }
 
   setGrid(gridWidth, gridHeight);
@@ -486,6 +561,7 @@ export function createFog(gridWidth, gridHeight) {
   return {
     mesh: mesh,
     material: material,
+    cap: cap,
     setGrid: setGrid,
     setVision: setVision,
     setSimple: setSimple,

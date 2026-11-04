@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- a recording stand-in for a canvas */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as THREE from 'three';
 import { createFog } from './fog.js';
 
 interface Call {
@@ -157,6 +158,7 @@ describe('fog of war', () => {
     expect(canvases[0].width).toBe(160);
     fog.setSimple(true);
     expect('FOG_SIMPLE' in fog.material.defines).toBe(true);
+    expect('FOG_SIMPLE' in fog.cap.material.defines).toBe(true);
     expect(canvases).toHaveLength(6);
     expect(canvases[3].width).toBe(80);
     expect(canvases[5].context.calls.some((c: Call) => c.name === 'drawImage')).toBe(true);
@@ -215,6 +217,40 @@ describe('fog of war', () => {
       { x: 4, z: 4 },
     ]);
     expect(triangles(fog)).toBe(2 + 8 + 2 * 2);
+  });
+
+  it('caps the near plane with fog when the camera is so close that it would slice the top off', () => {
+    const fog = createFog(10, 10);
+    const camera = new THREE.PerspectiveCamera(36, 1.5, 1, 1000);
+    const look = (y: number, pitch: number) => {
+      camera.position.set(5, y, 5);
+      camera.rotation.set(-pitch, 0, 0);
+      camera.updateMatrixWorld();
+      fog.update(performance.now() + 1, camera);
+    };
+    // zoomed right in: the lowest the controls allow (2.1), looking down a little
+    look(2.1, 0.45);
+    expect(fog.cap.visible).toBe(true);
+    // the cap lies on the near plane, one unit in front of the camera
+    const p = fog.cap.geometry.getAttribute('position');
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    for (let i = 0; i < 4; i++) {
+      const v = new THREE.Vector3(p.getX(i), p.getY(i), p.getZ(i)).sub(camera.position);
+      expect(v.dot(forward)).toBeCloseTo(1, 2);
+    }
+    // inside the fog
+    look(1, 0);
+    expect(fog.cap.visible).toBe(true);
+    // well above it, the cap costs nothing
+    look(12, 1);
+    expect(fog.cap.visible).toBe(false);
+    // and it goes with the fog in the clear view
+    look(2.1, 0.45);
+    fog.material.opacity = 0;
+    fog.update(performance.now() + 2, camera);
+    expect(fog.mesh.visible).toBe(false);
+    expect(fog.cap.parent).toBe(fog.mesh);
   });
 
   it('reset forgets everything seen', () => {
