@@ -337,8 +337,11 @@ test('camera slides across the floor at one height, like a strategy game', async
 
   // W slides forward, the way the camera faces, at the same height
   before = after;
+  // held until it has gone some way: software WebGL on CI draws only a few frames a second
   await page.keyboard.down('KeyW');
-  await page.waitForTimeout(400);
+  await expect
+    .poll(async () => across(before.target, (await camera()).target), { timeout: 20_000 })
+    .toBeGreaterThan(0.5);
   await page.keyboard.up('KeyW');
   after = await camera();
   const forward = [-Math.sin(before.turn), -Math.cos(before.turn)];
@@ -349,10 +352,11 @@ test('camera slides across the floor at one height, like a strategy game', async
   // Q turns the view round the spot it looks at, without tilting or lifting it
   before = after;
   await page.keyboard.down('KeyQ');
-  await page.waitForTimeout(300);
+  await expect
+    .poll(async () => Math.abs((await camera()).turn - before.turn), { timeout: 20_000 })
+    .toBeGreaterThan(0.2);
   await page.keyboard.up('KeyQ');
   after = await camera();
-  expect(Math.abs(after.turn - before.turn)).toBeGreaterThan(0.2);
   expect(after.tilt).toBeCloseTo(before.tilt, 4);
   expect(after.y).toBeCloseTo(before.y, 4);
 
