@@ -476,3 +476,57 @@ test('walls drawn with a model, and the loading title', async ({ page }) => {
   await expect.poll(async () => (await read()).tiles).toBeGreaterThan(4);
   expect((await read()).boxesShown).toBe(0);
 });
+
+test('box select: the rectangle goes away however the drag ends', async ({ page }) => {
+  await page.goto('/?demo=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+  await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
+  const at = await steadyScreenPosition(page, (await stats(page)).tokenIds[0]);
+  const rectangle = page.locator('.selectBox');
+  const selected = () =>
+    page.evaluate(() => (window as any).tabletop.debug.map.outlinePass.selectedObjects.length);
+  const clearSelection = async () => {
+    await page.evaluate(() => {
+      (window as any).tabletop.debug.map.outlinePass.selectedObjects = [];
+    });
+  };
+  const startDrag = async () => {
+    await page.keyboard.down('Shift');
+    await page.mouse.move(at.x - 50, at.y - 50);
+    await page.mouse.down();
+    await page.mouse.move(at.x + 50, at.y + 50, { steps: 6 });
+    await expect(rectangle).toBeVisible();
+  };
+
+  // Shift held for the whole drag
+  await startDrag();
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  await expect(rectangle).toHaveCount(0);
+  expect(await selected()).toBeGreaterThan(0);
+
+  // Shift let go before the button: the drag still selects, and the rectangle still goes
+  await clearSelection();
+  await startDrag();
+  await page.keyboard.up('Shift');
+  await page.mouse.move(at.x + 60, at.y + 60, { steps: 2 });
+  await expect(rectangle).toBeVisible();
+  await page.mouse.up();
+  await expect(rectangle).toHaveCount(0);
+  expect(await selected()).toBeGreaterThan(0);
+  // and select mode is off again: a plain drag turns the camera instead of drawing a box
+  expect(await page.evaluate(() => (window as any).tabletop.debug.map.selectModeActive)).toBe(
+    false,
+  );
+
+  // the window loses focus mid-drag (the Shift keyup then goes elsewhere)
+  await startDrag();
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await expect(rectangle).toHaveCount(0);
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  expect(await page.evaluate(() => (window as any).tabletop.debug.map.selectModeActive)).toBe(
+    false,
+  );
+});
