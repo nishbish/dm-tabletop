@@ -19,6 +19,7 @@ export {
   resetRound,
   rollInitiative,
   applyHpInput,
+  changeHp,
   migrate,
 } from './logic';
 export type {

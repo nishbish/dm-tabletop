@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addRow,
   applyHpInput,
+  changeHp,
   clear,
   createState,
   migrate,
@@ -211,6 +212,17 @@ describe('rollInitiative', () => {
       expect(v).toBeGreaterThanOrEqual(5);
       expect(v).toBeLessThanOrEqual(24);
     }
+  });
+});
+
+describe('changeHp', () => {
+  it('adds or takes away, never below 0 or above max', () => {
+    expect(changeHp(12, 20, -5)).toBe(7);
+    expect(changeHp(12, 20, 3)).toBe(15);
+    expect(changeHp(12, 20, -50)).toBe(0);
+    expect(changeHp(12, 20, 50)).toBe(20);
+    expect(changeHp(12, 0, 50)).toBe(62);
+    expect(changeHp(12, 20, NaN)).toBe(12);
   });
 });
 

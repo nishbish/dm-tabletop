@@ -240,6 +240,23 @@ export const css: string = `
 .it-c-hp .it-hp { width: 3.4rem; flex: 0 1 3.4rem; }
 .it-c-hp .it-maxhp { width: 3.2rem; flex: 0 1 3.2rem; padding-left: 2px; opacity: 0.8; font-size: 0.95rem; }
 .it-slash { opacity: 0.6; }
+/* the - / + box under the HP field: an amount between two buttons, over the row below */
+.it-hp-pop {
+  display: none; position: absolute; z-index: 10; left: 0; top: 100%; margin-top: 2px; padding: 6px; gap: 6px;
+  align-items: center; background: var(--_bg); color: var(--_fg);
+  border: 1px solid var(--_border-strong); box-shadow: var(--_shadow);
+}
+.it-c-hp--open .it-hp-pop { display: flex; }
+.it-root button.it-hp-step { width: var(--_control-height); padding: 0; font-size: 1.3rem; line-height: 1; }
+/* a normal boxed field again (the cell inputs above are bare) */
+.it-td .it-hp-pop .it-hp-amount {
+  width: 4rem; height: auto; min-height: var(--_control-height); padding: 6px 4px; text-align: center; font-size: 1rem;
+  color: var(--_fg); background-color: var(--_input-bg); background-image: ${SLANTS};
+  background-origin: border-box; background-clip: border-box; background-repeat: no-repeat;
+  background-size: var(--_cut) var(--_cut); background-position: top left, top right, bottom right, bottom left;
+  border: 1px solid var(--_border-strong); clip-path: ${CUT};
+}
+.it-td .it-hp-pop .it-hp-amount:focus-visible { outline-offset: -4px; }
 .it-down { position: absolute; right: 4px; top: 2px; font-weight: var(--_weight-strong); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em; }
 .it-suggest {
   position: absolute; z-index: 10; left: 0; right: 0; top: 100%; margin: 2px 0 0; padding: 4px 0;

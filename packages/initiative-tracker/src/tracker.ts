@@ -2,6 +2,7 @@ import { creatureBonus, searchCreatures, srdCreatures } from './creatures';
 import {
   addRow,
   applyHpInput,
+  changeHp,
   clear,
   createState,
   linkRow,
@@ -221,6 +222,9 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       '[data-field="bonus"]': 'Initiative bonus, ' + label,
       '[data-field="hp"]': 'Hit points, ' + label + '. Type a number, or +3 / -5 to change it',
       '[data-field="maxhp"]': 'Maximum hit points, ' + label,
+      '[data-field="hpstep"]': 'Amount to add or subtract, ' + label,
+      '[data-action="hp-down"]': 'Subtract the amount from hit points, ' + label,
+      '[data-action="hp-up"]': 'Add the amount to hit points, ' + label,
       '[data-field="ac"]': 'Armor class, ' + label,
       '[data-action="roll"]': 'Roll initiative for ' + label,
       '[data-grip]': 'Reorder ' + label + '. Drag, or press the up and down arrow keys',
@@ -349,10 +353,28 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       autocomplete: 'off',
     });
     maxInput.value = String(row.maxHp);
+    // The - / + box under the HP field, shown while the cell has focus (see openHp). It comes
+    // after max HP so Tab goes HP, max HP, -, amount, +.
+    const hpPop = el(doc, 'div', { class: 'it-hp-pop', role: 'group', 'aria-label': 'Change HP' });
+    const stepInput = el(doc, 'input', {
+      type: 'number',
+      class: 'it-hp-amount',
+      'data-field': 'hpstep',
+      min: 1,
+      inputmode: 'numeric',
+      autocomplete: 'off',
+    });
+    stepInput.value = '1';
+    hpPop.append(
+      button('hp-down', '', '\u2212', 'it-hp-step'),
+      stepInput,
+      button('hp-up', '', '+', 'it-hp-step'),
+    );
     hpCell.append(
       hpInput,
       el(doc, 'span', { class: 'it-slash', 'aria-hidden': 'true' }, '/'),
       maxInput,
+      hpPop,
       el(doc, 'span', { class: 'it-down', hidden: true }, 'Down'),
     );
     const ac = inputCell(
@@ -444,6 +466,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       if (tr && sel) restore = { id: tr.dataset.id, sel };
     }
     closeSuggest();
+    hpOpen = null;
     rowsEl.textContent = '';
     state.rows.forEach((row, i) => {
       const tr = buildRow(row, i);
@@ -488,6 +511,52 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       saved = [];
     }
     if (!destroyed) renderSaved();
+  }
+
+  // ---------- HP - / + box ----------
+  // Opened when focus moves into an HP cell from outside it, and closed when focus or a pointer
+  // press lands outside it, or on Escape. A class (not :focus-within) keeps it open when a phone
+  // browser drops focus on tapping a button, so the tap still reaches the button.
+  let hpOpen: HTMLElement | null = null;
+
+  function openHp(cell: HTMLElement) {
+    if (hpOpen === cell) return;
+    closeHp();
+    hpOpen = cell;
+    cell.classList.add('it-c-hp--open');
+  }
+
+  function closeHp() {
+    if (!hpOpen) return;
+    hpOpen.classList.remove('it-c-hp--open');
+    hpOpen = null;
+  }
+
+  function stepHp(btn: HTMLElement, id: string, sign: number) {
+    const row = state.rows.find((r) => r.id === id);
+    const cell = btn.closest('.it-c-hp');
+    const amountInput = cell && (cell.querySelector('[data-field="hpstep"]') as HTMLInputElement);
+    const amount = Math.abs(intOr(amountInput ? amountInput.value : '', 1));
+    if (!row || !amount) return;
+    commit(updateRow(state, id, { hp: changeHp(row.hp, row.maxHp, sign * amount) }));
+    const next = state.rows.find((r) => r.id === id);
+    syncInputs(rowEl(id), next);
+    say(`${labelOf(next, state.rows.indexOf(next))}: ${next.hp} HP`);
+  }
+
+  function onFocusIn(e: FocusEvent) {
+    const cell = (e.target as Element).closest('.it-c-hp') as HTMLElement | null;
+    if (!cell) {
+      closeHp();
+      return;
+    }
+    // Moving between the controls of one cell keeps it as it is (so Escape stays closed).
+    const from = e.relatedTarget as Node | null;
+    if (!from || !cell.contains(from)) openHp(cell);
+  }
+
+  function onDocPointerDown(e: Event) {
+    if (hpOpen && !hpOpen.contains(e.target as Node)) closeHp();
   }
 
   // ---------- autocomplete ----------
@@ -685,6 +754,10 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       chooseCreature(suggest.items[Number(option.dataset.index)]);
       return;
     }
+    if ((target as HTMLElement).dataset && (target as HTMLElement).dataset.field === 'hp') {
+      openHp(target.closest('.it-c-hp') as HTMLElement);
+      return;
+    }
     const btn = target.closest('button[data-action]') as HTMLButtonElement | null;
     if (!btn || btn.disabled) return;
     const action = btn.dataset.action;
@@ -718,6 +791,10 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
           commit(updateRow(state, id, { initiative: rollInitiative(row.initiativeBonus, rng) }));
           renderRows();
         }
+        break;
+      case 'hp-down':
+      case 'hp-up':
+        if (id) stepHp(btn, id, action === 'hp-up' ? 1 : -1);
         break;
       case 'sort':
         commit(sortByInitiative(state));
@@ -815,6 +892,14 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   function onKeydown(e: KeyboardEvent) {
     if (onGripKey(e)) return;
     const input = e.target as HTMLInputElement;
+    if (e.key === 'Escape' && hpOpen && hpOpen.contains(input)) {
+      e.preventDefault();
+      const inPop = !!input.closest('.it-hp-pop');
+      closeHp();
+      // the box's controls are hidden now, so focus goes back to the HP field
+      if (inPop) (rowEl(rowIdOf(input)).querySelector('[data-field="hp"]') as HTMLElement).focus();
+      return;
+    }
     if (!suggest || input !== suggest.input) return;
     const n = suggest.items.length;
     if (e.key === 'ArrowDown') {
@@ -834,9 +919,12 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     }
   }
 
-  function onFocusOut(e: Event) {
+  function onFocusOut(e: FocusEvent) {
     const input = e.target as HTMLInputElement;
     if (suggest && input === suggest.input) closeSuggest();
+    // relatedTarget is null when focus just drops (a tap on a phone): the pointer handler decides
+    const to = e.relatedTarget as Node | null;
+    if (hpOpen && to && !hpOpen.contains(to)) closeHp();
   }
 
   // Options must not steal focus from the name field before the click lands.
@@ -980,6 +1068,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     ['input', onInput as EventListener],
     ['change', onChange as EventListener],
     ['keydown', onKeydown as EventListener],
+    ['focusin', onFocusIn as EventListener],
     ['focusout', onFocusOut as EventListener],
     ['mousedown', onMouseDown as EventListener],
     ['pointerdown', onPointerDown as EventListener],
@@ -994,6 +1083,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     if (dirty && storage) flushAutosave();
   };
   if (view) view.addEventListener('pagehide', onPageHide);
+  doc.addEventListener('pointerdown', onDocPointerDown, true);
 
   // ---------- start ----------
   renderRows();
@@ -1053,6 +1143,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       armTimers.clear();
       listeners.forEach(([type, fn]) => root.removeEventListener(type, fn));
       if (view) view.removeEventListener('pagehide', onPageHide);
+      doc.removeEventListener('pointerdown', onDocPointerDown, true);
       root.remove();
       releaseStyles(doc);
     },
