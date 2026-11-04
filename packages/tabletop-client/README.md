@@ -262,4 +262,6 @@ host's translucent view, 0 for the clear view). One transparent plane and a thre
 
 No images, textures, skyboxes, models or fonts ship with this package: the sky is a drawn gradient, walls are
 generated geometry, the door planks are drawn on a canvas, tokens without a picture are cylinders, the font is the system font stack. The only
-bundled file is the Material Icons font for the button icons (Apache-2.0). See `ASSETS.md` in the repo root.
+bundled file is the Material Icons font for the button icons (Apache-2.0), shipped as `dist/assets/material-icons.woff2`
+next to the bundle, which loads it from there (`import.meta.url`): a host that serves `dist/tabletop-client.js` must serve
+`dist/assets/` beside it. See `ASSETS.md` in the repo root.
