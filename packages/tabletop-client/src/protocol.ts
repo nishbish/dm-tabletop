@@ -23,6 +23,7 @@ export const ID_KEYS: Record<string, string> = {
   assignToken: 'tokenId',
   removePlane: 'planeId',
   updatePlaneTransform: 'planeId',
+  updatePlaneImage: 'planeId',
   removeDoor: 'doorId',
   updateDoorTransform: 'doorId',
   updateDoorState: 'doorId',
@@ -114,6 +115,15 @@ export function toServer(name: string, a: Args): Translated | null {
       return { name: 'assignHost', args: { userId: str(a.user_id) } };
     case 'removePlane':
       return { name, args: { planeId: str(a.planeId) } };
+    case 'updatePlaneImage':
+      return {
+        name,
+        args: {
+          planeId: str(a.planeId),
+          planeUploadId: str(a.planeUploadId),
+          image: a.image === undefined ? undefined : str(a.image),
+        },
+      };
     case 'updatePlaneTransform':
       return {
         name,

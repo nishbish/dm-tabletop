@@ -206,6 +206,7 @@ const map = {
 		dmLight: 1,
 		daylight: 0,
 		planeListOffset: 0,
+		planeImageTarget: null,
 		planeListLimit: 24,
 		tokenListOffset: 0,
 		tokenListLimit: 24,
@@ -292,10 +293,18 @@ map.menus.default = new ContextMenu( {
   }
 );
 
+// While the map is being edited (Edit Map bar open) the floor offers images only.
+map.menus.defaultBuild = new ContextMenu( {
+	  'parent': root,
+	  'theme': 'default',
+	  'items': getDefaultItems('build')
+  }
+);
+
 map.menus.defaultPlaneImage = new ContextMenu( {
 	  'parent': root,
 	  'theme': 'default',
-	  'items': getDefaultItems(true)
+	  'items': getDefaultItems('plane')
   }
 );
 
@@ -342,17 +351,32 @@ map.menus.wallPoint = new ContextMenu( {
   }
 );
 
-function getDefaultItems(planeImage = false) {
-	var items = [
-		{'icon': 'person_add_alt_1', 'name': 'Add Token',  action: (e) => addToken(e)  },
-		{'icon': 'add_photo_alternate', 'name': 'Add Image',  action: (e) => addPlaneImage(e)  }
-	];
-	
-	if (planeImage) {
+// kind: 'floor' (outside Edit Map), 'build' (the floor while editing) or 'plane' (a map image,
+// which can only be right-clicked while editing images). Add Image stays on an image so images
+// can be layered.
+function getDefaultItems(kind = 'floor') {
+	var items = [];
+
+	if (kind == 'floor') {
+		items.push({'icon': 'person_add_alt_1', 'name': 'Add Token',  action: (e) => addToken(e)  });
+	}
+
+	if (kind == 'plane') {
+		items.push({'icon': 'photo_library', 'name': 'Change Image',  action: (e) => changePlaneImageMenu(e)  });
+	}
+
+	items.push({'icon': 'add_photo_alternate', 'name': 'Add Image',  action: (e) => addPlaneImage(e)  });
+
+	if (kind == 'plane') {
 		items.push({'icon': 'hide_image', 'name': 'Remove Image',  action: (e) => removePlaneImage(e)  });
 	}
-	
+
 	return items;
+}
+
+// The Edit Map bar is open (walls, doors or images).
+function isEditingMap() {
+	return isDM && map.toggleMode != 'token';
 }
 
 function getUserDetailItems() {
@@ -1928,8 +1952,6 @@ function assignToken(e) {
 }
 
 function createPlaneImage(file, planeUploadId, position, local = true, scale = new THREE.Vector2(1, 1), rotation = 0, planeId = false) {
-	var image = options.imageUrl({ kind: 'plane', src: file, size: map.settings.maxPlaneTextureSize, quality: map.settings.maxPlaneTextureQuality });
-	
 	var material = new THREE.MeshLambertMaterial({
 		color: 0xffffff,
 		side: THREE.FrontSide,
@@ -1955,6 +1977,7 @@ function createPlaneImage(file, planeUploadId, position, local = true, scale = n
 	plane.position.y += (planeLength / 100);
 
 	plane.src = file;
+	plane.planeUploadId = planeUploadId;
 
 	plane.defaultMatrix = {
 		position: new THREE.Vector3().copy(plane.position),
@@ -1986,8 +2009,18 @@ function createPlaneImage(file, planeUploadId, position, local = true, scale = n
 		sendMessage('update', 'addPlane', args);
 	}
 
+	loadPlaneTexture(plane, file, true);
+}
+
+// Sizes the plane to the picture (5 squares on its long side) once it has loaded. `counted`: the
+// plane is part of the room's first load, which the load screen waits for.
+function loadPlaneTexture(plane, file, counted) {
+	var image = options.imageUrl({ kind: 'plane', src: file, size: map.settings.maxPlaneTextureSize, quality: map.settings.maxPlaneTextureQuality });
+
 	new THREE.TextureLoader().load(image, function(texture) {
-		
+		// a later Change Image won the race
+		if (plane.src !== file) { texture.dispose(); return; }
+
 		var maxPlaneSize = 5;
 
 		if (texture.image.width > texture.image.height) {
@@ -2004,6 +2037,8 @@ function createPlaneImage(file, planeUploadId, position, local = true, scale = n
 		}
 
 		var geometry = new THREE.PlaneGeometry(texSize.w, texSize.h, 1, 1);
+		var oldGeometry = plane.geometry;
+		var oldMap = plane.material.map;
 		plane.geometry = geometry;
 		
 		texture.magFilter = THREE.LinearFilter;
@@ -2012,11 +2047,15 @@ function createPlaneImage(file, planeUploadId, position, local = true, scale = n
 		plane.material.map = texture;
 		plane.material.needsUpdate = true;
 
-		loadStateUpdate();
+		if (oldGeometry && oldGeometry !== geometry) { oldGeometry.dispose(); }
+		if (oldMap && oldMap !== texture) { oldMap.dispose(); }
+
+		if (counted) { loadStateUpdate(); }
 		
 	}, false, function(error) {
 		console.log(error);
-		loadStateUpdate();
+		if (counted) { loadStateUpdate(); }
+		else { notify('That image could not be loaded.', 'error'); }
 	});
 }
 
@@ -2643,7 +2682,7 @@ function checkSceneClick(e, clickType) {
 	
 		if (typeof(planeCheck) != "undefined") {
 			setLastClickPos(e);
-			openContextMenu(e, map.menus.default);
+			openContextMenu(e, isEditingMap() ? map.menus.defaultBuild : map.menus.default);
 		}
 	}
 
@@ -3805,7 +3844,7 @@ var BUILD_HINTS = {
 	room: 'Drag on the floor to draw a room. Right-drag turns the camera, arrow keys move it.',
 	corridor: 'Drag on the floor to draw a corridor ' + CORRIDOR_WIDTH + ' squares wide. Right-drag turns the camera.',
 	door: 'Click a wall to put a door in it, or drag a door along a wall. Click a door to turn it.',
-	plane: 'Click a map image to move, turn or resize it (hold Ctrl to do it freely). Right-click the floor to add one.',
+	plane: 'Click a map image to move, turn or resize it (hold Ctrl to do it freely). Right-click the floor to add one, or an image to change or remove it.',
 	wallPoint: 'Draw walls point by point, or drag out whole rooms and corridors.'
 };
 
@@ -4147,8 +4186,52 @@ function changePlanePage(folderId, parentId, offset) {
 }
 
 function addPlaneImage(e) {
+	map.local.planeImageTarget = null;
 	//populate images pane, from the first page
 	changePlanePage(0, 0, 0);
+}
+
+// Change Image: the images pane opens as for Add Image, and the picked image replaces this one's.
+function changePlaneImageMenu(e) {
+	map.local.planeImageTarget = map.menuTarget;
+	changePlanePage(0, 0, 0);
+}
+
+// The image an images pane pick should replace, or null to add a new one. Used once.
+function takePlaneImageTarget() {
+	var plane = map.local.planeImageTarget;
+	map.local.planeImageTarget = null;
+
+	if (plane && map.objects.planes[plane.planeId] === plane) { return plane; }
+	return null;
+}
+
+// Another picture on the same plane: its place, size, turn and layer stay.
+function changePlaneImage(plane, file, planeUploadId, local = true) {
+	plane.src = file;
+	plane.planeUploadId = planeUploadId;
+
+	map.scaleControls.plane.detach();
+	map.rotationControls.plane.detach();
+
+	if (local) {
+		sendMessage('update', 'updatePlaneImage', { planeId: plane.planeId, planeUploadId: planeUploadId, image: file });
+	}
+
+	loadPlaneTexture(plane, file, false);
+}
+
+// Picked in the images pane (library or URL): a new image, or Change Image's.
+function placePlaneImage(file, planeUploadId) {
+	var target = takePlaneImageTarget();
+
+	if (target) {
+		changePlaneImage(target, file, planeUploadId);
+		return;
+	}
+
+	var position = map.lastClickPos ? new THREE.Vector2(map.lastClickPos[0].point.x, map.lastClickPos[0].point.z) : new THREE.Vector2(0, 0);
+	createPlaneImage(file, planeUploadId, position);
 }
 
 function removePlaneImage(e) {
@@ -6827,6 +6910,18 @@ var updateClient = {
 		}
 	},
 	
+	updatePlaneImage: function(args) {
+		args = validateArguments(args, {
+			planeId: 'id',
+			planeUploadId: 'id',
+			image: 'text'
+		});
+
+		if (args !== false && args.planeId in map.objects.planes) {
+			changePlaneImage(map.objects.planes[args.planeId], args.image, args.planeUploadId, false);
+		}
+	},
+
 	updatePlaneTransform: function(args) {
 		args = validateArguments(args, {
 			planeId: 'id',
@@ -7465,8 +7560,7 @@ var clientRequest = {
 					return;
 				}
 
-				var position = map.lastClickPos ? new THREE.Vector2(map.lastClickPos[0].point.x, map.lastClickPos[0].point.z) : new THREE.Vector2(0, 0);
-				createPlaneImage(url, 'url', position);
+				placePlaneImage(url, 'url');
 				closePane(map.panes.plane_images);
 			}, false);
 		}
@@ -7529,8 +7623,7 @@ var clientRequest = {
 					var puid = planeUploadId;
 					
 					image.input.image.addEventListener('click', function() {
-						var position = new THREE.Vector2(map.lastClickPos[0].point.x, map.lastClickPos[0].point.z);
-						createPlaneImage(file, puid, position);
+						placePlaneImage(file, puid);
 						closePane(pane);
 					});
 				}());
