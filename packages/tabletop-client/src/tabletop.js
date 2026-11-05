@@ -5,7 +5,9 @@
 // Changes to the original logic are marked with "NOTE(port)" comments explaining why.
 import './style.css';
 import './context-menu.css';
-import iconFontUrl from 'material-icons/iconfont/material-icons.woff2?url';
+// NOTE(perf): a separate file (dist/assets/), not inlined: inlined it was 171 KB of base64 that every
+// page had to download and parse before the viewer could start (see vite.config.mjs).
+import iconFontUrl from 'material-icons/iconfont/material-icons.woff2?url&no-inline';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SelectionBox } from 'three/examples/jsm/interactive/SelectionBox.js';
