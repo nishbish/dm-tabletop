@@ -1146,6 +1146,44 @@
 	filter: brightness(1.2);
 }
 
+/* A host app's tag on a chooser tile or an upload button (folders, models and planes may carry
+   `badge`, the upload buttons `options.uploadBadge`): a small diamond and a word after the label.
+   No border, so it never meets a cut corner. Hosts restyle it with --dmt-badge-* or by
+   [data-badge="..."]. */
+.pane-item-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-left: 6px;
+	padding: 0 6px 0 4px;
+	vertical-align: middle;
+	white-space: nowrap;
+	font-size: 11px;
+	font-weight: 700;
+	line-height: 16px;
+	letter-spacing: 0.02em;
+	color: var(--dmt-badge-text, var(--_text));
+	background: var(--dmt-badge-fill, var(--_surface-sunken));
+}
+
+.pane-item-badge::before {
+	content: '';
+	flex: none;
+	width: 7px;
+	height: 7px;
+	transform: rotate(45deg);
+	background: var(--dmt-badge-mark, var(--_gold));
+}
+
+.pane-button .pane-item-badge {
+	margin-left: 8px;
+}
+
+.pane-item.pane-container-folder-item .pane-item-label-text {
+	flex-wrap: wrap;
+	row-gap: 2px;
+}
+
 .pane-item.pane-container-image-item .pane-item-image-container .pane-item-image-delete .material-icons {
 	font-size: 28px;
 }

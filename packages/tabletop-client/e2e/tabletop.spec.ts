@@ -216,6 +216,48 @@ test('offline demo works with no server', async ({ page }) => {
   await expect(page.locator('#demo-text')).toHaveText('DEMO');
 });
 
+test('badges on chooser tiles and on the upload button', async ({ page }) => {
+  await page.goto('/?demo=1&library=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 60_000 }).toBe(4);
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 60_000 });
+  await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
+  // a spot can land on a token or a wall (another menu), so try a few
+  const open = async (item: string) => {
+    const spots = [
+      [640, 400],
+      [820, 600],
+      [480, 620],
+      [1000, 620],
+      [700, 250],
+    ];
+    let attempt = 0;
+    await expect(async () => {
+      const [x, y] = spots[attempt++ % spots.length];
+      await page.mouse.click(x, y, { button: 'right' });
+      await page
+        .locator('.show-context-menu-default')
+        .getByText(item, { exact: true })
+        .click({ timeout: 5_000 });
+    }).toPass({ timeout: 90_000 });
+  };
+  for (const item of ['Add Token', 'Add Image']) {
+    await open(item);
+    const pane = page.locator('.pane:visible');
+    await expect(pane.locator('.pane-item-badge'), item).toHaveCount(3);
+    await expect(pane.locator('.pane-button .pane-item-badge')).toHaveText('Silver');
+    await expect(
+      pane.locator('.pane-container-folder-item', { hasText: 'Paid' }).locator('.pane-item-badge'),
+    ).toHaveAttribute('data-badge', 'gold');
+    await expect(
+      pane.locator('.pane-container-folder-item', { hasText: 'Free' }).locator('.pane-item-badge'),
+    ).toHaveCount(0);
+    await expect(
+      pane.locator('.pane-container-image-item', { hasText: 'Shiny' }).locator('.pane-item-badge'),
+    ).toHaveText('Silver');
+    await pane.locator('.pane-close-button').click();
+  }
+});
+
 test('2D view: drawn from above, tokens still move, and the choice is remembered', async ({
   page,
 }) => {

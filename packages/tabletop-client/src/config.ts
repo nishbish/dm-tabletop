@@ -106,12 +106,17 @@ export interface TabletopOptions {
   // the object createDemoRoom() returns (see demo.ts): name, dm, daylight, grid, clients, tokens,
   // planes, doors, wallPoints, models. It is copied, never modified.
   demoRoom?: Record<string, unknown>;
+  // A short word shown as a small tag on the Add Token and Add Image upload buttons, for example
+  // the plan that unlocks uploads ("Silver"). Folders, models and planes in a getModels or
+  // getPlaneImages reply (a server's or demoLibrary's) may carry the same thing as `badge`.
+  uploadBadge?: string;
   // Offline demo only: lists the token or map library in the Add Token / Add Image panes instead
   // of the plain pawns and the "Image URL" box. Called with the pane's request (`folderId`,
   // `parentId`, `limit`, `offset`); returns what a server would reply to getModels
   // (`{folders: [{folderId, parentId, name}], models: [{modelId, name, src, baseColor}], folderId,
   // parentId, showNext}`) or getPlaneImages (`planes: [{planeUploadId, name, src}]` instead of
-  // `models`). `src` goes through `imageUrl`. Nothing is saved in the demo.
+  // `models`). `src` goes through `imageUrl`. Nothing is saved in the demo. Any folder, model or
+  // plane may carry `badge` (see uploadBadge).
   demoLibrary?: (
     kind: 'model' | 'plane',
     args: Record<string, unknown>,

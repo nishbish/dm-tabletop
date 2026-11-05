@@ -4418,6 +4418,26 @@ function buildPaneSection(pane, title) {
 	return { element: details, body: body, items: [] };
 }
 
+// A short word a host app puts on a chooser tile or an upload button (for example the plan that
+// unlocks it, "Silver"): a small tag after the label. `data-badge` holds the word in lower case so
+// the host can style each one. Anything but a non-empty string is ignored.
+function addPaneBadge(target, badge) {
+	if (typeof badge !== 'string' || !badge.trim() || !target) {
+		return;
+	}
+
+	var word = badge.trim().slice(0, 24);
+	var tag = document.createElement('span');
+	tag.className = 'pane-item-badge';
+	tag.dataset.badge = word.toLowerCase();
+	tag.textContent = word;
+	target.appendChild(tag);
+}
+
+function badgeLabel(item) {
+	return item.element.querySelector('.pane-item-label-text');
+}
+
 function buildPaneItem(pane, text, type, value = false, dmOnly = false, name = '') {
 	var container = document.createElement('div');
 	container.className = 'pane-item';
@@ -7256,6 +7276,7 @@ var clientRequest = {
 		var newTokenButton = buildPaneItem(map.panes.tokens, '', 'button', '+ New Token');
 		newTokenButton.element.querySelector('.pane-item-label-text').style.display = 'none';
 		if (!options.uploadModel && !options.uploadLocked) { newTokenButton.element.style.display = 'none'; }
+		addPaneBadge(newTokenButton.input, options.uploadBadge);
 
 		newTokenButton.input.addEventListener('click', function() {
 			if (!options.uploadModel) { showNotice(options.uploadLocked); return; }
@@ -7303,6 +7324,7 @@ var clientRequest = {
 		if ('folders' in args) {
 			for (var j=0;j<args.folders.length;j++) {
 				var folder = buildPaneItem(map.panes.tokens, escapeHtml(args.folders[j].name), 'folder', args.folders[j].image);
+				addPaneBadge(badgeLabel(folder), args.folders[j].badge);
 
 				(function() {
 					var pane = map.panes.tokens;
@@ -7325,6 +7347,7 @@ var clientRequest = {
 				var thumbPath = model.src ? options.imageUrl({ kind: 'model', src: model.src, size: 200, quality: 80 }) : swatchUrl(model.baseColor);
 			
 				var image = buildPaneItem(map.panes.tokens, escapeHtml(model.name), 'image', thumbPath);
+				addPaneBadge(badgeLabel(image), model.badge);
 				
 				if (model.ownerId !== undefined && String(model.ownerId) !== '0') {
 					image.input.deleteButton.style.display = 'block';
@@ -7406,6 +7429,7 @@ var clientRequest = {
 		var newPlaneButton = buildPaneItem(map.panes.plane_images, '', 'button', '+ New Plane');
 		newPlaneButton.element.querySelector('.pane-item-label-text').style.display = 'none';
 		if (!options.uploadPlane && !options.uploadLocked) { newPlaneButton.element.style.display = 'none'; }
+		addPaneBadge(newPlaneButton.input, options.uploadBadge);
 
 		newPlaneButton.input.addEventListener('click', function() {
 			if (!options.uploadPlane) { showNotice(options.uploadLocked); return; }
@@ -7449,6 +7473,7 @@ var clientRequest = {
 			//build folder items
 			for (var j=0;j<args.folders.length;j++) {
 				var folder = buildPaneItem(map.panes.plane_images, escapeHtml(args.folders[j].name), 'folder', args.folders[j].image);
+				addPaneBadge(badgeLabel(folder), args.folders[j].badge);
 
 				(function() {
 					var pane = map.panes.plane_images;
@@ -7472,6 +7497,7 @@ var clientRequest = {
 				var thumbPath = options.imageUrl({ kind: 'plane', src: src, size: 200, quality: 80 });
 				
 				var image = buildPaneItem(map.panes.plane_images, name, 'image', thumbPath);
+				addPaneBadge(badgeLabel(image), args.planes[j].badge);
 				
 				if (args.planes[j].ownerId !== undefined && String(args.planes[j].ownerId) !== '0') {
 					image.input.deleteButton.style.display = 'block';
