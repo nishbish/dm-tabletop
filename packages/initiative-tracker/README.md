@@ -145,7 +145,8 @@ A row can carry a `link`, a string the tracker only stores, to tie it to somethi
 - In the HP field type a number to set it, or `-5` / `+3` to change it. Max HP is the next field.
   While the HP field has focus, a small box under it has an amount (1 to start with) and **-** /
   **+** buttons that take that many hit points away or add them, by the same rules: never below 0,
-  never above max HP when one is set. **Escape** closes the box.
+  but above max HP if you add that much (healing past the maximum is the DM's call). **Escape**
+  closes the box.
 - Reorder by dragging the handle (the row follows the pointer while the others slide aside), or
   focus the handle and press the up and down arrow keys.
 - The encounter's name sits above the list. Changes are saved on their own a moment after the

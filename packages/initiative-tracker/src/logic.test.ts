@@ -235,11 +235,11 @@ describe('rollInitiative', () => {
 });
 
 describe('changeHp', () => {
-  it('adds or takes away, never below 0 or above max', () => {
+  it('adds or takes away, never below 0, and may go above max', () => {
     expect(changeHp(12, 20, -5)).toBe(7);
     expect(changeHp(12, 20, 3)).toBe(15);
     expect(changeHp(12, 20, -50)).toBe(0);
-    expect(changeHp(12, 20, 50)).toBe(20);
+    expect(changeHp(12, 20, 50)).toBe(62);
     expect(changeHp(12, 0, 50)).toBe(62);
     expect(changeHp(12, 20, NaN)).toBe(12);
   });
@@ -250,7 +250,7 @@ describe('applyHpInput', () => {
     expect(applyHpInput('-5', 12, 20)).toEqual({ hp: 7, maxHp: 20 });
     expect(applyHpInput('+3', 12, 20)).toEqual({ hp: 15, maxHp: 20 });
     expect(applyHpInput('-50', 12, 20).hp).toBe(0);
-    expect(applyHpInput('+50', 12, 20).hp).toBe(20);
+    expect(applyHpInput('+50', 12, 20)).toEqual({ hp: 62, maxHp: 20 });
     expect(applyHpInput('+50', 12, 0).hp).toBe(62);
   });
 

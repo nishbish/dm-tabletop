@@ -229,13 +229,13 @@ export interface HpResult {
 }
 
 /**
- * Adds `delta` (negative for damage) to HP: never below 0, and never above max HP when a max is
- * set. Used by both the typed "-5" / "+3" and the - / + buttons, so they follow the same rules.
+ * Adds `delta` (negative for damage) to HP, never below 0. It may go above max HP, as on the
+ * first tracker: healing past the maximum is the DM's call. Used by both the typed "-5" / "+3"
+ * and the - / + buttons, so they follow the same rules. (`maxHp` is kept in the signature so
+ * existing callers keep working; it no longer limits anything.)
  */
 export function changeHp(hp: number, maxHp: number, delta: number): number {
-  let next = Math.max(0, hp + (Number(delta) || 0));
-  if (maxHp > 0) next = Math.min(next, maxHp);
-  return next;
+  return Math.max(0, hp + (Number(delta) || 0));
 }
 
 /**

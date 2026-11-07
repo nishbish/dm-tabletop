@@ -275,7 +275,8 @@ describe('rendering and actions', () => {
     expect(tracker.getState().rows[0].hp).toBe(12);
     click(up);
     click(up);
-    expect(tracker.getState().rows[0].hp).toBe(20); // capped at max
+    expect(tracker.getState().rows[0].hp).toBe(26); // above max is allowed
+    expect(tracker.getState().rows[0].maxHp).toBe(20);
     type(field(row, 'hpstep'), '50');
     click(down);
     expect(tracker.getState().rows[0].hp).toBe(0);
