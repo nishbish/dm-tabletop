@@ -275,7 +275,8 @@ describe('rendering and actions', () => {
     expect(tracker.getState().rows[0].hp).toBe(12);
     click(up);
     click(up);
-    expect(tracker.getState().rows[0].hp).toBe(20); // capped at max
+    expect(tracker.getState().rows[0].hp).toBe(26); // above max is allowed
+    expect(tracker.getState().rows[0].maxHp).toBe(20);
     type(field(row, 'hpstep'), '50');
     click(down);
     expect(tracker.getState().rows[0].hp).toBe(0);
@@ -343,6 +344,26 @@ describe('autocomplete', () => {
     expect(name.getAttribute('aria-activedescendant')).toBeTruthy();
     name.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(tracker.getState().rows[0].name).toBe('Owlbear');
+  });
+
+  it('suggests Pathfinder creatures too, tagged, with Perception as the bonus', async () => {
+    await make().ready;
+    type(field(rows()[0], 'name'), 'goblin warr');
+    const option = $$('.it-suggest [role="option"]').find((o) =>
+      o.textContent.includes('Goblin Warrior'),
+    );
+    expect(option.textContent).toContain('PF2e');
+    click(option);
+    expect(tracker.getState().rows[0]).toMatchObject({
+      name: 'Goblin Warrior',
+      ac: 16,
+      hp: 6,
+      initiativeBonus: 2,
+      monsterId: 'pf2e-goblin-warrior',
+    });
+    // fixed hit points: no hit dice to roll
+    const roll = rows()[0].querySelector('[data-action="roll-hp"]') as HTMLButtonElement;
+    expect(roll.hidden).toBe(true);
   });
 
   it('uses a creature list supplied by the host', async () => {
@@ -682,6 +703,11 @@ describe('stat block panel', () => {
     expect(info(rows()[0]).hidden).toBe(true);
     type(field(rows()[1], 'name'), 'Bob');
     expect(info(rows()[1]).hidden).toBe(true);
+    // a Pathfinder creature has no SRD stat block: no button
+    type(field(rows()[2], 'name'), 'Adamant Sentinel');
+    click($$('.it-suggest [role="option"]')[0]);
+    expect(tracker.getState().rows[2].monsterId).toBe('pf2e-adamant-sentinel');
+    expect(info(rows()[2]).hidden).toBe(true);
     await pickGoblin(rows()[0]);
     const btn = info(rows()[0]);
     expect(btn.hidden).toBe(false);

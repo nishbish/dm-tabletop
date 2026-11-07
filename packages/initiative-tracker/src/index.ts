@@ -1,5 +1,12 @@
 export { createTracker } from './tracker';
-export { srdCreatures, searchCreatures, initiativeBonusFromDex, creatureBonus } from './creatures';
+export {
+  srdCreatures,
+  pf2eCreatures,
+  defaultCreatures,
+  searchCreatures,
+  initiativeBonusFromDex,
+  creatureBonus,
+} from './creatures';
 export {
   renderStatBlock,
   statBlockCss,

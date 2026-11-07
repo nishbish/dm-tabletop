@@ -1,4 +1,4 @@
-import { creatureBonus, searchCreatures, srdCreatures } from './creatures';
+import { creatureBonus, defaultCreatures, searchCreatures, srdCreatures } from './creatures';
 import {
   addRow,
   applyHpInput,
@@ -106,7 +106,7 @@ const intOr = (text: string, fallback: number) => {
 export function createTracker(container: HTMLElement, options: TrackerOptions = {}): Tracker {
   const doc = container.ownerDocument;
   const rng = options.rng || Math.random;
-  const creatures: CreatureTemplate[] = options.creatures || srdCreatures;
+  const creatures: CreatureTemplate[] = options.creatures || defaultCreatures;
   const autosaveDelay = options.autosaveDelay === undefined ? 400 : options.autosaveDelay;
 
   let storage: EncounterStorage | null = null;
@@ -441,7 +441,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
         'aria-controls': panelId,
       });
       info.innerHTML = BOOK_ICON;
-      info.hidden = !row.monsterId;
+      info.hidden = !hasStatBlock(row.monsterId);
       nameCell.append(info);
     }
     if (row.link && options.onLinkClick) {
@@ -540,7 +540,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     const mod = tr.querySelector('.it-mod');
     if (mod && mod.textContent !== modText(row)) mod.textContent = modText(row);
     const info = tr.querySelector('[data-action="info"]') as HTMLButtonElement | null;
-    if (info) info.hidden = !row.monsterId;
+    if (info) info.hidden = !hasStatBlock(row.monsterId);
     set('name', row.name);
     set('hp', hpText(row));
     set('maxhp', blankZero(row.maxHp));
@@ -791,7 +791,10 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
         'data-index': i,
         'aria-selected': 'false',
       });
-      li.append(el(doc, 'span', {}, c.name), el(doc, 'small', {}, `AC ${c.ac} · HP ${c.hp}`));
+      li.append(
+        el(doc, 'span', {}, c.name),
+        el(doc, 'small', {}, `${c.ruleset ? c.ruleset + ' · ' : ''}AC ${c.ac} · HP ${c.hp}`),
+      );
       ul.append(li);
     });
     (input.parentElement as HTMLElement).append(ul);
@@ -830,6 +833,12 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   // the tracker stays usable beside it. It lives on <body> (the tracker is a size container, which
   // would otherwise hold a fixed panel inside its own box).
   const panelId = `it-panel-${instance}`;
+  const srdIds = new Set(srdCreatures.map((c) => c.id));
+  const hasStatBlock = (id: string | undefined) => {
+    const source = options.statBlocks;
+    if (!id || !source) return false;
+    return source.has ? source.has(id) : srdIds.has(id);
+  };
   let panel: HTMLElement | null = null;
   let panelBody: HTMLElement | null = null;
   let panelRowId: string | null = null;
@@ -1175,7 +1184,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
         break;
       case 'info': {
         const row = state.rows.find((r) => r.id === id);
-        if (row && row.monsterId) {
+        if (row && hasStatBlock(row.monsterId)) {
           if (panelRowId === row.id) closePanel(true);
           else void openPanel(row);
         }

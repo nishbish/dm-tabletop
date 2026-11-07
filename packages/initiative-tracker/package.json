@@ -20,7 +20,8 @@
     },
     "./statblock": {
       "types": "./dist/types/statblock.d.ts",
-      "import": "./dist/statblock.js"
+      "import": "./dist/statblock.js",
+      "default": "./dist/statblock.js"
     },
     "./srd-monsters.json": "./dist/srd-monsters.json"
   },

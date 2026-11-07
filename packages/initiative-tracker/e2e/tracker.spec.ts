@@ -94,7 +94,7 @@ test('HP - / + buttons change HP by the amount, from mouse and keyboard', async 
   await expect(hp).toHaveValue('3');
   await up.click();
   await up.click();
-  await expect(hp).toHaveValue('7'); // the goblin's max HP
+  await expect(hp).toHaveValue('9'); // above the goblin's max of 7: the DM's call
   await page.screenshot({ path: 'e2e/.results/hp-box.png' });
 
   // keyboard: Tab from HP reaches the box, Enter / Space press the buttons, Escape closes it
@@ -103,7 +103,7 @@ test('HP - / + buttons change HP by the amount, from mouse and keyboard', async 
   await page.keyboard.press('Tab');
   await expect(down).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(hp).toHaveValue('4');
+  await expect(hp).toHaveValue('6');
   await page.keyboard.press('Escape');
   await expect(down).toBeHidden();
   await expect(hp).toBeFocused();

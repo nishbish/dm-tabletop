@@ -1,5 +1,25 @@
 # Notice
 
+## D&D 5e SRD 5.1 creatures (CC-BY-4.0)
+
 This work includes material taken from the System Reference Document 5.1 ("SRD 5.1") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.
 
 The material used is the creature statistics in `src/data/srd-creatures.json` (name, armor class, hit points, hit dice, dexterity score and challenge rating) and the full stat blocks in `src/data/srd-monsters.json` (with the descriptions printed after some of them), extracted from the SRD 5.1 by `scripts/build-creatures.mjs`. The text is as printed, apart from typographic dashes, hyphens and quotes changed to plain ones and two headings reordered ("Elf, Drow" as "Drow", "Gnome, Deep (Svirfneblin)" as "Deep Gnome (Svirfneblin)").
+
+## Pathfinder creatures (ORC License)
+
+The material used is the creature statistics in `src/data/pf2e-creatures.json` (name, armor class, hit points, Perception modifier and level of the creatures in Pathfinder Monster Core and Monster Core 2), extracted by `scripts/build-pf2e-creatures.mjs` from the game data of the Foundry VTT PF2e system (https://github.com/foundryvtt/pf2e), using only entries marked as published under the ORC License.
+
+**ORC Notice.** This product is licensed under the ORC License held in the Library of Congress at TX 9-307-067 and available online at various locations including www.paizo.com/orclicense, www.azoralaw.com/orclicense and others. All warranties are disclaimed as set forth therein.
+
+**Attribution.** This product is based on the following Licensed Material:
+
+Pathfinder Monster Core © 2024 Paizo Inc., Authors: Alexander Augunas, Dennis Baker, Kate Baker, Joshua Birdsong, Joseph Blomquist, Logan Bonner, Jason Bulmahn, James Case, John Compton, Paris Crenshaw, Adam Daigle, Darrin Drader, Brian Duckwitz, Robert N. Emerson, Scott Fernandez, Eleanor Ferron, Leo Glass, Matthew Goodall, BJ Hensley, Thurston Hillman, Vanessa Hoskins, James Jacobs, Jenny Jarzabski, Miko Kallio, Jason Keeley, Jeff Lee, Lyz Liddell, Luis Loza, Ron Lundeen, Robert G. McCreary, Philippe-Antoine Menard, Jacob W. Michaels, Dave Nelson, Jason Nelson, Tim Nightengale, Stephen Radney-MacFarland, Mikhail Rekun, Patrick Renie, Alex Riggs, David N. Ross, Michael Sayre, Mark Seifter, Chris S. Sims, Amber Stewart, Jeffrey Swank, William Thompson, Jason Tondro, Clark Valentine, Landon Winkler, Tonya Woldridge, and Linda Zayas-Palmer.
+
+Pathfinder Monster Core 2 © 2025 Paizo Inc., Authors: Alexander Augunas, Jesse Benner, Joshua Birdsong, Logan Bonner, Jason Bulmahn, James Case, Jessica Catalan, John Compton, Paris Crenshaw, Adam Daigle, Katina Davis, Jesse Decker, Darrin Drader, Felix Dritz, Brian Duckwitz, Robert N. Emerson, Scott Fernandez, Eleanor Ferron, Hexe Fey, Benjamin U. Fields, Keith Garret, Scott Gladstein, Leo Glass, Matthew Goodall, Alice Grizzle, T.H. Gulliver, Sen H.H.S., Steven Hammond, Tim Hitchcock, Joan Hong, Vanessa Hoskins, James Jacobs, Brian R. James, Michelle Jones, TJ Kahn, Mikko Kallio, Jason Keeley, Joshua Kim, Avi Kool, John Laffan, Lyz Liddell, Luis Loza, Colm Lundberg, Ron Lundeen, Mahpiya, Philippe-Antoine Menard, Jacob W. Michaels, Patchen Mortimer, Dennis Muldoon, Andrew Mullen, Quinn Murphy, Dave Nelson, Jason Nelson, K. Tessa Newton, Tim Nightengale, Samantha Phelan, Randy Price, Stephen Radney-MacFarland, BJ Recio, Jessica Redekop, Mikhail Rekun, Patrick Renie, Alex Riggs, David N. Ross, Simone D. Sallé, Michael Sayre, David Schwartz, Mark Seifter, Chris S. Sims, Rodney Sloan, Shay Snow, Kendra Leigh Speedling, Amber Stewart, Jeffrey Swank, Tan Shao Han, Russ Taylor, William Thompson, Jason Tondro, Clark Valentine, Ruvaid Virk, Andrew White, Landon Winkler, and Linda Zayas-Palmer.
+
+If you use our Licensed Material in your own published works, please credit us in your product as follows: DM Tools initiative tracker (https://github.com/nishbish/dm-tabletop).
+
+**Reserved Material.** Reserved Material elements in this product include all elements designated as Reserved Material under the ORC License. No Reserved Material of Paizo Inc. is used: creatures whose names are proper nouns of the setting (deities, planes and other locations, named characters) are left out. "Pathfinder" is a trademark of Paizo Inc.; this product is not published, endorsed or approved by Paizo Inc.
+
+**Expressly Designated Licensed Material.** This product contains no Expressly Designated Licensed Material.

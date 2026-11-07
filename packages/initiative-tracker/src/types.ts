@@ -48,6 +48,10 @@ export interface CreatureTemplate {
   /** Used instead of `dex` when given. */
   initiativeBonus?: number;
   cr?: number;
+  /** Creature level, for game systems that use levels (Pathfinder). */
+  level?: number;
+  /** A short tag shown with the suggestion when the list mixes game systems, e.g. "PF2e". */
+  ruleset?: string;
 }
 
 export interface EncounterSummary {
@@ -74,7 +78,10 @@ export interface EncounterStorage {
 export interface TrackerOptions {
   /** Encounter storage. Defaults to localStorage when available; `null` turns storage off. */
   storage?: EncounterStorage | null;
-  /** Autocomplete list. Replaces the built-in SRD list; concat `srdCreatures` to extend it. */
+  /**
+   * Autocomplete list. Replaces the built-in list (`defaultCreatures`: `srdCreatures` then
+   * `pf2eCreatures`); spread those into yours to extend it.
+   */
   creatures?: CreatureTemplate[];
   /** Random source returning [0, 1). Defaults to Math.random. */
   rng?: () => number;
@@ -93,7 +100,7 @@ export interface TrackerOptions {
   /** Milliseconds to wait after the last change before autosaving. Default 400. */
   autosaveDelay?: number;
   /**
-   * When given, a row filled from the creature list gets a small button in its name cell that
+   * When given, a row filled from the creature list (by default the SRD part of it) gets a small button in its name cell that
    * opens the creature's stat block in a panel beside the tracker. `load` is called with the
    * row's `monsterId` the first time (the result is kept) and resolves to the stat block, or
    * null when there is none. `pageUrl`, when given, adds a link to a full page.
@@ -103,6 +110,8 @@ export interface TrackerOptions {
 
 export interface StatBlockSource {
   load(id: string): Promise<Monster | null>;
+  /** Which rows get the button. Default: the SRD creatures (`srdCreatures`). */
+  has?: (id: string) => boolean;
   pageUrl?: (id: string) => string;
 }
 

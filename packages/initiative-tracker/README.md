@@ -12,7 +12,7 @@ npm run dev -w @dm-tabletop/initiative-tracker     # demo page on http://127.0.0
 npm run build -w @dm-tabletop/initiative-tracker   # dist/initiative-tracker.js + dist/types
 ```
 
-The built file is about 100 kB (26 kB gzipped); about 28 kB of that is the creature list. The full stat blocks are a separate file, loaded only when the host asks for them (see "Stat blocks").
+The built file is about 120 kB (33 kB gzipped); most of that is the two creature lists. The full SRD stat blocks are a separate file, loaded only when the host asks for them (see "Stat blocks").
 
 ## Use
 
@@ -83,19 +83,19 @@ start with `it-`; they are not a stable API, the variables are.
 
 ### Options
 
-| Option          | Type                       | Default        | Meaning                                                                                       |
-| --------------- | -------------------------- | -------------- | --------------------------------------------------------------------------------------------- |
-| `storage`       | `EncounterStorage \| null` | localStorage   | Where encounters are saved. `null` turns saving off and hides the folder and new buttons.     |
-| `creatures`     | `CreatureTemplate[]`       | `srdCreatures` | Autocomplete list. It replaces the built-in list; spread `srdCreatures` into yours to extend. |
-| `rng`           | `() => number` in [0, 1)   | `Math.random`  | Random source for rolls (inject a fake one in tests).                                         |
-| `onChange`      | `(state) => void`          | none           | Called after every change the user makes (not after `setState`).                              |
-| `onRowEdit`     | `(row) => void`            | none           | Called when the user changes the HP, max HP or AC of a linked row.                            |
-| `onLoad`        | `(state) => void`          | none           | Called after an encounter was opened or the last session restored.                            |
-| `onLinkClick`   | `(row) => void`            | none           | When given, linked rows show a button that calls this.                                        |
-| `onLimit`       | `(reason: string) => void` | none           | Called when `storage.save` rejects with `code === 'LIMIT'`.                                   |
-| `initialState`  | `TrackerState`             | last session   | Start from this state instead of restoring the last session.                                  |
-| `autosaveDelay` | `number` (ms)              | `400`          | Wait after the last change before the working state is autosaved.                             |
-| `statBlocks`    | `{ load, pageUrl? }`       | none           | When given, rows filled from the creature list get a book button that opens the stat block.   |
+| Option          | Type                       | Default            | Meaning                                                                                                                    |
+| --------------- | -------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `storage`       | `EncounterStorage \| null` | localStorage       | Where encounters are saved. `null` turns saving off and hides the folder and new buttons.                                  |
+| `creatures`     | `CreatureTemplate[]`       | `defaultCreatures` | Autocomplete list. It replaces the built-in list (`srdCreatures` then `pf2eCreatures`); spread those into yours to extend. |
+| `rng`           | `() => number` in [0, 1)   | `Math.random`      | Random source for rolls (inject a fake one in tests).                                                                      |
+| `onChange`      | `(state) => void`          | none               | Called after every change the user makes (not after `setState`).                                                           |
+| `onRowEdit`     | `(row) => void`            | none               | Called when the user changes the HP, max HP or AC of a linked row.                                                         |
+| `onLoad`        | `(state) => void`          | none               | Called after an encounter was opened or the last session restored.                                                         |
+| `onLinkClick`   | `(row) => void`            | none               | When given, linked rows show a button that calls this.                                                                     |
+| `onLimit`       | `(reason: string) => void` | none               | Called when `storage.save` rejects with `code === 'LIMIT'`.                                                                |
+| `initialState`  | `TrackerState`             | last session       | Start from this state instead of restoring the last session.                                                               |
+| `autosaveDelay` | `number` (ms)              | `400`              | Wait after the last change before the working state is autosaved.                                                          |
+| `statBlocks`    | `{ load, has?, pageUrl? }` | none               | When given, rows filled from the SRD list get a book button that opens the creature's stat block.                          |
 
 ### State
 
@@ -146,7 +146,8 @@ A row can carry a `link`, a string the tracker only stores, to tie it to somethi
 - In the HP field type a number to set it, or `-5` / `+3` to change it. Max HP is the next field.
   While the HP field has focus, a small box under it has an amount (1 to start with) and **-** /
   **+** buttons that take that many hit points away or add them, by the same rules: never below 0,
-  never above max HP when one is set. **Escape** closes the box.
+  but above max HP if you add that much (healing past the maximum is the DM's call). **Escape**
+  closes the box.
 - Reorder by dragging the handle (the row follows the pointer while the others slide aside), or
   focus the handle and press the up and down arrow keys.
 - The encounter's name sits above the list. Changes are saved on their own a moment after the
@@ -193,13 +194,27 @@ npm install --no-save pdfjs-dist@4
 node packages/initiative-tracker/scripts/build-creatures.mjs path/to/SRD_CC_v5.1.pdf
 ```
 
+`pf2eCreatures` has the creatures of Pathfinder Monster Core and Monster Core 2 (Paizo, ORC License,
+see [NOTICE.md](NOTICE.md)): `{ id, name, ac, hp, initiativeBonus, level, ruleset: 'PF2e' }`. The
+initiative bonus is the creature's Perception, which Pathfinder rolls initiative with; there are no
+hit dice (fixed hit points). Names that are Reserved Material under the ORC License (deities, planes
+and other places, named characters) are left out. Suggestions show the `ruleset` tag. To regenerate
+the file (it is committed), check out the Foundry VTT PF2e system
+(https://github.com/foundryvtt/pf2e) and run:
+
+```
+node packages/initiative-tracker/scripts/build-pf2e-creatures.mjs path/to/pf2e
+```
+
+`defaultCreatures` is both lists, SRD first.
+
 It writes both files. The stat blocks are read from the PDF's fonts (bold italic trait names,
 bold section headings); a test checks a sample of them against the printed stat blocks.
 
 ### Stat blocks
 
-With the `statBlocks` option, a row filled from the creature list shows a small book button in its
-name cell. It opens the creature's full stat block in a panel at the side of the window (along the
+With the `statBlocks` option, a row filled from the SRD creature list shows a small book button in
+its name cell (`has(monsterId)` picks other rows, for a host with stat blocks of its own). It opens the creature's full stat block in a panel at the side of the window (along the
 bottom on a phone), without leaving the tracker; × or Escape closes it. `load(monsterId)` returns
 the stat block (it is called once per creature), `pageUrl(monsterId)` adds a "Full page" link.
 
