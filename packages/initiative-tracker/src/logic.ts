@@ -125,6 +125,22 @@ export function rollInitiative(bonus: number, rng: () => number = Math.random): 
   return die + (Number(bonus) || 0);
 }
 
+/**
+ * Rolls hit dice written like "2d6" or "18d10+36" (never less than 1 hit point). Returns null
+ * for anything else.
+ */
+export function rollHitDice(hitDice: string, rng: () => number = Math.random): number | null {
+  const m = /^\s*(\d+)\s*d\s*(\d+)\s*(?:([+-])\s*(\d+))?\s*$/i.exec(String(hitDice || ''));
+  if (!m) return null;
+  const count = Number(m[1]);
+  const sides = Number(m[2]);
+  if (!count || !sides || count > 1000) return null;
+  let total = 0;
+  for (let i = 0; i < count; i++) total += Math.min(sides, Math.floor(rng() * sides) + 1);
+  if (m[3]) total += (m[3] === '-' ? -1 : 1) * Number(m[4]);
+  return Math.max(1, total);
+}
+
 export function addRow(
   state: TrackerState,
   init: Partial<TrackerRow> = {},

@@ -119,7 +119,7 @@ interface TrackerState {
 
 `migrate(anything)` turns old or damaged saved data into a valid current state. The pure
 functions the UI uses (`sortByInitiative`, `nextTurn`, `resetRound`, `rollInitiative`, `addRow`,
-`removeRow`, `clear`, `moveRow`, `applyHpInput`, `changeHp`) are exported too.
+`removeRow`, `clear`, `moveRow`, `applyHpInput`, `changeHp`, `rollHitDice`) are exported too.
 
 ### Linking rows
 
@@ -137,6 +137,9 @@ A row can carry a `link`, a string the tracker only stores, to tie it to somethi
   initiative with empty rows last (ties: higher bonus, then the order they were in). **Next** moves
   the turn on, skipping empty rows; after the last creature the round counter goes up. **Reset
   round** goes back to round 1.
+- A creature picked from the list can also roll its hit points: the die button in the HP cell
+  (shown the same way as the d20, labelled with the die, e.g. "d6") rolls its hit dice and sets HP
+  and max HP to the result.
 - While the initiative field has focus, a small box under it has an amount (1 to start with) and
   **-** / **+** buttons that change the initiative by that much.
 - In the HP field type a number to set it, or `-5` / `+3` to change it. Max HP is the next field.

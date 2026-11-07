@@ -13,6 +13,7 @@ import {
   nextTurn,
   removeRow,
   resetRound,
+  rollHitDice,
   rollInitiative,
   sortByInitiative,
   updateRow,
@@ -274,6 +275,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       '[data-action="init-up"]': 'Add the amount to initiative, ' + label,
       '[data-field="ac"]': 'Armor class, ' + label,
       '[data-action="roll"]': 'Roll initiative for ' + label,
+      '[data-action="roll-hp"]': 'Roll hit points for ' + label,
       '[data-grip]': 'Reorder ' + label + '. Drag, or press the up and down arrow keys',
       '[data-action="remove"]': 'Remove ' + label,
       '[data-action="link"]': 'Show ' + label + ' on the table',
@@ -318,6 +320,16 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   // when the creature has a max HP (it is down).
   const blankZero = (n: number) => (n ? String(n) : '');
   const hpText = (row: TrackerRow) => (row.hp || row.maxHp ? String(row.hp) : '');
+
+  // the creature a row was filled from, for its hit dice
+  const creatureOf = (row: TrackerRow) =>
+    row.monsterId ? creatures.find((c) => c.id === row.monsterId) : undefined;
+  const hitDiceOf = (row: TrackerRow) => {
+    const c = creatureOf(row);
+    return c && c.hitDice && rollHitDice(c.hitDice, () => 0) !== null ? c.hitDice : '';
+  };
+  // the HP roll button shows the die it rolls ("d6"), like the d20 of initiative
+  const hpDieText = (hitDice: string) => (hitDice ? 'd' + /d\s*(\d+)/i.exec(hitDice)[1] : '');
 
   const modText = (row: TrackerRow) => {
     if (!row.initiativeBonus && !row.monsterId) return '';
@@ -441,11 +453,17 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     // Current HP takes most of the cell, max HP a small part on the right (the / sits over its
     // left padding). The - / + box comes after max HP so Tab goes HP, max HP, -, amount, +.
     const hpPop = stepBox('hp', 'Change HP');
+    // A creature from the list can roll its hit points, as on the first tracker: the button shows
+    // on hover, or while the cell is in use, and only for a row with hit dice.
+    const hitDice = hitDiceOf(row);
+    const hpRoll = button('roll-hp', '', hpDieText(hitDice), 'it-d20 it-hp-roll');
+    hpRoll.hidden = !hitDice;
     hpCell.append(
       hpInput,
       el(doc, 'span', { class: 'it-slash', 'aria-hidden': 'true' }, '/'),
       maxInput,
       hpPop,
+      hpRoll, // after the box, so Tab still goes HP, max HP, -, amount, +
       el(doc, 'span', { class: 'it-down', hidden: true }, 'Down'),
     );
     const ac = inputCell(
@@ -489,6 +507,12 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       input.value = value;
     };
     set('initiative', blankZero(row.initiative));
+    const hpRoll = tr.querySelector('[data-action="roll-hp"]') as HTMLButtonElement | null;
+    if (hpRoll) {
+      const hitDice = hitDiceOf(row);
+      hpRoll.hidden = !hitDice;
+      if (hpRoll.textContent !== hpDieText(hitDice)) hpRoll.textContent = hpDieText(hitDice);
+    }
     const mod = tr.querySelector('.it-mod');
     if (mod && mod.textContent !== modText(row)) mod.textContent = modText(row);
     set('name', row.name);
@@ -963,6 +987,18 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
         renderRows();
         say('Rolled initiative for everyone');
         break;
+      case 'roll-hp': {
+        const row = id && state.rows.find((r) => r.id === id);
+        const hitDice = row ? hitDiceOf(row) : '';
+        if (!hitDice) break;
+        const hp = rollHitDice(hitDice, rng);
+        commit(updateRow(state, id, { hp, maxHp: hp }));
+        const next = state.rows.find((r) => r.id === id);
+        syncInputs(rowEl(id), next);
+        edited(id);
+        say(`${labelOf(next, state.rows.indexOf(next))}: rolled ${hp} HP`);
+        break;
+      }
       case 'roll':
         if (id) {
           const row = state.rows.find((r) => r.id === id);

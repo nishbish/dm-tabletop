@@ -148,6 +148,20 @@ describe('rendering and actions', () => {
     expect(document.activeElement).toBe(field(row, 'initiative'));
   });
 
+  it('rolls hit points from the hit dice of a creature picked from the list', async () => {
+    await make({ rng: () => 0.999 }).ready;
+    const row = rows()[0];
+    const roll = row.querySelector('[data-action="roll-hp"]') as HTMLButtonElement;
+    expect(roll.hidden).toBe(true); // nothing to roll for a row without a creature
+    type(field(row, 'name'), 'gobl');
+    click($('.it-suggest [role="option"]'));
+    expect(roll.hidden).toBe(false);
+    expect(roll.textContent).toBe('d6');
+    click(roll); // goblin: 2d6, the highest roll
+    expect(tracker.getState().rows[0]).toMatchObject({ hp: 12, maxHp: 12 });
+    expect(field(rows()[0], 'hp').value).toBe('12');
+  });
+
   it('shows the d20 button while the initiative cell is in use', async () => {
     await make().ready;
     const cell = rows()[1].querySelector('.it-c-init');

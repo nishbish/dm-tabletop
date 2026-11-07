@@ -12,6 +12,7 @@ import {
   nextTurn,
   removeRow,
   resetRound,
+  rollHitDice,
   rollInitiative,
   sortByInitiative,
   linkRow,
@@ -363,5 +364,19 @@ describe('empty rows', () => {
     expect(kept.turn).toBe(1);
     const full = withRows([['a', 1]]);
     expect(withoutBlankRows(full)).toBe(full);
+  });
+});
+
+describe('rollHitDice', () => {
+  it('rolls the dice and adds the modifier, never below 1', () => {
+    expect(rollHitDice('2d6', () => 0)).toBe(2);
+    expect(rollHitDice('2d6', () => 0.999)).toBe(12);
+    expect(rollHitDice('18d10+36', () => 0)).toBe(54);
+    expect(rollHitDice('1d4-3', () => 0)).toBe(1);
+  });
+
+  it('refuses anything that is not dice', () => {
+    expect(rollHitDice('', () => 0)).toBeNull();
+    expect(rollHitDice('lots', () => 0)).toBeNull();
   });
 });

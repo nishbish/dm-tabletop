@@ -22,6 +22,7 @@ export {
   nextTurn,
   resetRound,
   rollInitiative,
+  rollHitDice,
   applyHpInput,
   changeHp,
   migrate,

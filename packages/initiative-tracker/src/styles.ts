@@ -243,7 +243,7 @@ export const css: string = `
 .it-rows > .it-row:last-child > .it-td:last-child { clip-path: ${cutCorner('bottom right', CELL_CUT)}; }
 .it-head, .it-row {
   display: grid; align-items: stretch; gap: 3px; margin: 0 0 2px;
-  grid-template-columns: minmax(10.5rem, 13.5rem) minmax(0, 1fr) 8.5rem 4.5rem 2.75rem;
+  grid-template-columns: minmax(10.5rem, 13.5rem) minmax(0, 1fr) 10rem 4.5rem 2.75rem;
 }
 .it-th {
   padding: 6px 12px; background: var(--_head-bg); color: var(--_head-fg);
@@ -290,10 +290,12 @@ export const css: string = `
   width: 2.5rem; min-height: 2.5rem; height: 2.5rem; padding: 0; font-size: 0.72rem; background: transparent; clip-path: none;
   opacity: 0; pointer-events: none; transition: opacity 0.2s ease-in-out;
 }
-.it-c-init--open button.it-d20 { opacity: 1; pointer-events: auto; }
+.it-c-init--open button.it-d20, .it-c-hp--open button.it-d20 { opacity: 1; pointer-events: auto; }
 @media (hover: hover) {
-  .it-c-init:hover button.it-d20 { opacity: 1; pointer-events: auto; }
+  .it-c-init:hover button.it-d20, .it-c-hp:hover button.it-d20 { opacity: 1; pointer-events: auto; }
 }
+/* the HP roll sits just left of max HP */
+.it-root button.it-hp-roll { right: calc(3.4rem + 2px); }
 .it-root button.it-d20::before { inset: 3px; clip-path: ${HEXAGON}; background: var(--_accent); }
 .it-root button.it-d20:hover:not(:disabled) { --edge: transparent; filter: brightness(1.15); }
 
@@ -413,6 +415,7 @@ export const css: string = `
   }
   .it-c-hp, .it-c-ac { padding-top: 10px; }
   .it-c-hp .it-slash { top: calc(50% + 5px); } /* the fields sit 10px lower, under their label */
+  .it-root button.it-hp-roll { top: calc(50% - 1.25rem + 5px); }
   .it-c-hp .it-hp { padding-left: 10px; }
   .it-c-ac input { padding-left: 10px; }
   .it-tools-left { flex: 1 1 100%; }
