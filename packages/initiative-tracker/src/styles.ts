@@ -359,6 +359,9 @@ export const css: string = `
 .it-round-num { font-weight: var(--_weight-strong); font-variant-numeric: tabular-nums; min-width: 1ch; }
 .it-root button.it-icon { --edge: transparent; --fill: transparent; width: var(--_control-height); padding: 0; font-size: 1.5rem; clip-path: none; }
 .it-root button.it-icon::before { display: none; }
+/* the icon buttons (folder, new encounter, reset round) get the same faint fill on hover as the
+   encounter name, not the accent fill of the other buttons, which hid the icon */
+.it-root button.it-icon:hover:not(:disabled) { --edge: rgba(127, 127, 127, 0.14); }
 .it-root button.it-add {
   --edge: var(--_accent); --fill: var(--_accent); --ink: var(--_accent-fg);
   width: 3.75rem; height: 3.75rem; min-height: 3.75rem; padding: 0; font-size: 2.2rem; line-height: 1; clip-path: ${OCTAGON};
