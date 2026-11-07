@@ -346,6 +346,26 @@ describe('autocomplete', () => {
     expect(tracker.getState().rows[0].name).toBe('Owlbear');
   });
 
+  it('suggests Pathfinder creatures too, tagged, with Perception as the bonus', async () => {
+    await make().ready;
+    type(field(rows()[0], 'name'), 'goblin warr');
+    const option = $$('.it-suggest [role="option"]').find((o) =>
+      o.textContent.includes('Goblin Warrior'),
+    );
+    expect(option.textContent).toContain('PF2e');
+    click(option);
+    expect(tracker.getState().rows[0]).toMatchObject({
+      name: 'Goblin Warrior',
+      ac: 16,
+      hp: 6,
+      initiativeBonus: 2,
+      monsterId: 'pf2e-goblin-warrior',
+    });
+    // fixed hit points: no hit dice to roll
+    const roll = rows()[0].querySelector('[data-action="roll-hp"]') as HTMLButtonElement;
+    expect(roll.hidden).toBe(true);
+  });
+
   it('uses a creature list supplied by the host', async () => {
     await make({ creatures: [{ id: 'x', name: 'Xyzzy', ac: 4, hp: 9, dex: 18 }] }).ready;
     click(action('add'));

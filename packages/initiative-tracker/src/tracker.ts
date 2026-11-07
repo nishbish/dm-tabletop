@@ -1,4 +1,4 @@
-import { creatureBonus, searchCreatures, srdCreatures } from './creatures';
+import { creatureBonus, defaultCreatures, searchCreatures } from './creatures';
 import {
   addRow,
   applyHpInput,
@@ -98,7 +98,7 @@ const intOr = (text: string, fallback: number) => {
 export function createTracker(container: HTMLElement, options: TrackerOptions = {}): Tracker {
   const doc = container.ownerDocument;
   const rng = options.rng || Math.random;
-  const creatures: CreatureTemplate[] = options.creatures || srdCreatures;
+  const creatures: CreatureTemplate[] = options.creatures || defaultCreatures;
   const autosaveDelay = options.autosaveDelay === undefined ? 400 : options.autosaveDelay;
 
   let storage: EncounterStorage | null = null;
@@ -764,7 +764,10 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
         'data-index': i,
         'aria-selected': 'false',
       });
-      li.append(el(doc, 'span', {}, c.name), el(doc, 'small', {}, `AC ${c.ac} · HP ${c.hp}`));
+      li.append(
+        el(doc, 'span', {}, c.name),
+        el(doc, 'small', {}, `${c.ruleset ? c.ruleset + ' · ' : ''}AC ${c.ac} · HP ${c.hp}`),
+      );
       ul.append(li);
     });
     (input.parentElement as HTMLElement).append(ul);

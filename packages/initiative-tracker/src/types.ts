@@ -46,6 +46,10 @@ export interface CreatureTemplate {
   /** Used instead of `dex` when given. */
   initiativeBonus?: number;
   cr?: number;
+  /** Creature level, for game systems that use levels (Pathfinder). */
+  level?: number;
+  /** A short tag shown with the suggestion when the list mixes game systems, e.g. "PF2e". */
+  ruleset?: string;
 }
 
 export interface EncounterSummary {
@@ -72,7 +76,10 @@ export interface EncounterStorage {
 export interface TrackerOptions {
   /** Encounter storage. Defaults to localStorage when available; `null` turns storage off. */
   storage?: EncounterStorage | null;
-  /** Autocomplete list. Replaces the built-in SRD list; concat `srdCreatures` to extend it. */
+  /**
+   * Autocomplete list. Replaces the built-in list (`defaultCreatures`: `srdCreatures` then
+   * `pf2eCreatures`); spread those into yours to extend it.
+   */
   creatures?: CreatureTemplate[];
   /** Random source returning [0, 1). Defaults to Math.random. */
   rng?: () => number;
