@@ -123,10 +123,11 @@ const CUT_INNER = poly('max(0px, calc(var(--_cut) - 0.83px))');
 const slant = (dir: string) =>
   `linear-gradient(to ${dir}, transparent 50%, var(--_border-strong) 50%, var(--_border-strong) calc(50% + 1px), transparent calc(50% + 1px))`;
 const SLANTS = ['bottom right', 'bottom left', 'top left', 'top right'].map(slant).join(', ');
-// A corner cut of one cell sitting inside a cut panel: the panel's cut, made smaller so the
-// line of panel colour along the slant is as thick as along the straight sides (inset 2px).
-const CELL_CUT = 'max(0px, calc(var(--_cut) - 1.17px))';
-const CELL_CUT_NARROW = 'max(0px, calc(var(--_cut) - 3.51px))'; // inset 6px (narrow layout)
+// The lines of the creature list: between the cells and round the outside, all this wide.
+const LINE = 1; // px
+// A corner cell sits LINE px inside the cut panel: its cut is the panel's, made smaller so the
+// line along the slant is as thick as along the straight sides.
+const CELL_CUT = `max(0px, calc(var(--_cut) - ${((2 - Math.SQRT2) * LINE).toFixed(2)}px))`;
 const cutCorner = (corner: string, c: string) =>
   ({
     'top left': `polygon(${c} 0, 100% 0, 100% 100%, 0 100%, 0 ${c})`,
@@ -226,7 +227,7 @@ export const css: string = `
 .it-saved-empty { margin: 4px; color: var(--_muted); }
 
 /* the creature list: a cream panel with dark cells, as on the first tracker */
-.it-table { position: relative; margin-top: 4px; padding: 2px 2px 0; }
+.it-table { position: relative; margin-top: 4px; padding: ${LINE}px ${LINE}px 0; }
 .it-table::before { background: var(--_rule); }
 /* the gap under the last row stays inside the list (it would otherwise collapse out of it and
    leave the bottom edge without a line) */
@@ -237,7 +238,7 @@ export const css: string = `
 .it-rows > .it-row:last-child > .it-td:first-child { clip-path: ${cutCorner('bottom left', CELL_CUT)}; }
 .it-rows > .it-row:last-child > .it-td:last-child { clip-path: ${cutCorner('bottom right', CELL_CUT)}; }
 .it-head, .it-row {
-  display: grid; align-items: stretch; gap: 3px; margin: 0 0 2px;
+  display: grid; align-items: stretch; gap: ${LINE}px; margin: 0 0 ${LINE}px;
   grid-template-columns: minmax(10.5rem, 13.5rem) minmax(0, 1fr) 8.5rem 4.5rem 2.75rem;
 }
 .it-th {
@@ -384,11 +385,15 @@ export const css: string = `
 }
 @container it (max-width: 720px) {
   .it-head { display: none; }
-  .it-table { padding: 6px; }
   .it-rows > .it-row:last-child { margin-bottom: 0; }
+  /* the head is hidden: the corners are the first row's initiative and remove, and the last
+     row's HP and AC */
   .it-rows > .it-row:last-child > .it-td:first-child, .it-rows > .it-row:last-child > .it-td:last-child { clip-path: none; }
-  .it-rows > .it-row:first-child > .it-c-init { clip-path: ${cutCorner('top left', CELL_CUT_NARROW)}; }
-  .it-rows > .it-row:first-child > .it-c-remove { clip-path: ${cutCorner('top right', CELL_CUT_NARROW)}; }
+  .it-rows > .it-row:first-child > .it-c-init { clip-path: ${cutCorner('top left', CELL_CUT)}; }
+  .it-rows > .it-row:first-child > .it-c-remove { clip-path: ${cutCorner('top right', CELL_CUT)}; }
+  .it-rows > .it-row:last-child > .it-c-hp { clip-path: ${cutCorner('bottom left', CELL_CUT)}; }
+  .it-rows > .it-row:last-child > .it-c-ac { clip-path: ${cutCorner('bottom right', CELL_CUT)}; }
+  .it-table { padding-bottom: ${LINE}px; }
   .it-row {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.75rem;
     grid-template-areas: 'init init remove' 'name name name' 'hp ac ac';
