@@ -27,7 +27,18 @@ describe('built-in Pathfinder creature data (Monster Core, ORC License)', () => 
 
   it('leaves out names that are Reserved Material (deities, planes, places, named characters)', () => {
     const names = pf2eCreatures.map((c) => c.name).join('|');
-    for (const reserved of ['Pharasma', 'Leng', 'Tindalos', 'Treerazer', 'Grisantian', 'Shade (']) {
+    for (const reserved of [
+      'Pharasma',
+      'Leng',
+      'Tindalos',
+      'Treerazer',
+      'Grisantian',
+      'Shade (',
+      // unique creatures (named individuals)
+      'Volnagur',
+      'Sorvuth-Ka',
+      'Grim Reaper',
+    ]) {
       expect(names).not.toContain(reserved);
     }
   });
