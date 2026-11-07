@@ -10,6 +10,8 @@
 // Corners are cut (chamfered, like the edge of a die) with `clip-path`, never rounded; the default
 // cut is 0, which gives square corners. Buttons draw their border as a second, smaller cut shape
 // so the border follows the cut.
+import { statBlockCss } from './statblock';
+
 export const STYLE_ID = 'it-styles';
 
 export interface ThemeVariable {
@@ -310,6 +312,15 @@ export const css: string = `
 .it-root button.it-link::before { display: none; }
 .it-root button.it-link:hover:not(:disabled) { --edge: transparent; opacity: 1; --ink: var(--_row-fg); }
 .it-name { min-width: 0; }
+/* the stat block button: faint, like the remove button, until the pointer is on the row */
+.it-root button.it-info { --edge: transparent; --fill: transparent; --ink: var(--_row-fg); flex: none; width: 2rem; min-height: 2rem; padding: 0; clip-path: none; opacity: 0.45; transition: opacity 0.15s ease-in-out; }
+.it-root button.it-info::before { display: none; }
+.it-root button.it-info svg { display: block; margin: auto; }
+.it-row:hover button.it-info, .it-root button.it-info:focus-visible, .it-root button.it-info[aria-expanded='true'] { opacity: 0.85; }
+.it-root button.it-info:hover:not(:disabled) { --edge: transparent; opacity: 1; --ink: var(--_row-fg); }
+@media (hover: none) {
+  .it-root button.it-info { opacity: 0.7; }
+}
 .it-c-hp { gap: 0; }
 .it-c-hp .it-hp { flex: 1 1 auto; width: auto; }
 .it-c-hp .it-maxhp { flex: none; width: 3.4rem; padding-left: 1rem; padding-right: 6px; opacity: 0.8; font-size: 0.9rem; }
@@ -422,4 +433,36 @@ export const css: string = `
   .it-tools-left button { flex: 1 1 0; padding-inline: 8px; }
   .it-tools-right { flex: 1 1 100%; justify-content: space-between; }
 }
-`;
+
+/* The stat block panel (on <body>, outside .it-root, so it carries its own working copies): along
+   the right of the window, or along the bottom on a phone. Not modal; the tracker stays usable. */
+.it-panel { ${workingCopies('light')} }
+@media (prefers-color-scheme: dark) {
+  .it-panel { ${workingCopies('dark')} }
+}
+.it-panel {
+  box-sizing: border-box; position: fixed; z-index: 1000; top: 0; right: 0; bottom: 0; width: min(27rem, 100vw);
+  overflow-y: auto; overscroll-behavior: contain; padding: 18px 20px 24px;
+  background: var(--_bg); color: var(--_fg); border-left: 1px solid var(--_border-strong); box-shadow: var(--_shadow);
+  font: var(--_weight) 15px/1.45 var(--_font);
+}
+.it-panel[hidden] { display: none; }
+.it-panel *, .it-panel *::before, .it-panel *::after { box-sizing: border-box; }
+.it-panel :focus-visible { outline: 3px solid var(--_focus); outline-offset: 2px; }
+.it-panel .sb { --sb-accent: var(--_fg); --sb-rule: var(--_border-strong); }
+.it-panel .sb-name { padding-right: 2.5rem; }
+.it-panel h2, .it-panel h3 { font-weight: var(--_weight-strong); }
+.it-panel button.it-panel-close {
+  position: absolute; top: 8px; right: 8px; width: var(--_control-height); height: var(--_control-height); padding: 0;
+  font: inherit; font-size: 1.6rem; line-height: 1; color: var(--_fg); background: transparent; border: 0; cursor: pointer;
+}
+.it-panel button.it-panel-close:hover { background: rgba(127, 127, 127, 0.14); }
+.it-panel-note { color: var(--_muted); margin: 8px 0; }
+.it-panel-page { margin: 18px 0 0; }
+.it-panel-page a { color: inherit; font-weight: var(--_weight-strong); }
+.it-panel-credit { margin: 14px 0 0; font-size: 0.78rem; color: var(--_muted); }
+.it-panel-credit a { color: inherit; }
+@media (max-width: 640px) {
+  .it-panel { top: auto; left: 0; width: auto; max-height: 72vh; border-left: 0; border-top: 1px solid var(--_border-strong); }
+}
+${statBlockCss}`;

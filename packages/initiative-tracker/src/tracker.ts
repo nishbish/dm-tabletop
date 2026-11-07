@@ -20,6 +20,8 @@ import {
   withoutBlankRows,
 } from './logic';
 import { css, STYLE_ID } from './styles';
+import { escapeHtml, renderStatBlock, SRD_CREDIT_HTML } from './statblock';
+import type { Monster } from './statblock';
 import { LAST_SESSION_ID, LocalStorageEncounterStorage, localStorageAvailable } from './storage';
 import {
   CreatureTemplate,
@@ -74,6 +76,12 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 // A plain folder outline for the saved-encounters button (drawn here, no icon font needed).
+// An open book, for the stat block button in the name cell.
+const BOOK_ICON =
+  '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">' +
+  '<path d="M12 6.5C10 5 7 4.5 3 5v13c4-.5 7 0 9 1.5 2-1.5 5-2 9-1.5V5c-4-.5-7 0-9 1.5zm0 0V19" ' +
+  'fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+
 const FOLDER_ICON =
   '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">' +
   '<path d="M3 5h6.5l2 2H21v12H3z" fill="currentColor"/></svg>';
@@ -279,6 +287,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       '[data-grip]': 'Reorder ' + label + '. Drag, or press the up and down arrow keys',
       '[data-action="remove"]': 'Remove ' + label,
       '[data-action="link"]': 'Show ' + label + ' on the table',
+      '[data-action="info"]': 'Stat block for ' + label,
     };
     Object.keys(names).forEach((sel) => {
       const node = tr.querySelector(sel);
@@ -420,6 +429,21 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     nameField.value = row.name;
     wrap.append(nameField);
     nameCell.append(wrap);
+    if (options.statBlocks) {
+      // the stat block button: only on a row filled from the creature list
+      const info = el(doc, 'button', {
+        type: 'button',
+        class: 'it-info',
+        'data-action': 'info',
+        'aria-label': 'Stat block for ' + label,
+        title: 'Stat block',
+        'aria-expanded': String(panelRowId === row.id),
+        'aria-controls': panelId,
+      });
+      info.innerHTML = BOOK_ICON;
+      info.hidden = !row.monsterId;
+      nameCell.append(info);
+    }
     if (row.link && options.onLinkClick) {
       nameCell.append(
         el(
@@ -515,6 +539,8 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     }
     const mod = tr.querySelector('.it-mod');
     if (mod && mod.textContent !== modText(row)) mod.textContent = modText(row);
+    const info = tr.querySelector('[data-action="info"]') as HTMLButtonElement | null;
+    if (info) info.hidden = !row.monsterId;
     set('name', row.name);
     set('hp', hpText(row));
     set('maxhp', blankZero(row.maxHp));
@@ -571,6 +597,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     }
     closeSuggest();
     popOpen = null;
+    if (panelRowId && !state.rows.some((r) => r.id === panelRowId)) closePanel(false);
     rowsEl.textContent = '';
     state.rows.forEach((row, i) => {
       const tr = buildRow(row, i);
@@ -792,7 +819,112 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     if (tr && row) syncInputs(tr, row);
     relabelRow(id);
     edited(id);
+    // the panel is showing this row: show the creature it was changed to
+    if (panelRowId === id && row) void openPanel(row, false);
     input.focus();
+  }
+
+  // ---------- stat block panel ----------
+  // A panel at the side of the window (a sheet along the bottom on a phone) with the stat block of
+  // a row's creature, so it can be read mid-combat without leaving the tracker. It is not modal:
+  // the tracker stays usable beside it. It lives on <body> (the tracker is a size container, which
+  // would otherwise hold a fixed panel inside its own box).
+  const panelId = `it-panel-${instance}`;
+  let panel: HTMLElement | null = null;
+  let panelBody: HTMLElement | null = null;
+  let panelRowId: string | null = null;
+  let panelToken = 0;
+  const statCache = new Map<string, Promise<Monster | null>>();
+
+  function ensurePanel(): HTMLElement {
+    if (panel) return panel;
+    panel = el(doc, 'aside', {
+      class: 'it-panel',
+      id: panelId,
+      role: 'dialog',
+      'aria-modal': 'false',
+      'aria-label': 'Stat block',
+      hidden: true,
+    });
+    const close = button('close-panel', 'Close stat block', '\u00D7', 'it-panel-close');
+    panelBody = el(doc, 'div', { class: 'it-panel-body' });
+    panel.append(close, panelBody);
+    panel.addEventListener('click', onPanelClick);
+    panel.addEventListener('keydown', onPanelKeydown);
+    doc.body.append(panel);
+    return panel;
+  }
+
+  function onPanelClick(e: Event) {
+    const btn = (e.target as Element).closest('[data-action="close-panel"]');
+    if (btn) closePanel(true);
+  }
+  function onPanelKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closePanel(true);
+    }
+  }
+
+  function infoButton(rowId: string): HTMLButtonElement | null {
+    const tr = rowEl(rowId);
+    return tr && (tr.querySelector('[data-action="info"]') as HTMLButtonElement | null);
+  }
+  function markOpen(rowId: string | null, open: boolean) {
+    const btn = rowId && infoButton(rowId);
+    if (btn) btn.setAttribute('aria-expanded', String(open));
+  }
+
+  async function openPanel(row: TrackerRow, focus = true) {
+    const source = options.statBlocks;
+    const box = ensurePanel();
+    markOpen(panelRowId, false);
+    panelRowId = row.id;
+    markOpen(row.id, true);
+    const token = ++panelToken;
+    const id = row.monsterId;
+    box.hidden = false;
+    panelBody.innerHTML = '<p class="it-panel-note">Loading\u2026</p>';
+    if (focus) (box.querySelector('.it-panel-close') as HTMLElement).focus();
+    if (!statCache.has(id)) {
+      // a failed load is not kept, so the next click tries again
+      const p = source.load(id).catch(() => {
+        statCache.delete(id);
+        return undefined;
+      });
+      statCache.set(id, p);
+    }
+    const monster = await statCache.get(id);
+    if (token !== panelToken || destroyed || !panelBody) return;
+    if (monster === undefined) {
+      panelBody.innerHTML = '<p class="it-panel-note">The stat block did not load. Try again.</p>';
+      return;
+    }
+    if (!monster) {
+      panelBody.innerHTML = '<p class="it-panel-note">No stat block for this creature.</p>';
+      return;
+    }
+    const titleId = `${panelId}-title`;
+    const page = source.pageUrl ? source.pageUrl(monster.id) : '';
+    panelBody.innerHTML =
+      renderStatBlock(monster, { headingLevel: 2, headingId: titleId }) +
+      (page
+        ? `<p class="it-panel-page"><a href="${escapeHtml(page)}" target="_blank" rel="noopener">Full page</a></p>`
+        : '') +
+      `<p class="it-panel-credit">${SRD_CREDIT_HTML}</p>`;
+    box.removeAttribute('aria-label');
+    box.setAttribute('aria-labelledby', titleId);
+  }
+
+  function closePanel(returnFocus: boolean) {
+    if (!panel || !panelRowId) return;
+    const rowId = panelRowId;
+    panelRowId = null;
+    panelToken++;
+    panel.hidden = true;
+    markOpen(rowId, false);
+    const btn = infoButton(rowId);
+    if (returnFocus && btn && !btn.hidden) btn.focus();
   }
 
   // ---------- storage ----------
@@ -1041,6 +1173,14 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
           (toolbar.querySelector('[data-action="add"]') as HTMLElement).focus();
         }
         break;
+      case 'info': {
+        const row = state.rows.find((r) => r.id === id);
+        if (row && row.monsterId) {
+          if (panelRowId === row.id) closePanel(true);
+          else void openPanel(row);
+        }
+        break;
+      }
       case 'link': {
         const row = state.rows.find((r) => r.id === id);
         if (row && options.onLinkClick) options.onLinkClick({ ...row });
@@ -1124,6 +1264,11 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       closePop();
       // the box's controls are hidden now, so focus goes back to the cell's own field
       if (inPop) (cell.querySelector(`[data-field="${fieldName}"]`) as HTMLElement).focus();
+      return;
+    }
+    if (e.key === 'Escape' && panelRowId && !(suggest && input === suggest.input)) {
+      e.preventDefault();
+      closePanel(true);
       return;
     }
     if (!suggest || input !== suggest.input) return;
@@ -1375,6 +1520,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       if (view) view.removeEventListener('pagehide', onPageHide);
       doc.removeEventListener('pointerdown', onDocPointerDown, true);
       root.remove();
+      if (panel) panel.remove();
       releaseStyles(doc);
     },
   };

@@ -8,6 +8,8 @@
   "types": "dist/types/index.d.ts",
   "files": [
     "dist/initiative-tracker.js",
+    "dist/statblock.js",
+    "dist/srd-monsters.json",
     "dist/types",
     "NOTICE.md"
   ],
@@ -15,13 +17,18 @@
     ".": {
       "types": "./dist/types/index.d.ts",
       "import": "./dist/initiative-tracker.js"
-    }
+    },
+    "./statblock": {
+      "types": "./dist/types/statblock.d.ts",
+      "import": "./dist/statblock.js"
+    },
+    "./srd-monsters.json": "./dist/srd-monsters.json"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "dev": "vite dev/ --host 127.0.0.1 --port 5174",
-    "build": "vite build && tsc -p tsconfig.build.json && vite build -c vite.page.config.mjs",
+    "build": "vite build && vite build -c vite.statblock.config.mjs && cp src/data/srd-monsters.json dist/ && tsc -p tsconfig.build.json && vite build -c vite.page.config.mjs",
     "e2e": "npm run build && playwright test"
   },
   "devDependencies": {

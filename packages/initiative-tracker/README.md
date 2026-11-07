@@ -12,7 +12,7 @@ npm run dev -w @dm-tabletop/initiative-tracker     # demo page on http://127.0.0
 npm run build -w @dm-tabletop/initiative-tracker   # dist/initiative-tracker.js + dist/types
 ```
 
-The built file is about 65 kB (16 kB gzipped); about 28 kB of that is the creature list.
+The built file is about 100 kB (26 kB gzipped); about 28 kB of that is the creature list. The full stat blocks are a separate file, loaded only when the host asks for them (see "Stat blocks").
 
 ## Use
 
@@ -95,6 +95,7 @@ start with `it-`; they are not a stable API, the variables are.
 | `onLimit`       | `(reason: string) => void` | none           | Called when `storage.save` rejects with `code === 'LIMIT'`.                                   |
 | `initialState`  | `TrackerState`             | last session   | Start from this state instead of restoring the last session.                                  |
 | `autosaveDelay` | `number` (ms)              | `400`          | Wait after the last change before the working state is autosaved.                             |
+| `statBlocks`    | `{ load, pageUrl? }`       | none           | When given, rows filled from the creature list get a book button that opens the stat block.   |
 
 ### State
 
@@ -182,6 +183,7 @@ or another is started.
 ### Creature data
 
 `srdCreatures` has the monsters and NPCs of the D&D 5e SRD 5.1: `{ id, name, ac, hp, hitDice, dex, cr }`.
+The full stat blocks (`srd-monsters.json`, the `Monster` type) have the same ids.
 The initiative bonus is `floor((dex - 10) / 2)`. A `CreatureTemplate` may give `initiativeBonus`
 directly instead of `dex`. To regenerate the file (it is committed), download the SRD 5.1 PDF
 (Creative Commons edition) from the page named below and run:
@@ -189,6 +191,34 @@ directly instead of `dex`. To regenerate the file (it is committed), download th
 ```
 npm install --no-save pdfjs-dist@4
 node packages/initiative-tracker/scripts/build-creatures.mjs path/to/SRD_CC_v5.1.pdf
+```
+
+It writes both files. The stat blocks are read from the PDF's fonts (bold italic trait names,
+bold section headings); a test checks a sample of them against the printed stat blocks.
+
+### Stat blocks
+
+With the `statBlocks` option, a row filled from the creature list shows a small book button in its
+name cell. It opens the creature's full stat block in a panel at the side of the window (along the
+bottom on a phone), without leaving the tracker; × or Escape closes it. `load(monsterId)` returns
+the stat block (it is called once per creature), `pageUrl(monsterId)` adds a "Full page" link.
+
+The full SRD stat blocks ship as `@dm-tabletop/initiative-tracker/srd-monsters.json` (about
+470 kB, 85 kB gzipped, so serve it on its own rather than bundling it). The renderer is exported
+too, also as the DOM-free `@dm-tabletop/initiative-tracker/statblock`, so a server can render the
+same markup into pages: `renderStatBlock(monster, { headingLevel, headingId, description })`
+returns HTML, `statBlockCss` its styles, `SRD_CREDIT_HTML` the credit line to show beside it.
+
+```js
+let all;
+createTracker(el, {
+  statBlocks: {
+    load: async (id) => {
+      all = all || (await fetch('/srd-monsters.json').then((r) => r.json()));
+      return all.find((m) => m.id === id) || null;
+    },
+  },
+});
 ```
 
 ### Accessibility
@@ -203,7 +233,7 @@ the arrow keys on their handle as well as dragging, and the name field is an ARI
 
 This work includes material taken from the System Reference Document 5.1 ("SRD 5.1") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.
 
-A host app that offers the built-in creature list should show this notice too.
+A host app that offers the built-in creature list or shows the stat blocks should show this notice too (the stat block panel shows a short credit line with links).
 
 ## Tests
 

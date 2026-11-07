@@ -1,5 +1,14 @@
 export { createTracker } from './tracker';
 export { srdCreatures, searchCreatures, initiativeBonusFromDex, creatureBonus } from './creatures';
+export {
+  renderStatBlock,
+  statBlockCss,
+  SRD_CREDIT_HTML,
+  abilityModifier,
+  challengeText,
+  metaText,
+} from './statblock';
+export type { Monster, MonsterEntry, StatBlockOptions } from './statblock';
 export { themeVariables } from './styles';
 export type { ThemeVariable } from './styles';
 export { LocalStorageEncounterStorage, LAST_SESSION_ID, localStorageAvailable } from './storage';
@@ -31,6 +40,7 @@ export type {
   CreatureTemplate,
   EncounterStorage,
   EncounterSummary,
+  StatBlockSource,
   Tracker,
   TrackerOptions,
   TrackerRow,
