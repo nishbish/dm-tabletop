@@ -75,12 +75,6 @@ export const themeVariables: ThemeVariable[] = [
     dark: '#07241a',
     description: 'Text and icons on the accent colour',
   },
-  {
-    name: 'remove',
-    light: '#8c3a35',
-    dark: '#8a4540',
-    description: 'The small remove button on each row (a muted red)',
-  },
   { name: 'focus', light: '#a35200', dark: '#ffc566', description: 'Keyboard focus ring' },
   { name: 'danger', light: '#a4161a', dark: '#ff9a9d', description: 'Clear and Delete buttons' },
   {
@@ -195,14 +189,19 @@ export const css: string = `
 .it-root button.it-danger:hover:not(:disabled) { --fill: var(--_surface); }
 .it-root button.it-armed { --edge: var(--_danger); --fill: var(--_danger); --ink: var(--_bg); }
 
-.it-header { position: relative; display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; margin-bottom: 12px; }
-/* the name reads as the encounter's title; a faint line under it shows it can be typed in */
-.it-enc-name {
-  font-size: 1.3rem; font-weight: var(--_weight-strong); width: 18rem; max-width: 100%;
-  background: transparent !important; border-color: transparent !important; border-bottom-color: var(--_border-strong) !important;
+.it-header { position: relative; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 12px; }
+/* the name reads as the encounter's title, the size of the column headings, with no line or
+   box; a faint fill on hover and while typing shows it is a field */
+.it-root input.it-enc-name {
+  font-size: 1.15rem; font-weight: var(--_weight-strong); width: 18rem; max-width: 100%;
+  background: transparent; border-color: transparent; padding-inline: 8px; clip-path: none;
 }
-/* only an underline, no box: a cut would clip the line short at both ends (beats .it-root input) */
-.it-root .it-enc-name { clip-path: none; }
+@supports (field-sizing: content) {
+  .it-root input.it-enc-name { width: auto; min-width: 8ch; field-sizing: content; }
+}
+.it-root input.it-enc-name:hover, .it-root input.it-enc-name:focus { background: rgba(127, 127, 127, 0.12); }
+.it-root input.it-enc-name:focus { outline: none; }
+.it-root button.it-folder, .it-root button.it-new { width: 2.25rem; }
 .it-root button.it-folder svg { display: block; margin: auto; }
 .it-root button.it-new { font-size: 1.7rem; font-weight: var(--_weight); line-height: 1; }
 .it-message:not(.it-sr) { margin: 0 0 0 10px; color: var(--_danger); font-weight: var(--_weight-strong); }
@@ -238,7 +237,7 @@ export const css: string = `
 .it-rows > .it-row:last-child > .it-td:last-child { clip-path: ${cutCorner('bottom right', CELL_CUT)}; }
 .it-head, .it-row {
   display: grid; align-items: stretch; gap: 3px; margin: 0 0 2px;
-  grid-template-columns: minmax(10.5rem, 13.5rem) minmax(0, 1fr) 8.5rem 6.5rem;
+  grid-template-columns: minmax(10.5rem, 13.5rem) minmax(0, 1fr) 8.5rem 4.5rem 2.75rem;
 }
 .it-th {
   padding: 6px 12px; background: var(--_head-bg); color: var(--_head-fg);
@@ -339,14 +338,9 @@ export const css: string = `
 .it-suggest li small { color: var(--_muted); }
 .it-suggest li[aria-selected='true'] { background: var(--_accent); color: var(--_accent-fg); }
 .it-suggest li[aria-selected='true'] small { color: inherit; }
-/* remove: a small muted red button at the end of the AC cell */
-.it-c-ac input { flex: 1 1 auto; width: auto; }
-.it-root button.it-x {
-  --edge: color-mix(in srgb, var(--_remove) 75%, var(--_row-fg)); --fill: var(--_remove); --ink: var(--_row-fg);
-  flex: none; width: 1.9rem; height: 1.9rem; min-height: 1.9rem; margin-right: 8px; padding: 0; font-size: 0.8rem; line-height: 1;
-}
-.it-root button.it-x::before { inset: 1px; }
-.it-root button.it-x:hover:not(:disabled) { --edge: color-mix(in srgb, var(--_remove) 55%, var(--_row-fg)); --fill: color-mix(in srgb, var(--_remove) 88%, var(--_row-fg)); }
+.it-root button.it-x { --edge: transparent; --fill: transparent; --ink: var(--_row-fg); width: 100%; min-height: 3.25rem; padding: 0; font-size: 1rem; clip-path: none; opacity: 0.8; }
+.it-root button.it-x::before { display: none; }
+.it-root button.it-x:hover:not(:disabled) { --edge: transparent; opacity: 1; --ink: var(--_row-fg); }
 
 /* Next, Sort and Clear under the list; the round and the big add button on the right */
 .it-toolbar { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; justify-content: space-between; margin: 16px 0 4px; }
@@ -383,16 +377,15 @@ export const css: string = `
   .it-table { padding: 6px; }
   .it-rows > .it-row:last-child { margin-bottom: 0; }
   .it-rows > .it-row:last-child > .it-td:first-child, .it-rows > .it-row:last-child > .it-td:last-child { clip-path: none; }
-  /* the head is hidden: the first row's initiative has both top corners, the last row's HP and AC the bottom ones */
-  .it-rows > .it-row:first-child > .it-c-init { clip-path: polygon(${CELL_CUT_NARROW} 0, calc(100% - ${CELL_CUT_NARROW}) 0, 100% ${CELL_CUT_NARROW}, 100% 100%, 0 100%, 0 ${CELL_CUT_NARROW}); }
-  .it-rows > .it-row:last-child > .it-c-hp { clip-path: ${cutCorner('bottom left', CELL_CUT_NARROW)}; }
-  .it-rows > .it-row:last-child > .it-c-ac { clip-path: ${cutCorner('bottom right', CELL_CUT_NARROW)}; }
+  .it-rows > .it-row:first-child > .it-c-init { clip-path: ${cutCorner('top left', CELL_CUT_NARROW)}; }
+  .it-rows > .it-row:first-child > .it-c-remove { clip-path: ${cutCorner('top right', CELL_CUT_NARROW)}; }
   .it-row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-areas: 'init init' 'name name' 'hp ac';
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.75rem;
+    grid-template-areas: 'init init remove' 'name name name' 'hp ac ac';
     margin-bottom: 8px;
   }
   .it-row .it-c-init { grid-area: init; }
+  .it-row .it-c-remove { grid-area: remove; }
   .it-row .it-c-name { grid-area: name; }
   .it-row .it-c-hp { grid-area: hp; }
   .it-row .it-c-ac { grid-area: ac; }
@@ -403,7 +396,6 @@ export const css: string = `
   .it-c-hp .it-slash { top: calc(50% + 5px); } /* the fields sit 10px lower, under their label */
   .it-c-hp .it-hp { padding-left: 10px; }
   .it-c-ac input { padding-left: 10px; }
-  .it-enc-name { flex: 1 1 0; width: auto; min-width: 0; }
   .it-tools-left { flex: 1 1 100%; }
   .it-tools-left button { flex: 1 1 0; padding-inline: 8px; }
   .it-tools-right { flex: 1 1 100%; justify-content: space-between; }

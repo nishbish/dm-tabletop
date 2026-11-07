@@ -189,6 +189,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     ['name', 'Name', ''],
     ['hp', 'HP', ''],
     ['ac', 'AC', ''],
+    ['remove', '', 'Remove'],
   ].forEach(([cls, text, sr]) => {
     const th = el(doc, 'div', { class: 'it-th it-c-' + cls, role: 'columnheader' }, text);
     if (sr) th.append(el(doc, 'span', { class: 'it-sr' }, sr));
@@ -442,10 +443,10 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       blankZero(row.ac),
     );
 
-    // the small remove button ends the AC cell (no column, and no line, of its own)
-    ac.td.append(button('remove', 'Remove ' + label, '\u2715', 'it-x'));
+    const removeCell = cellOf('remove', '');
+    removeCell.append(button('remove', 'Remove ' + label, '\u2715', 'it-x'));
 
-    tr.append(initCell, nameCell, hpCell, ac.td);
+    tr.append(initCell, nameCell, hpCell, ac.td, removeCell);
     relabel(tr, row, index);
     return tr;
   }

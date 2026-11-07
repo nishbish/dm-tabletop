@@ -178,9 +178,8 @@ describe('rendering and actions', () => {
     expect(row.querySelector('.it-actions')).toBeNull();
     expect(row.querySelector('.it-c-init [data-action="roll"]')).toBeTruthy();
     expect(row.querySelector('[data-action="up"]')).toBeNull();
-    // the drag handle and the remove button sit in cells, not in columns of their own
-    expect(row.querySelectorAll('[role="cell"]')).toHaveLength(4);
-    expect(row.querySelector('.it-c-ac [data-action="remove"]')).toBeTruthy();
+    // the drag handle is in the initiative cell, not a column of its own
+    expect(row.querySelectorAll('[role="cell"]')).toHaveLength(5);
     expect(row.querySelector('.it-c-init [data-grip]')).toBeTruthy();
   });
 
