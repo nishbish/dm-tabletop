@@ -1,19 +1,23 @@
-import { creatureBonus, searchCreatures, srdCreatures } from './creatures';
+import { creatureBonus, defaultCreatures, searchCreatures } from './creatures';
 import {
   addRow,
   applyHpInput,
   changeHp,
   clear,
   createState,
+  hasContent,
+  isBlankRow,
   linkRow,
   migrate,
   moveRowTo,
   nextTurn,
   removeRow,
   resetRound,
+  rollHitDice,
   rollInitiative,
   sortByInitiative,
   updateRow,
+  withoutBlankRows,
 } from './logic';
 import { css, STYLE_ID } from './styles';
 import { LAST_SESSION_ID, LocalStorageEncounterStorage, localStorageAvailable } from './storage';
@@ -69,6 +73,23 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+// A plain folder outline for the saved-encounters button (drawn here, no icon font needed).
+const FOLDER_ICON =
+  '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">' +
+  '<path d="M3 5h6.5l2 2H21v12H3z" fill="currentColor"/></svg>';
+
+// The encounter the tracker is saving into. `id` is null until it has been saved once;
+// `blocked` stops further tries after the host refused to keep another one (LIMIT).
+interface OpenEncounter {
+  id: string | null;
+  blocked: boolean;
+}
+
+const notFound = (err: unknown) => {
+  const e = err as { status?: number; code?: string } | null;
+  return !!e && (e.status === 404 || e.code === 'NOT_FOUND');
+};
+
 const intOr = (text: string, fallback: number) => {
   const n = parseInt(text, 10);
   return isNaN(n) ? fallback : n;
@@ -77,7 +98,9 @@ const intOr = (text: string, fallback: number) => {
 export function createTracker(container: HTMLElement, options: TrackerOptions = {}): Tracker {
   const doc = container.ownerDocument;
   const rng = options.rng || Math.random;
-  const creatures: CreatureTemplate[] = options.creatures || srdCreatures;
+  const creatures: CreatureTemplate[] = options.creatures || defaultCreatures;
+  // suggestions only carry a game-system tag when there is more than one system to tell apart
+  const mixedRulesets = new Set(creatures.map((c) => c.ruleset || '')).size > 1;
   const autosaveDelay = options.autosaveDelay === undefined ? 400 : options.autosaveDelay;
 
   let storage: EncounterStorage | null = null;
@@ -88,8 +111,12 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   }
 
   let state: TrackerState = options.initialState ? migrate(options.initialState) : createState();
-  let currentId: string | null = null; // id of the named encounter being edited, if saved
+  // The open encounter. Every change is autosaved into it (and into the last session), as on the
+  // first tracker: there is no Save button.
+  let current: OpenEncounter = { id: null, blocked: false };
   let dirty = false; // the user changed something (stops a late restore from overwriting it)
+  let pending = false; // a change has not been handed to storage yet
+  let saving: Promise<void> = Promise.resolve(); // saves run one after another
   let destroyed = false;
   let saved: EncounterSummary[] = [];
   let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -100,16 +127,18 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
 
   // ---------- skeleton ----------
   const root = el(doc, 'div', { class: 'it-root' });
+  // The name, with the folder (saved encounters) and new-encounter buttons beside it, as on the
+  // first tracker. No label: the name is the heading of the encounter.
   const nameInput = el(doc, 'input', {
     class: 'it-enc-name',
     type: 'text',
     'data-field': 'encname',
+    'aria-label': 'Encounter name',
     autocomplete: 'off',
+    spellcheck: 'false',
   });
-  const nameLabel = el(doc, 'label', { class: 'it-field' });
-  nameLabel.append(el(doc, 'span', {}, 'Encounter name'), nameInput);
   const header = el(doc, 'div', { class: 'it-header' });
-  header.append(nameLabel);
+  header.append(nameInput);
 
   const button = (action: string, label: string, text: string, cls = '') =>
     el(
@@ -119,8 +148,32 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       text,
     );
 
+  const folderButton = el(doc, 'button', {
+    type: 'button',
+    'data-action': 'saved',
+    'aria-label': 'Saved encounters',
+    title: 'Open encounter',
+    'aria-expanded': 'false',
+    'aria-controls': `it-saved-${instance}`,
+    class: 'it-icon it-folder',
+  });
+  folderButton.innerHTML = FOLDER_ICON;
+  const savedList = el(doc, 'div', {
+    class: 'it-saved',
+    id: `it-saved-${instance}`,
+    role: 'group',
+    'aria-label': 'Saved encounters',
+    hidden: true,
+  });
+  if (storage) {
+    const newButton = button('new', 'New encounter', '+', 'it-icon it-new');
+    newButton.title = 'New encounter';
+    header.append(folderButton, newButton, savedList);
+  }
+
+  // Whose turn it is goes to screen readers only: the highlighted row shows it on screen.
   const turnLine = el(doc, 'p', {
-    class: 'it-turn',
+    class: 'it-turn it-sr',
     role: 'status',
     'aria-live': 'polite',
     'aria-atomic': 'true',
@@ -135,7 +188,6 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   });
   const head = el(doc, 'div', { class: 'it-head', role: 'row' });
   [
-    ['grip', '', 'Reorder'],
     ['init', 'Initiative', ''],
     ['name', 'Name', ''],
     ['hp', 'HP', ''],
@@ -148,12 +200,6 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   });
   const rowsEl = el(doc, 'div', { class: 'it-rows', role: 'rowgroup' });
   table.append(head, rowsEl);
-  const emptyNote = el(
-    doc,
-    'p',
-    { class: 'it-empty' },
-    'No creatures yet. Use "Add creature" to start.',
-  );
 
   // Under the list, as on the first tracker: Next, Sort and Clear on the left, the round and the
   // big add button on the right.
@@ -190,26 +236,28 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   rightTools.append(roundBox, button('add', 'Add creature', '+', 'it-add'));
   toolbar.append(leftTools, rightTools);
 
-  const saveSelect = el(doc, 'select', { 'data-field': 'saved' });
-  const storageBox = el(doc, 'div', {
-    class: 'it-storage',
-    role: 'group',
-    'aria-label': 'Saved encounters',
+  // Problems (a save refused, an encounter that would not open) are shown; everything else the
+  // tracker says only reaches screen readers.
+  const message = el(doc, 'p', {
+    class: 'it-message it-sr',
+    role: 'status',
+    'aria-live': 'polite',
   });
-  const selectLabel = el(doc, 'label', { class: 'it-field' });
-  selectLabel.append(el(doc, 'span', {}, 'Saved encounters'), saveSelect);
-  storageBox.append(
-    selectLabel,
-    button('open', 'Open selected encounter', 'Open'),
-    button('save', 'Save encounter', 'Save'),
-    button('new', 'New encounter', 'New'),
-    button('delete', 'Delete selected encounter', 'Delete'),
-  );
-  const message = el(doc, 'p', { class: 'it-message', role: 'status', 'aria-live': 'polite' });
+  // "All changes saved", shown for a moment after each autosave, as on the first tracker: with no
+  // Save button it is the sign that the encounter was kept. Screen readers are not told every
+  // time; a problem saving is announced (see `say`).
+  const savedNote = el(doc, 'span', { class: 'it-saved-note', 'aria-hidden': 'true' });
+  let savedNoteTimer: ReturnType<typeof setTimeout> | null = null;
+  function showSaved() {
+    if (destroyed || !storage || shown) return;
+    savedNote.textContent = 'All changes saved';
+    savedNote.classList.add('it-saved-note--shown');
+    if (savedNoteTimer) clearTimeout(savedNoteTimer);
+    savedNoteTimer = setTimeout(() => savedNote.classList.remove('it-saved-note--shown'), 2500);
+  }
+  header.append(savedNote, message);
 
-  root.append(header, turnLine, table, emptyNote, toolbar);
-  if (storage) root.append(storageBox);
-  root.append(message);
+  root.append(header, turnLine, table, toolbar);
   container.appendChild(root);
 
   // ---------- helpers ----------
@@ -219,14 +267,17 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     const label = labelOf(row, index);
     const names: Record<string, string> = {
       '[data-field="initiative"]': 'Initiative, ' + label,
-      '[data-field="bonus"]': 'Initiative bonus, ' + label,
       '[data-field="hp"]': 'Hit points, ' + label + '. Type a number, or +3 / -5 to change it',
       '[data-field="maxhp"]': 'Maximum hit points, ' + label,
       '[data-field="hpstep"]': 'Amount to add or subtract, ' + label,
       '[data-action="hp-down"]': 'Subtract the amount from hit points, ' + label,
       '[data-action="hp-up"]': 'Add the amount to hit points, ' + label,
+      '[data-field="initstep"]': 'Amount to add or subtract, initiative of ' + label,
+      '[data-action="init-down"]': 'Subtract the amount from initiative, ' + label,
+      '[data-action="init-up"]': 'Add the amount to initiative, ' + label,
       '[data-field="ac"]': 'Armor class, ' + label,
       '[data-action="roll"]': 'Roll initiative for ' + label,
+      '[data-action="roll-hp"]': 'Roll hit points for ' + label,
       '[data-grip]': 'Reorder ' + label + '. Drag, or press the up and down arrow keys',
       '[data-action="remove"]': 'Remove ' + label,
       '[data-action="link"]': 'Show ' + label + ' on the table',
@@ -239,8 +290,14 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   const rowEl = (id: string) =>
     Array.from(rowsEl.children).find((tr) => (tr as HTMLElement).dataset.id === id) as
       HTMLElement | undefined;
-  const say = (text: string) => {
+  let shown = false; // the message on screen is a problem the user should see
+  const say = (text: string, loud = false) => {
     message.textContent = text;
+    shown = loud && !!text;
+    message.classList.toggle('it-sr', !shown);
+  };
+  const clearProblem = () => {
+    if (shown) say('');
   };
 
   function commit(next: TrackerState) {
@@ -261,6 +318,26 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   }
 
   // ---------- rendering ----------
+  // A 0 that nobody typed shows as an empty field, so empty rows look empty. HP 0 still shows
+  // when the creature has a max HP (it is down).
+  const blankZero = (n: number) => (n ? String(n) : '');
+  const hpText = (row: TrackerRow) => (row.hp || row.maxHp ? String(row.hp) : '');
+
+  // the creature a row was filled from, for its hit dice
+  const creatureOf = (row: TrackerRow) =>
+    row.monsterId ? creatures.find((c) => c.id === row.monsterId) : undefined;
+  const hitDiceOf = (row: TrackerRow) => {
+    const c = creatureOf(row);
+    return c && c.hitDice && rollHitDice(c.hitDice, () => 0) !== null ? c.hitDice : '';
+  };
+  // the HP roll button shows the die it rolls ("d6"), like the d20 of initiative
+  const hpDieText = (hitDice: string) => (hitDice ? 'd' + /d\s*(\d+)/i.exec(hitDice)[1] : '');
+
+  const modText = (row: TrackerRow) => {
+    if (!row.initiativeBonus && !row.monsterId) return '';
+    return `(${row.initiativeBonus >= 0 ? '+' : ''}${row.initiativeBonus})`;
+  };
+
   function cellOf(cls: string, label: string) {
     return el(doc, 'div', { class: 'it-td it-c-' + cls, role: 'cell', 'data-label': label });
   }
@@ -272,21 +349,40 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     return { td, input };
   }
 
+  // The - / + box under the initiative and HP fields, as on the first tracker: an amount (1 to
+  // start with) between a minus and a plus button. Shown while the cell is in use (see openPop).
+  function stepBox(kind: 'init' | 'hp', label: string) {
+    const box = el(doc, 'div', { class: 'it-hp-pop', role: 'group', 'aria-label': label });
+    const amount = el(doc, 'input', {
+      type: 'number',
+      class: 'it-hp-amount',
+      'data-field': kind + 'step',
+      min: 1,
+      inputmode: 'numeric',
+      autocomplete: 'off',
+    });
+    amount.value = '1';
+    box.append(
+      button(kind + '-down', '', '\u2212', 'it-hp-step'),
+      amount,
+      button(kind + '-up', '', '+', 'it-hp-step'),
+    );
+    return box;
+  }
+
   function buildRow(row: TrackerRow, index: number): HTMLElement {
     const label = labelOf(row, index);
     const tr = el(doc, 'div', { class: 'it-row', role: 'row', 'data-id': row.id });
 
-    const gripCell = cellOf('grip', '');
-    gripCell.append(
-      el(
-        doc,
-        'button',
-        { type: 'button', class: 'it-grip', 'data-grip': 'true', title: 'Drag to reorder' },
-        '\u22EE\u22EE',
-      ),
+    // The initiative cell starts with the drag handle (no column of its own, so no extra line),
+    // then the number, which takes the rest of the cell; the bonus and the d20 sit over its right
+    // end, as on the first tracker.
+    const grip = el(
+      doc,
+      'button',
+      { type: 'button', class: 'it-grip', 'data-grip': 'true', title: 'Drag to reorder' },
+      '\u22EE\u22EE',
     );
-
-    // initiative: the d20 roll button sits in the cell, with the number and the bonus
     const initCell = cellOf('init', 'Initiative');
     const initInput = el(doc, 'input', {
       type: 'number',
@@ -294,19 +390,20 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       'data-field': 'initiative',
       autocomplete: 'off',
     });
-    initInput.value = String(row.initiative);
-    const mod = el(doc, 'label', { class: 'it-mod' });
-    const bonusInput = el(doc, 'input', {
-      type: 'number',
-      class: 'it-bonus',
-      'data-field': 'bonus',
-      autocomplete: 'off',
-    });
-    bonusInput.value = String(row.initiativeBonus);
-    mod.append(el(doc, 'span', { 'aria-hidden': 'true' }, '+'), bonusInput);
-    initCell.append(button('roll', 'Roll initiative for ' + label, '20', 'it-d20'), initInput, mod);
+    initInput.value = blankZero(row.initiative);
+    // A picked creature's bonus, in brackets as on the first tracker. It is not typed in: players
+    // say their total, and a creature from the list brings its own.
+    const mod = el(doc, 'span', { class: 'it-mod' }, modText(row));
+    initCell.append(
+      grip,
+      initInput,
+      mod,
+      button('roll', 'Roll initiative for ' + label, '20', 'it-d20'),
+      stepBox('init', 'Change initiative'),
+    );
 
     const listId = `it-list-${instance}-${row.id}`;
+    // the name field fills the cell; the turn arrow sits over its left padding
     const nameCell = cellOf('name', 'Name');
     nameCell.append(el(doc, 'span', { class: 'it-marker' }));
     const wrap = el(doc, 'div', { class: 'it-name-wrap' });
@@ -341,53 +438,51 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       type: 'text',
       class: 'it-hp',
       'data-field': 'hp',
+      placeholder: ' ', // lets the stylesheet hide the / while there are no hit points
       inputmode: 'text',
       autocomplete: 'off',
     });
-    hpInput.value = String(row.hp);
+    hpInput.value = hpText(row);
     const maxInput = el(doc, 'input', {
       type: 'number',
       class: 'it-maxhp',
       'data-field': 'maxhp',
+      placeholder: ' ',
       min: 0,
       autocomplete: 'off',
     });
-    maxInput.value = String(row.maxHp);
-    // The - / + box under the HP field, shown while the cell has focus (see openHp). It comes
-    // after max HP so Tab goes HP, max HP, -, amount, +.
-    const hpPop = el(doc, 'div', { class: 'it-hp-pop', role: 'group', 'aria-label': 'Change HP' });
-    const stepInput = el(doc, 'input', {
-      type: 'number',
-      class: 'it-hp-amount',
-      'data-field': 'hpstep',
-      min: 1,
-      inputmode: 'numeric',
-      autocomplete: 'off',
-    });
-    stepInput.value = '1';
-    hpPop.append(
-      button('hp-down', '', '\u2212', 'it-hp-step'),
-      stepInput,
-      button('hp-up', '', '+', 'it-hp-step'),
-    );
+    maxInput.value = blankZero(row.maxHp);
+    // Current HP takes most of the cell, max HP a small part on the right (the / sits over its
+    // left padding). The - / + box comes after max HP so Tab goes HP, max HP, -, amount, +.
+    const hpPop = stepBox('hp', 'Change HP');
+    // A creature from the list can roll its hit points, as on the first tracker: the button shows
+    // on hover, or while the cell is in use, and only for a row with hit dice.
+    const hitDice = hitDiceOf(row);
+    const hpRoll = button('roll-hp', '', hpDieText(hitDice), 'it-d20 it-hp-roll');
+    hpRoll.hidden = !hitDice;
     hpCell.append(
       hpInput,
       el(doc, 'span', { class: 'it-slash', 'aria-hidden': 'true' }, '/'),
       maxInput,
       hpPop,
+      hpRoll, // after the box, so Tab still goes HP, max HP, -, amount, +
       el(doc, 'span', { class: 'it-down', hidden: true }, 'Down'),
     );
     const ac = inputCell(
       'ac',
       'AC',
       { type: 'number', class: 'it-num', 'data-field': 'ac', min: 0 },
-      row.ac,
+      blankZero(row.ac),
     );
 
     const removeCell = cellOf('remove', '');
-    removeCell.append(button('remove', 'Remove ' + label, '\u2715', 'it-x'));
+    // a minus in a thin ring: the pair of the big + that adds a row (a cross reads as "close"),
+    // and the ring tells it apart from the - buttons that subtract hit points
+    const removeButton = button('remove', 'Remove ' + label, '', 'it-x');
+    removeButton.append(el(doc, 'span', { class: 'it-x-mark', 'aria-hidden': 'true' }, '\u2212'));
+    removeCell.append(removeButton);
 
-    tr.append(gripCell, initCell, nameCell, hpCell, ac.td, removeCell);
+    tr.append(initCell, nameCell, hpCell, ac.td, removeCell);
     relabel(tr, row, index);
     return tr;
   }
@@ -405,16 +500,27 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   }
 
   function syncInputs(tr: HTMLElement, row: TrackerRow) {
-    const set = (field: string, value: string | number) => {
+    // a number field being typed in keeps what was typed ("" and "0" mean the same there)
+    const set = (field: string, value: string) => {
       const input = tr.querySelector(`[data-field="${field}"]`) as HTMLInputElement | null;
-      if (input && input.value !== String(value)) input.value = String(value);
+      if (!input || input.value === value) return;
+      const typing = input === doc.activeElement && field !== 'name';
+      if (typing && intOr(input.value, 0) === intOr(value, 0)) return;
+      input.value = value;
     };
-    set('initiative', row.initiative);
-    set('bonus', row.initiativeBonus);
+    set('initiative', blankZero(row.initiative));
+    const hpRoll = tr.querySelector('[data-action="roll-hp"]') as HTMLButtonElement | null;
+    if (hpRoll) {
+      const hitDice = hitDiceOf(row);
+      hpRoll.hidden = !hitDice;
+      if (hpRoll.textContent !== hpDieText(hitDice)) hpRoll.textContent = hpDieText(hitDice);
+    }
+    const mod = tr.querySelector('.it-mod');
+    if (mod && mod.textContent !== modText(row)) mod.textContent = modText(row);
     set('name', row.name);
-    set('hp', row.hp);
-    set('maxhp', row.maxHp);
-    set('ac', row.ac);
+    set('hp', hpText(row));
+    set('maxhp', blankZero(row.maxHp));
+    set('ac', blankZero(row.ac));
     refreshDown(tr, row);
   }
 
@@ -466,16 +572,14 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       if (tr && sel) restore = { id: tr.dataset.id, sel };
     }
     closeSuggest();
-    hpOpen = null;
+    popOpen = null;
     rowsEl.textContent = '';
     state.rows.forEach((row, i) => {
       const tr = buildRow(row, i);
       rowsEl.append(tr);
       refreshDown(tr, row);
     });
-    emptyNote.hidden = state.rows.length > 0;
-    table.hidden = state.rows.length === 0;
-    nameInput.value = state.name;
+    if (nameInput !== doc.activeElement) nameInput.value = state.name;
     renderTurn(false);
     if (restore) {
       const tr = rowEl(restore.id);
@@ -484,23 +588,46 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     }
   }
 
+  // The list under the folder button: click a name to open it, the bin to delete it.
   function renderSaved() {
     if (!storage) return;
-    const keep = saveSelect.value;
-    saveSelect.textContent = '';
-    saveSelect.append(
-      el(
+    savedList.textContent = '';
+    if (!saved.length) {
+      savedList.append(el(doc, 'p', { class: 'it-saved-empty' }, 'No saved encounters yet'));
+      return;
+    }
+    const ul = el(doc, 'ul');
+    saved.forEach((e) => {
+      const li = el(doc, 'li');
+      const open = el(
         doc,
-        'option',
-        { value: '' },
-        saved.length ? 'Choose an encounter' : 'No saved encounters',
-      ),
-    );
-    saved.forEach((e) =>
-      saveSelect.append(el(doc, 'option', { value: e.id }, e.name || 'Untitled')),
-    );
-    const want = currentId && saved.some((e) => e.id === currentId) ? currentId : keep;
-    saveSelect.value = saved.some((e) => e.id === want) ? want : '';
+        'button',
+        {
+          type: 'button',
+          class: 'it-saved-open',
+          'data-action': 'open',
+          'data-id': e.id,
+          'aria-current': e.id === current.id ? 'true' : undefined,
+        },
+        e.name || 'Untitled encounter',
+      );
+      const del = el(
+        doc,
+        'button',
+        {
+          type: 'button',
+          class: 'it-saved-delete',
+          'data-action': 'delete',
+          'data-id': e.id,
+          'aria-label': 'Delete ' + (e.name || 'Untitled encounter'),
+          title: 'Delete',
+        },
+        '\u2715',
+      );
+      li.append(open, del);
+      ul.append(li);
+    });
+    savedList.append(ul);
   }
 
   async function refreshSaved() {
@@ -513,30 +640,52 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     if (!destroyed) renderSaved();
   }
 
-  // ---------- HP - / + box ----------
-  // Opened when focus moves into an HP cell from outside it, and closed when focus or a pointer
-  // press lands outside it, or on Escape. A class (not :focus-within) keeps it open when a phone
-  // browser drops focus on tapping a button, so the tap still reaches the button.
-  let hpOpen: HTMLElement | null = null;
-
-  function openHp(cell: HTMLElement) {
-    if (hpOpen === cell) return;
-    closeHp();
-    hpOpen = cell;
-    cell.classList.add('it-c-hp--open');
+  function openList() {
+    renderSaved();
+    savedList.hidden = false;
+    folderButton.setAttribute('aria-expanded', 'true');
+    void refreshSaved();
   }
 
-  function closeHp() {
-    if (!hpOpen) return;
-    hpOpen.classList.remove('it-c-hp--open');
-    hpOpen = null;
+  function closeList() {
+    if (savedList.hidden) return;
+    savedList.hidden = true;
+    folderButton.setAttribute('aria-expanded', 'false');
+  }
+
+  // ---------- initiative and HP cells ----------
+  // A cell is "open" while it is in use: focus moved into it from outside, or its field was
+  // clicked or tapped. An open initiative cell shows its d20 button (on a screen with a mouse it
+  // also shows on hover), and both cells show their - / + box. It closes when focus or a pointer
+  // press lands outside it, or on Escape. A class (not :focus-within) keeps it open when a phone
+  // browser drops focus on tapping a button, so the tap still reaches the button.
+  const POP_CELLS = '.it-c-init, .it-c-hp';
+  let popOpen: HTMLElement | null = null;
+  const openClass = (cell: HTMLElement) =>
+    cell.classList.contains('it-c-hp') ? 'it-c-hp--open' : 'it-c-init--open';
+
+  function openPop(cell: HTMLElement) {
+    if (popOpen === cell) return;
+    closePop();
+    popOpen = cell;
+    cell.classList.add(openClass(cell));
+  }
+
+  function closePop() {
+    if (!popOpen) return;
+    popOpen.classList.remove(openClass(popOpen));
+    popOpen = null;
+  }
+
+  function stepAmount(btn: HTMLElement, kind: string) {
+    const cell = btn.closest(POP_CELLS);
+    const input = cell && (cell.querySelector(`[data-field="${kind}step"]`) as HTMLInputElement);
+    return Math.abs(intOr(input ? input.value : '', 1));
   }
 
   function stepHp(btn: HTMLElement, id: string, sign: number) {
     const row = state.rows.find((r) => r.id === id);
-    const cell = btn.closest('.it-c-hp');
-    const amountInput = cell && (cell.querySelector('[data-field="hpstep"]') as HTMLInputElement);
-    const amount = Math.abs(intOr(amountInput ? amountInput.value : '', 1));
+    const amount = stepAmount(btn, 'hp');
     if (!row || !amount) return;
     commit(updateRow(state, id, { hp: changeHp(row.hp, row.maxHp, sign * amount) }));
     const next = state.rows.find((r) => r.id === id);
@@ -544,19 +693,33 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     say(`${labelOf(next, state.rows.indexOf(next))}: ${next.hp} HP`);
   }
 
+  function stepInit(btn: HTMLElement, id: string, sign: number) {
+    const row = state.rows.find((r) => r.id === id);
+    const amount = stepAmount(btn, 'init');
+    if (!row || !amount) return;
+    commit(updateRow(state, id, { initiative: row.initiative + sign * amount }));
+    const next = state.rows.find((r) => r.id === id);
+    syncInputs(rowEl(id), next);
+    say(`${labelOf(next, state.rows.indexOf(next))}: initiative ${next.initiative}`);
+  }
+
   function onFocusIn(e: FocusEvent) {
-    const cell = (e.target as Element).closest('.it-c-hp') as HTMLElement | null;
+    const cell = (e.target as Element).closest(POP_CELLS) as HTMLElement | null;
     if (!cell) {
-      closeHp();
+      closePop();
       return;
     }
     // Moving between the controls of one cell keeps it as it is (so Escape stays closed).
     const from = e.relatedTarget as Node | null;
-    if (!from || !cell.contains(from)) openHp(cell);
+    if (!from || !cell.contains(from)) openPop(cell);
   }
 
   function onDocPointerDown(e: Event) {
-    if (hpOpen && !hpOpen.contains(e.target as Node)) closeHp();
+    const target = e.target as Node;
+    if (popOpen && !popOpen.contains(target)) closePop();
+    if (!savedList.hidden && !savedList.contains(target) && !folderButton.contains(target)) {
+      closeList();
+    }
   }
 
   // ---------- autocomplete ----------
@@ -603,7 +766,14 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
         'data-index': i,
         'aria-selected': 'false',
       });
-      li.append(el(doc, 'span', {}, c.name), el(doc, 'small', {}, `AC ${c.ac} · HP ${c.hp}`));
+      // When the list mixes game systems, a small tag in front of the name says which one
+      const name = el(doc, 'span', { class: 'it-suggest-name' });
+      if (mixedRulesets && c.ruleset) {
+        const tag = c.ruleset.toLowerCase().replace(/[^a-z0-9]/g, '');
+        name.append(el(doc, 'span', { class: `it-tag it-tag--${tag}` }, c.ruleset));
+      }
+      name.append(c.name);
+      li.append(name, el(doc, 'small', {}, `AC ${c.ac} · HP ${c.hp}`));
       ul.append(li);
     });
     (input.parentElement as HTMLElement).append(ul);
@@ -632,21 +802,59 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     relabelRow(id);
     edited(id);
     input.focus();
-    say(`Filled in ${c.name}: AC ${c.ac}, HP ${c.hp}`);
   }
 
   // ---------- storage ----------
+  // Changes are saved a moment after the last one, as on the first tracker: into the open
+  // encounter once it has a filled-in row (creating it the first time), and into the last session
+  // so a reload carries on where you were. Saves run one after another, so a slow first save
+  // cannot create the same encounter twice.
   function scheduleAutosave() {
     if (!storage) return;
+    pending = true;
     if (autosaveTimer) clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(flushAutosave, autosaveDelay);
   }
 
-  function flushAutosave() {
+  function flushAutosave(): Promise<void> {
     if (autosaveTimer) clearTimeout(autosaveTimer);
     autosaveTimer = null;
-    if (!storage) return;
-    storage.save(LAST_SESSION_ID, getState()).catch((err) => reportSaveError(err, false));
+    if (!storage || !pending) return saving;
+    pending = false;
+    const enc = current;
+    const snapshot = getState();
+    saving = saving.then(() => saveNow(enc, snapshot));
+    return saving;
+  }
+
+  async function saveNow(enc: OpenEncounter, snapshot: TrackerState) {
+    if (enc.id || (!enc.blocked && hasContent(snapshot))) {
+      const kept = withoutBlankRows(snapshot);
+      const created = !enc.id;
+      try {
+        try {
+          enc.id = await storage.save(enc.id, kept);
+        } catch (err) {
+          if (!enc.id || !notFound(err)) throw err;
+          enc.id = await storage.save(null, kept); // deleted elsewhere: keep it as a new one
+        }
+        enc.blocked = false;
+        if (!destroyed) clearProblem();
+        if (created || !savedList.hidden) await refreshSaved();
+      } catch (err) {
+        const e = err as { code?: string };
+        if (!enc.id && e && e.code === 'LIMIT') enc.blocked = true;
+        reportSaveError(err, true);
+      }
+    }
+    // a newer encounter took over: its own saves keep the last session
+    if (enc !== current) return;
+    try {
+      await storage.save(LAST_SESSION_ID, { ...snapshot, encounterId: enc.id || undefined });
+      showSaved();
+    } catch (err) {
+      reportSaveError(err, false);
+    }
   }
 
   function reportSaveError(err: unknown, loud: boolean) {
@@ -654,65 +862,67 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     if (e && e.code === 'LIMIT') {
       const reason = e.message || 'Storage limit reached';
       if (options.onLimit) options.onLimit(reason);
-      if (!destroyed) say(reason);
+      if (!destroyed) say(reason, true);
     } else if (loud && !destroyed) {
-      say((e && e.message) || 'Could not save');
+      say((e && e.message) || 'Could not save', true);
     }
   }
 
-  async function saveNamed() {
+  // Shows another encounter (opened, or a new one) after the open one has been saved.
+  function switchTo(enc: OpenEncounter, next: TrackerState) {
+    current = enc;
+    clearProblem();
+    commit(next);
+    renderRows();
+    renderSaved();
+  }
+
+  async function openSaved(id: string) {
+    closeList();
     if (!storage) return;
+    await flushAutosave();
+    let loaded: TrackerState | null = null;
     try {
-      currentId = await storage.save(currentId, getState());
-      say(`Saved "${state.name}"`);
-    } catch (err) {
-      reportSaveError(err, true);
+      loaded = await storage.load(id);
+    } catch {
+      loaded = null;
     }
-    await refreshSaved();
-  }
-
-  async function openNamed() {
-    if (!storage || !saveSelect.value) {
-      say('Choose a saved encounter first');
-      return;
-    }
-    const id = saveSelect.value;
-    const loaded = await storage.load(id);
     if (destroyed) return;
     if (!loaded) {
-      say('That encounter could not be loaded');
+      say('That encounter could not be opened', true);
       return;
     }
-    currentId = id;
-    commit(migrate(loaded));
-    renderRows();
+    const next = migrate(loaded);
+    delete next.encounterId;
+    switchTo({ id, blocked: false }, next);
     if (options.onLoad) options.onLoad(getState());
-    say(`Opened "${state.name}"`);
+    say(`Opened ${state.name}`);
   }
 
-  function newEncounter() {
-    currentId = null;
-    commit(createState());
-    renderRows();
-    saveSelect.value = '';
+  async function newEncounter() {
+    closeList();
+    await flushAutosave();
+    if (destroyed) return;
+    switchTo({ id: null, blocked: false }, createState());
     say('Started a new encounter');
+    const first = rowsEl.querySelector('[data-field="name"]') as HTMLInputElement | null;
+    if (first) first.focus();
   }
 
-  async function deleteNamed() {
+  async function deleteSaved(id: string) {
     if (!storage) return;
-    const id = saveSelect.value || currentId;
-    if (!id) {
-      say('Choose a saved encounter to delete');
-      return;
-    }
     try {
       await storage.remove(id);
-      if (id === currentId) currentId = null;
+      // the open encounter stays on screen and is saved again as a new one if it changes
+      if (id === current.id) current.id = null;
+      current.blocked = false;
       say('Deleted the saved encounter');
     } catch {
-      say('Could not delete that encounter');
+      say('Could not delete that encounter', true);
     }
     await refreshSaved();
+    const first = savedList.querySelector('button') as HTMLButtonElement | null;
+    (first || folderButton).focus();
   }
 
   // Destructive buttons need a second press within a few seconds.
@@ -754,8 +964,9 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       chooseCreature(suggest.items[Number(option.dataset.index)]);
       return;
     }
-    if ((target as HTMLElement).dataset && (target as HTMLElement).dataset.field === 'hp') {
-      openHp(target.closest('.it-c-hp') as HTMLElement);
+    const clicked = (target as HTMLElement).dataset && (target as HTMLElement).dataset.field;
+    if (clicked === 'initiative' || clicked === 'hp') {
+      openPop(target.closest(POP_CELLS) as HTMLElement);
       return;
     }
     const btn = target.closest('button[data-action]') as HTMLButtonElement | null;
@@ -777,14 +988,26 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       case 'roll-all':
         commit({
           ...state,
-          rows: state.rows.map((r) => ({
-            ...r,
-            initiative: rollInitiative(r.initiativeBonus, rng),
-          })),
+          // empty rows are left empty
+          rows: state.rows.map((r) =>
+            isBlankRow(r) ? r : { ...r, initiative: rollInitiative(r.initiativeBonus, rng) },
+          ),
         });
         renderRows();
         say('Rolled initiative for everyone');
         break;
+      case 'roll-hp': {
+        const row = id && state.rows.find((r) => r.id === id);
+        const hitDice = row ? hitDiceOf(row) : '';
+        if (!hitDice) break;
+        const hp = rollHitDice(hitDice, rng);
+        commit(updateRow(state, id, { hp, maxHp: hp }));
+        const next = state.rows.find((r) => r.id === id);
+        syncInputs(rowEl(id), next);
+        edited(id);
+        say(`${labelOf(next, state.rows.indexOf(next))}: rolled ${hp} HP`);
+        break;
+      }
       case 'roll':
         if (id) {
           const row = state.rows.find((r) => r.id === id);
@@ -795,6 +1018,10 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       case 'hp-down':
       case 'hp-up':
         if (id) stepHp(btn, id, action === 'hp-up' ? 1 : -1);
+        break;
+      case 'init-down':
+      case 'init-up':
+        if (id) stepInit(btn, id, action === 'init-up' ? 1 : -1);
         break;
       case 'sort':
         commit(sortByInitiative(state));
@@ -828,18 +1055,21 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
         if (row && options.onLinkClick) options.onLinkClick({ ...row });
         break;
       }
-      case 'save':
-        void saveNamed();
+      case 'saved':
+        if (savedList.hidden) openList();
+        else closeList();
         break;
       case 'open':
-        void openNamed();
+        void openSaved(btn.dataset.id);
         break;
       case 'new':
-        newEncounter();
+        void newEncounter();
         break;
-      case 'delete':
-        confirmFirst(btn, 'delete', 'Delete this encounter?', () => void deleteNamed());
+      case 'delete': {
+        const delId = btn.dataset.id;
+        confirmFirst(btn, 'delete:' + delId, 'Delete?', () => void deleteSaved(delId));
         break;
+      }
     }
   }
 
@@ -859,8 +1089,6 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       openSuggest(input, id);
     } else if (field === 'initiative') {
       commit(updateRow(state, id, { initiative: intOr(input.value, 0) }));
-    } else if (field === 'bonus') {
-      commit(updateRow(state, id, { initiativeBonus: intOr(input.value, 0) }));
     } else if (field === 'ac') {
       commit(updateRow(state, id, { ac: Math.max(0, intOr(input.value, 0)) }));
       edited(id);
@@ -877,7 +1105,6 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   // The HP field is committed on change (blur or Enter) so "-5" is not applied per keystroke.
   function onChange(e: Event) {
     const input = e.target as HTMLInputElement;
-    if (input.dataset && input.dataset.field === 'saved') return;
     if (!input.dataset || input.dataset.field !== 'hp') return;
     const id = rowIdOf(input);
     const row = state.rows.find((r) => r.id === id);
@@ -892,12 +1119,20 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   function onKeydown(e: KeyboardEvent) {
     if (onGripKey(e)) return;
     const input = e.target as HTMLInputElement;
-    if (e.key === 'Escape' && hpOpen && hpOpen.contains(input)) {
+    if (e.key === 'Escape' && !savedList.hidden) {
+      e.preventDefault();
+      closeList();
+      folderButton.focus();
+      return;
+    }
+    if (e.key === 'Escape' && popOpen && popOpen.contains(input)) {
       e.preventDefault();
       const inPop = !!input.closest('.it-hp-pop');
-      closeHp();
-      // the box's controls are hidden now, so focus goes back to the HP field
-      if (inPop) (rowEl(rowIdOf(input)).querySelector('[data-field="hp"]') as HTMLElement).focus();
+      const fieldName = popOpen.classList.contains('it-c-hp') ? 'hp' : 'initiative';
+      const cell = popOpen;
+      closePop();
+      // the box's controls are hidden now, so focus goes back to the cell's own field
+      if (inPop) (cell.querySelector(`[data-field="${fieldName}"]`) as HTMLElement).focus();
       return;
     }
     if (!suggest || input !== suggest.input) return;
@@ -924,7 +1159,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     if (suggest && input === suggest.input) closeSuggest();
     // relatedTarget is null when focus just drops (a tap on a phone): the pointer handler decides
     const to = e.relatedTarget as Node | null;
-    if (hpOpen && to && !hpOpen.contains(to)) closeHp();
+    if (popOpen && to && !popOpen.contains(to)) closePop();
   }
 
   // Options must not steal focus from the name field before the click lands.
@@ -1080,7 +1315,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
 
   const view = doc.defaultView;
   const onPageHide = () => {
-    if (dirty && storage) flushAutosave();
+    void flushAutosave();
   };
   if (view) view.addEventListener('pagehide', onPageHide);
   doc.addEventListener('pointerdown', onDocPointerDown, true);
@@ -1096,6 +1331,8 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
         const last = await storage.load(LAST_SESSION_ID);
         if (last && !dirty && !destroyed) {
           state = migrate(last);
+          if (state.encounterId) current = { id: state.encounterId, blocked: false };
+          delete state.encounterId;
           renderRows();
           if (options.onLoad) options.onLoad(getState());
         }
@@ -1111,6 +1348,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     getState,
     setState(next: TrackerState) {
       state = migrate(next);
+      delete state.encounterId;
       dirty = true;
       renderRows();
       scheduleAutosave();
@@ -1136,10 +1374,11 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     },
     destroy() {
       if (destroyed) return;
-      if (dirty && storage) flushAutosave();
+      void flushAutosave();
       destroyed = true;
       if (autosaveTimer) clearTimeout(autosaveTimer);
       armTimers.forEach((t) => clearTimeout(t));
+      if (savedNoteTimer) clearTimeout(savedNoteTimer);
       armTimers.clear();
       listeners.forEach(([type, fn]) => root.removeEventListener(type, fn));
       if (view) view.removeEventListener('pagehide', onPageHide);

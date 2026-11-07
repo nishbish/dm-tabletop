@@ -1,12 +1,23 @@
 export { createTracker } from './tracker';
-export { srdCreatures, searchCreatures, initiativeBonusFromDex, creatureBonus } from './creatures';
+export {
+  srdCreatures,
+  pf2eCreatures,
+  defaultCreatures,
+  searchCreatures,
+  initiativeBonusFromDex,
+  creatureBonus,
+} from './creatures';
 export { themeVariables } from './styles';
 export type { ThemeVariable } from './styles';
 export { LocalStorageEncounterStorage, LAST_SESSION_ID, localStorageAvailable } from './storage';
 export type { LocalStorageOptions, StorageLike } from './storage';
 export {
   STATE_VERSION,
+  BLANK_ROWS,
   createState,
+  isBlankRow,
+  hasContent,
+  withoutBlankRows,
   addRow,
   removeRow,
   clear,
@@ -18,6 +29,7 @@ export {
   nextTurn,
   resetRound,
   rollInitiative,
+  rollHitDice,
   applyHpInput,
   changeHp,
   migrate,

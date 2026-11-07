@@ -10,8 +10,53 @@ export function makeId(): string {
   return 'r' + idCounter.toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
+/** How many empty rows a new or cleared encounter starts with, as on the first tracker. */
+export const BLANK_ROWS = 5;
+
+function blankRows(): TrackerRow[] {
+  return Array.from({ length: BLANK_ROWS }, () => ({
+    id: makeId(),
+    name: '',
+    initiative: 0,
+    initiativeBonus: 0,
+    hp: 0,
+    maxHp: 0,
+    ac: 0,
+  }));
+}
+
+/** A new encounter: round 1 and five empty rows to type into. */
 export function createState(): TrackerState {
-  return { version: STATE_VERSION, name: 'New encounter', round: 1, turn: 0, rows: [] };
+  return { version: STATE_VERSION, name: 'New encounter', round: 1, turn: 0, rows: blankRows() };
+}
+
+/** True for a row nobody has filled in yet (no name, no numbers, not linked). */
+export function isBlankRow(row: TrackerRow): boolean {
+  return (
+    !row.name.trim() &&
+    !row.link &&
+    !row.monsterId &&
+    !row.initiative &&
+    !row.initiativeBonus &&
+    !row.hp &&
+    !row.maxHp &&
+    !row.ac
+  );
+}
+
+/** True when the encounter has something worth keeping: at least one filled-in row. */
+export function hasContent(state: TrackerState): boolean {
+  return state.rows.some((r) => !isBlankRow(r));
+}
+
+/**
+ * The state without its empty rows, as it is kept in a saved encounter (the first tracker kept
+ * only filled-in rows too). The creature whose turn it is stays active.
+ */
+export function withoutBlankRows(state: TrackerState): TrackerState {
+  const rows = state.rows.filter((r) => !isBlankRow(r));
+  if (rows.length === state.rows.length) return state;
+  return { ...state, rows, turn: turnOf(rows, activeId(state), 0) };
 }
 
 function activeId(state: TrackerState): string | undefined {
@@ -25,7 +70,8 @@ function turnOf(rows: TrackerRow[], id: string | undefined, fallback: number): n
 }
 
 /**
- * Highest initiative first. Ties go to the higher bonus, then to the row that was earlier.
+ * Highest initiative first; empty rows go to the bottom. Ties go to the higher bonus, then to
+ * the row that was earlier.
  * Before combat has started (round 1, first turn) the turn goes back to the top row;
  * mid-combat the creature whose turn it is stays active.
  */
@@ -34,6 +80,7 @@ export function sortByInitiative(state: TrackerState): TrackerState {
     .map((row, index) => ({ row, index }))
     .sort(
       (a, b) =>
+        Number(isBlankRow(a.row)) - Number(isBlankRow(b.row)) ||
         b.row.initiative - a.row.initiative ||
         b.row.initiativeBonus - a.row.initiativeBonus ||
         a.index - b.index,
@@ -47,12 +94,25 @@ export function sortByInitiative(state: TrackerState): TrackerState {
   };
 }
 
-/** Moves to the next row. After the last row it wraps to the first and the round goes up. */
+/**
+ * Moves to the next creature, skipping empty rows. After the last one it wraps to the first and
+ * the round goes up. With nothing filled in, it steps through the rows as they are.
+ */
 export function nextTurn(state: TrackerState): TrackerState {
-  if (state.rows.length === 0) return state;
-  const next = state.turn + 1;
-  if (next >= state.rows.length) return { ...state, turn: 0, round: state.round + 1 };
-  return { ...state, turn: next };
+  const n = state.rows.length;
+  if (n === 0) return state;
+  const filled = state.rows.some((r) => !isBlankRow(r));
+  let turn = state.turn;
+  let round = state.round;
+  for (let step = 0; step < n; step++) {
+    turn += 1;
+    if (turn >= n) {
+      turn = 0;
+      round += 1;
+    }
+    if (!filled || !isBlankRow(state.rows[turn])) break;
+  }
+  return { ...state, turn, round };
 }
 
 export function resetRound(state: TrackerState): TrackerState {
@@ -63,6 +123,26 @@ export function resetRound(state: TrackerState): TrackerState {
 export function rollInitiative(bonus: number, rng: () => number = Math.random): number {
   const die = Math.min(20, Math.floor(rng() * 20) + 1);
   return die + (Number(bonus) || 0);
+}
+
+/**
+ * Rolls hit dice written like "2d6" or "18d10+36" (never less than 1 hit point). Returns null
+ * for anything else.
+ */
+export function rollHitDice(hitDice: string, rng: () => number = Math.random): number | null {
+  // spaces are dropped first, so the pattern has nothing ambiguous to backtrack over
+  const text = String(hitDice || '')
+    .slice(0, 40)
+    .replace(/\s/g, '');
+  const m = /^(\d{1,4})d(\d{1,4})(?:([+-])(\d{1,6}))?$/i.exec(text);
+  if (!m) return null;
+  const count = Number(m[1]);
+  const sides = Number(m[2]);
+  if (!count || !sides || count > 1000) return null;
+  let total = 0;
+  for (let i = 0; i < count; i++) total += Math.min(sides, Math.floor(rng() * sides) + 1);
+  if (m[3]) total += (m[3] === '-' ? -1 : 1) * Number(m[4]);
+  return Math.max(1, total);
 }
 
 export function addRow(
@@ -77,7 +157,7 @@ export function addRow(
     initiativeBonus: 0,
     hp: 0,
     maxHp: 0,
-    ac: 10,
+    ac: 0,
     ...init,
   };
   return { ...state, rows: [...state.rows, row] };
@@ -94,9 +174,9 @@ export function removeRow(state: TrackerState, id: string): TrackerState {
   return { ...state, rows, turn };
 }
 
-/** Removes every row and starts again at round 1. Keeps the encounter name. */
+/** Removes every creature and starts again at round 1 with five empty rows. Keeps the name. */
 export function clear(state: TrackerState): TrackerState {
-  return { ...state, rows: [], round: 1, turn: 0 };
+  return { ...state, rows: blankRows(), round: 1, turn: 0 };
 }
 
 export function updateRow(
@@ -111,8 +191,8 @@ const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().t
 
 /**
  * Ties `link` to a row, so a prepared encounter can be matched up with what is on the table: the
- * row that already has the link, else the first unlinked row with the same name, else a new row.
- * `id` is used for a new row.
+ * row that already has the link, else the first unlinked row with the same name, else the first
+ * empty row, else a new row. `id` is used for a new row.
  */
 export function linkRow(
   state: TrackerState,
@@ -122,7 +202,8 @@ export function linkRow(
 ): TrackerState {
   const target =
     state.rows.find((r) => r.link === link) ||
-    state.rows.find((r) => !r.link && sameName(r.name, fields.name || ''));
+    state.rows.find((r) => !r.link && sameName(r.name, fields.name || '')) ||
+    state.rows.find(isBlankRow);
   if (!target) return addRow(state, { ...fields, link }, id);
   // A row that already has a name keeps it: that may be how the table knows this creature.
   const name = target.name.trim() ? target.name : fields.name || '';
@@ -152,13 +233,13 @@ export interface HpResult {
 }
 
 /**
- * Adds `delta` (negative for damage) to HP: never below 0, and never above max HP when a max is
- * set. Used by both the typed "-5" / "+3" and the - / + buttons, so they follow the same rules.
+ * Adds `delta` (negative for damage) to HP, never below 0. It may go above max HP, as on the
+ * first tracker: healing past the maximum is the DM's call. Used by both the typed "-5" / "+3"
+ * and the - / + buttons, so they follow the same rules. (`maxHp` is kept in the signature so
+ * existing callers keep working; it no longer limits anything.)
  */
 export function changeHp(hp: number, maxHp: number, delta: number): number {
-  let next = Math.max(0, hp + (Number(delta) || 0));
-  if (maxHp > 0) next = Math.min(next, maxHp);
-  return next;
+  return Math.max(0, hp + (Number(delta) || 0));
 }
 
 /**
@@ -209,11 +290,13 @@ export function migrate(input: unknown): TrackerState {
       return row;
     });
   const turn = Math.min(Math.max(int(raw.turn, 0), 0), Math.max(rows.length - 1, 0));
-  return {
+  const state: TrackerState = {
     version: STATE_VERSION,
-    name: typeof raw.name === 'string' ? raw.name : createState().name,
+    name: typeof raw.name === 'string' ? raw.name : 'New encounter',
     round: Math.max(1, int(raw.round, 1)),
     turn,
     rows,
   };
+  if (typeof raw.encounterId === 'string' && raw.encounterId) state.encounterId = raw.encounterId;
+  return state;
 }

@@ -27,6 +27,11 @@ export interface TrackerState {
   /** Index into `rows` of the creature whose turn it is. */
   turn: number;
   rows: TrackerRow[];
+  /**
+   * Only in the autosaved last session: the id of the saved encounter it is a copy of, so the
+   * tracker carries on saving into that encounter after a reload.
+   */
+  encounterId?: string;
 }
 
 /** A creature the name field can autocomplete. */
@@ -41,6 +46,13 @@ export interface CreatureTemplate {
   /** Used instead of `dex` when given. */
   initiativeBonus?: number;
   cr?: number;
+  /** Creature level, for game systems that use levels (Pathfinder). */
+  level?: number;
+  /**
+   * A short tag for the game system, e.g. "5e" or "PF2e". When the list mixes systems, each
+   * suggestion shows it as a small badge in front of the name.
+   */
+  ruleset?: string;
 }
 
 export interface EncounterSummary {
@@ -49,10 +61,13 @@ export interface EncounterSummary {
 }
 
 /**
- * Where named encounters (and the autosaved "last session") live. All methods are async so a
- * host can back it with a server. `save(null, state)` creates a new encounter and resolves to
- * its id. A host that wants to cap how many encounters a user may keep rejects `save` with an
- * error whose `code` is 'LIMIT'; the tracker then calls `onLimit` and shows a short message.
+ * Where saved encounters (and the autosaved "last session") live. All methods are async so a
+ * host can back it with a server. Every encounter with something in it is saved on its own:
+ * `save(null, state)` creates it and resolves to its id, later changes call `save(id, state)`.
+ * A host that wants to cap how many encounters a user may keep rejects `save` with an error
+ * whose `code` is 'LIMIT'; the tracker then calls `onLimit` and shows a short message. A
+ * rejection with `status` 404 or `code` 'NOT_FOUND' (the encounter was deleted elsewhere) makes
+ * the tracker save it again as a new one.
  */
 export interface EncounterStorage {
   list(): Promise<EncounterSummary[]>;
@@ -64,7 +79,10 @@ export interface EncounterStorage {
 export interface TrackerOptions {
   /** Encounter storage. Defaults to localStorage when available; `null` turns storage off. */
   storage?: EncounterStorage | null;
-  /** Autocomplete list. Replaces the built-in SRD list; concat `srdCreatures` to extend it. */
+  /**
+   * Autocomplete list. Replaces the built-in list (`defaultCreatures`: `srdCreatures` then
+   * `pf2eCreatures`); spread those into yours to extend it.
+   */
   creatures?: CreatureTemplate[];
   /** Random source returning [0, 1). Defaults to Math.random. */
   rng?: () => number;
