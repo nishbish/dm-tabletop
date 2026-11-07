@@ -60,7 +60,8 @@ for (const book of BOOKS) {
       left.notOrc++;
       continue;
     }
-    if ((s.traits.value || []).includes('unique')) {
+    // a unique creature is a named individual (Reserved Material); Foundry keeps it as the rarity
+    if (s.traits.rarity === 'unique' || (s.traits.value || []).includes('unique')) {
       left.unique.push(j.name);
       continue;
     }
