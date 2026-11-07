@@ -444,7 +444,8 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     );
 
     const removeCell = cellOf('remove', '');
-    removeCell.append(button('remove', 'Remove ' + label, '\u2715', 'it-x'));
+    // a minus, the pair of the big + that adds a row (a cross reads as "close")
+    removeCell.append(button('remove', 'Remove ' + label, '\u2212', 'it-x'));
 
     tr.append(initCell, nameCell, hpCell, ac.td, removeCell);
     relabel(tr, row, index);

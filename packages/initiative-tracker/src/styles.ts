@@ -195,6 +195,7 @@ export const css: string = `
 .it-root input.it-enc-name {
   font-size: 1.15rem; font-weight: var(--_weight-strong); width: 18rem; max-width: 100%;
   background: transparent; border-color: transparent; padding-inline: 8px; clip-path: none;
+  margin-left: -8px; /* the text lines up with the list; the hover fill reaches out past it */
 }
 @supports (field-sizing: content) {
   .it-root input.it-enc-name { width: auto; min-width: 8ch; field-sizing: content; }
@@ -338,7 +339,7 @@ export const css: string = `
 .it-suggest li small { color: var(--_muted); }
 .it-suggest li[aria-selected='true'] { background: var(--_accent); color: var(--_accent-fg); }
 .it-suggest li[aria-selected='true'] small { color: inherit; }
-.it-root button.it-x { --edge: transparent; --fill: transparent; --ink: var(--_row-fg); width: 100%; min-height: 3.25rem; padding: 0; font-size: 1rem; clip-path: none; opacity: 0.8; }
+.it-root button.it-x { --edge: transparent; --fill: transparent; --ink: var(--_row-fg); width: 100%; min-height: 3.25rem; padding: 0; font-size: 1.35rem; clip-path: none; opacity: 0.8; }
 .it-root button.it-x::before { display: none; }
 .it-root button.it-x:hover:not(:disabled) { --edge: transparent; opacity: 1; --ink: var(--_row-fg); }
 
