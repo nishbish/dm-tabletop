@@ -241,8 +241,11 @@ export const css: string = `
 .it-td { position: relative; display: flex; align-items: center; min-width: 0; background: var(--_row-bg); color: var(--_row-fg); min-height: 3.25rem; }
 .it-row--active .it-td { background: var(--_active-bg); }
 .it-row--down .it-td { background: var(--_down-bg); }
-.it-row--active.it-row--down .it-td { background: var(--_down-bg); box-shadow: inset 0 0 0 2px var(--_row-fg); }
-.it-row--active .it-c-grip { box-shadow: inset 4px 0 0 var(--_accent); }
+.it-row--active.it-row--down .it-td { background: var(--_down-bg); }
+/* the bar on the active row is a background stripe, not an inset shadow, so a cut corner cell
+   (the first row's grip on a phone, the last row's on a wide screen) cuts it cleanly */
+.it-row--active .it-c-grip { background: linear-gradient(var(--_accent), var(--_accent)) left / 4px 100% no-repeat, var(--_active-bg); }
+.it-row--active.it-row--down .it-c-grip { background: linear-gradient(var(--_accent), var(--_accent)) left / 4px 100% no-repeat, var(--_down-bg); }
 .it-td input {
   width: 100%; height: 100%; min-height: 3.25rem; padding: 0 10px; color: inherit; background: transparent;
   border: 0; clip-path: none; font-size: 1.1rem;
