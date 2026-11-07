@@ -149,7 +149,9 @@ const GLYPHS = {
 /** Foundry HTML -> paragraphs ("\n"), **bold**, *italic*. */
 export function foundryText(html) {
   if (!html) return '';
-  let t = replaceCodes(html);
+  // Entities are decoded first and every tag is stripped after, until none is left, so no
+  // markup can come back out of an encoded "&lt;script" (the pages escape this text anyway).
+  let t = decodeEntities(replaceCodes(html));
   t = t
     .replace(/<span class="action-glyph">\s*([123AaRrFf])\s*<\/span>/g, (_, g) => {
       const k = g.toLowerCase() === 'a' ? 'r' : g.toLowerCase();
@@ -164,9 +166,13 @@ export function foundryText(html) {
     .replace(/<(strong|b)>/g, '\u0002')
     .replace(/<\/(strong|b)>/g, '\u0003')
     .replace(/<(em|i)>/g, '\u0004')
-    .replace(/<\/(em|i)>/g, '\u0005')
-    .replace(/<[^>]+>/g, '');
-  t = decodeEntities(t);
+    .replace(/<\/(em|i)>/g, '\u0005');
+  let before;
+  do {
+    before = t;
+    t = t.replace(/<[^>]*>/g, '');
+  } while (t !== before);
+  t = t.replace(/[<>]/g, '');
   return t
     .split('\n')
     .map((p) =>
