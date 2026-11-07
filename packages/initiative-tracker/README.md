@@ -51,32 +51,32 @@ small rule:
 }
 ```
 
-| Variable              | Light default                                              | Dark default                     | Used for                                                                                  |
-| --------------------- | ---------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------- |
-| `--it-bg`             | `#f4f1e4`                                                  | `#0e2a24`                        | Background of the whole widget                                                            |
-| `--it-fg`             | `#16261f`                                                  | `#eef0e2`                        | Main text on the background                                                               |
-| `--it-muted`          | `#4d5b52`                                                  | `#b6c4b9`                        | Secondary text and labels                                                                 |
-| `--it-border-strong`  | `#5f6f63`                                                  | `#8fae9f`                        | Borders of fields and buttons                                                             |
-| `--it-surface`        | `#e7e5d2`                                                  | `#17382f`                        | Buttons and raised parts                                                                  |
-| `--it-input-bg`       | `#ffffff`                                                  | `#0a211c`                        | Fill of text fields                                                                       |
-| `--it-rule`           | `#c9c9ad`                                                  | `#dbdbc7`                        | The panel behind the creature list: shows between the cells and under the headings        |
-| `--it-head-bg`        | `#244e44`                                                  | `#2b5a4e`                        | Background of the column headings                                                         |
-| `--it-head-fg`        | `#f4f1e4`                                                  | same                             | Text of the column headings                                                               |
-| `--it-row-bg`         | `#244e44`                                                  | `#1c4137`                        | Fill of a creature row                                                                    |
-| `--it-row-fg`         | `#f4f1e4`                                                  | `#eef0e2`                        | Text in a creature row                                                                    |
-| `--it-active-bg`      | `#2f7a5e`                                                  | same                             | Fill of the row whose turn it is                                                          |
-| `--it-down-bg`        | `#7a3535`                                                  | `#773636`                        | Fill of a row whose creature is down (0 hit points)                                       |
-| `--it-accent`         | `#1d6a4c`                                                  | `#9be3b4`                        | Primary buttons and markers                                                               |
-| `--it-accent-fg`      | `#ffffff`                                                  | `#07241a`                        | Text and icons on the accent colour                                                       |
-| `--it-focus`          | `#a35200`                                                  | `#ffc566`                        | Keyboard focus ring                                                                       |
-| `--it-danger`         | `#a4161a`                                                  | `#ff9a9d`                        | Clear and Delete buttons                                                                  |
-| `--it-cut`            | `0px`                                                      | same                             | Size of the cut corners of the widget, the creature list, buttons and fields (0 = square) |
-| `--it-font`           | `system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | same                             | Font family                                                                               |
-| `--it-weight`         | `500`                                                      | same                             | Normal font weight                                                                        |
-| `--it-weight-strong`  | `700`                                                      | same                             | Bold font weight (buttons, headings, the round number)                                    |
-| `--it-shadow`         | `0 2px 10px rgba(0, 0, 0, 0.12)`                           | `0 2px 12px rgba(0, 0, 0, 0.45)` | Shadow of the suggestion list and of a row being dragged                                  |
-| `--it-control-height` | `44px`                                                     | same                             | Minimum height of buttons and fields (touch target)                                       |
-| `--it-pad`            | `14px`                                                     | same                             | Padding inside the widget                                                                 |
+| Variable              | Light default                                              | Dark default                     | Used for                                                                                              |
+| --------------------- | ---------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `--it-bg`             | `#f4f1e4`                                                  | `#0e2a24`                        | Background of the whole widget                                                                        |
+| `--it-fg`             | `#16261f`                                                  | `#eef0e2`                        | Main text on the background                                                                           |
+| `--it-muted`          | `#4d5b52`                                                  | `#b6c4b9`                        | Secondary text and labels                                                                             |
+| `--it-border-strong`  | `#5f6f63`                                                  | `#8fae9f`                        | Borders of fields and buttons                                                                         |
+| `--it-surface`        | `#e7e5d2`                                                  | `#17382f`                        | Buttons and raised parts                                                                              |
+| `--it-input-bg`       | `#ffffff`                                                  | `#0a211c`                        | Fill of text fields                                                                                   |
+| `--it-rule`           | `#c9c9ad`                                                  | `#dbdbc7`                        | The panel behind the creature list, which shows as the lines between the cells (a gradient works too) |
+| `--it-head-bg`        | `#244e44`                                                  | `#2b5a4e`                        | Background of the column headings                                                                     |
+| `--it-head-fg`        | `#f4f1e4`                                                  | same                             | Text of the column headings                                                                           |
+| `--it-row-bg`         | `#244e44`                                                  | `#1c4137`                        | Fill of a creature row                                                                                |
+| `--it-row-fg`         | `#f4f1e4`                                                  | `#eef0e2`                        | Text in a creature row                                                                                |
+| `--it-active-bg`      | `#2f7a5e`                                                  | same                             | Fill of the row whose turn it is                                                                      |
+| `--it-down-bg`        | `#7a3535`                                                  | `#773636`                        | Fill of a row whose creature is down (0 hit points)                                                   |
+| `--it-accent`         | `#1d6a4c`                                                  | `#9be3b4`                        | Primary buttons and markers                                                                           |
+| `--it-accent-fg`      | `#ffffff`                                                  | `#07241a`                        | Text and icons on the accent colour                                                                   |
+| `--it-focus`          | `#a35200`                                                  | `#ffc566`                        | Keyboard focus ring                                                                                   |
+| `--it-danger`         | `#a4161a`                                                  | `#ff9a9d`                        | Clear and Delete buttons                                                                              |
+| `--it-cut`            | `0px`                                                      | same                             | Size of the cut corners of the widget, the creature list, buttons and fields (0 = square)             |
+| `--it-font`           | `system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | same                             | Font family                                                                                           |
+| `--it-weight`         | `500`                                                      | same                             | Normal font weight                                                                                    |
+| `--it-weight-strong`  | `700`                                                      | same                             | Bold font weight (buttons, headings, the round number)                                                |
+| `--it-shadow`         | `0 2px 10px rgba(0, 0, 0, 0.12)`                           | `0 2px 12px rgba(0, 0, 0, 0.45)` | Shadow of the suggestion list and of a row being dragged                                              |
+| `--it-control-height` | `44px`                                                     | same                             | Minimum height of buttons and fields (touch target)                                                   |
+| `--it-pad`            | `14px`                                                     | same                             | Padding inside the widget                                                                             |
 
 The same list is exported as `themeVariables` (name, defaults, description). Layout classes all
 start with `it-`; they are not a stable API, the variables are.

@@ -40,7 +40,7 @@ export const themeVariables: ThemeVariable[] = [
     light: '#c9c9ad',
     dark: '#dbdbc7',
     description:
-      'The panel behind the creature list: shows between the cells and under the headings',
+      'The panel behind the creature list, which shows as the lines between the cells (a gradient works too)',
   },
   {
     name: 'head-bg',
@@ -222,6 +222,9 @@ export const css: string = `
 /* the creature list: a cream panel with dark cells, as on the first tracker */
 .it-table { position: relative; margin-top: 4px; padding: 2px 2px 0; }
 .it-table::before { background: var(--_rule); }
+/* the gap under the last row stays inside the list (it would otherwise collapse out of it and
+   leave the bottom edge without a line) */
+.it-rows { display: flow-root; }
 /* the four corner cells are cut too, so the panel colour runs along the slants */
 .it-head > .it-th:first-child { clip-path: ${cutCorner('top left', CELL_CUT)}; }
 .it-head > .it-th:last-child { clip-path: ${cutCorner('top right', CELL_CUT)}; }
@@ -355,6 +358,7 @@ export const css: string = `
 @container it (max-width: 720px) {
   .it-head { display: none; }
   .it-table { padding: 6px; }
+  .it-rows > .it-row:last-child { margin-bottom: 0; }
   .it-rows > .it-row:last-child > .it-td:first-child, .it-rows > .it-row:last-child > .it-td:last-child { clip-path: none; }
   .it-rows > .it-row:first-child > .it-c-grip { clip-path: ${cutCorner('top left', CELL_CUT_NARROW)}; }
   .it-rows > .it-row:first-child > .it-c-remove { clip-path: ${cutCorner('top right', CELL_CUT_NARROW)}; }
