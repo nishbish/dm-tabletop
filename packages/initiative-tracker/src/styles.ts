@@ -232,7 +232,7 @@ export const css: string = `
 .it-rows > .it-row:last-child > .it-td:last-child { clip-path: ${cutCorner('bottom right', CELL_CUT)}; }
 .it-head, .it-row {
   display: grid; align-items: stretch; gap: 3px; margin: 0 0 2px;
-  grid-template-columns: 2.25rem minmax(8.5rem, 11.5rem) minmax(0, 1fr) 8.5rem 4.5rem 2.75rem;
+  grid-template-columns: minmax(10.5rem, 13.5rem) minmax(0, 1fr) 8.5rem 4.5rem 2.75rem;
 }
 .it-th {
   padding: 6px 12px; background: var(--_head-bg); color: var(--_head-fg);
@@ -243,9 +243,9 @@ export const css: string = `
 .it-row--down .it-td { background: var(--_down-bg); }
 .it-row--active.it-row--down .it-td { background: var(--_down-bg); }
 /* the bar on the active row is a background stripe, not an inset shadow, so a cut corner cell
-   (the first row's grip on a phone, the last row's on a wide screen) cuts it cleanly */
-.it-row--active .it-c-grip { background: linear-gradient(var(--_accent), var(--_accent)) left / 4px 100% no-repeat, var(--_active-bg); }
-.it-row--active.it-row--down .it-c-grip { background: linear-gradient(var(--_accent), var(--_accent)) left / 4px 100% no-repeat, var(--_down-bg); }
+   (the first row's initiative on a phone, the last row's on a wide screen) cuts it cleanly */
+.it-row--active .it-c-init { background: linear-gradient(var(--_accent), var(--_accent)) left / 4px 100% no-repeat, var(--_active-bg); }
+.it-row--active.it-row--down .it-c-init { background: linear-gradient(var(--_accent), var(--_accent)) left / 4px 100% no-repeat, var(--_down-bg); }
 .it-td input {
   width: 100%; height: 100%; min-height: 3.25rem; padding: 0 10px; color: inherit; background: transparent;
   border: 0; clip-path: none; font-size: 1.1rem;
@@ -256,22 +256,26 @@ export const css: string = `
 .it-td input::-webkit-outer-spin-button, .it-td input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .it-row--dragging .it-td { box-shadow: var(--_shadow); }
 
-.it-c-grip { justify-content: center; }
 .it-root button.it-grip {
   --edge: transparent; --fill: transparent; --ink: var(--_row-fg);
-  min-height: 3.25rem; width: 100%; padding: 0; cursor: grab; touch-action: none; user-select: none; font-size: 1rem; clip-path: none;
+  flex: none; align-self: stretch; width: 2rem; min-height: 3.25rem; padding: 0; cursor: grab; touch-action: none; user-select: none; font-size: 1rem; clip-path: none;
 }
 .it-root button.it-grip::before { display: none; }
 .it-root button.it-grip:hover:not(:disabled) { --edge: transparent; opacity: 0.75; }
-.it-c-init { gap: 2px; }
-.it-c-init .it-init { width: 3.4rem; flex: 0 1 3.4rem; padding-left: 4px; }
-.it-mod { margin-left: auto; padding-right: 10px; font-size: 0.85rem; opacity: 0.85; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.it-th.it-c-init { padding-left: calc(2rem + 4px); }
+/* the number fills the cell after the handle; the bonus and the d20 sit over its right end */
+.it-c-init .it-init { flex: 1 1 auto; width: auto; padding-left: 4px; padding-right: 5.5rem; }
+.it-mod {
+  position: absolute; right: 3.2rem; top: 50%; transform: translateY(-50%); pointer-events: none;
+  font-size: 0.85rem; opacity: 0.85; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
 
 /* the d20 button inside the initiative cell: only there while the pointer is over the cell, or
    while the cell is in use (focused or tapped), as on the first tracker */
 .it-root button.it-d20 {
   --edge: transparent; --fill: var(--_accent); --ink: var(--_accent-fg);
-  flex: none; width: 2.5rem; min-height: 2.5rem; height: 2.5rem; padding: 0; margin-left: 6px; font-size: 0.72rem; background: transparent; clip-path: none;
+  position: absolute; right: 6px; top: calc(50% - 1.25rem);
+  width: 2.5rem; min-height: 2.5rem; height: 2.5rem; padding: 0; font-size: 0.72rem; background: transparent; clip-path: none;
   opacity: 0; pointer-events: none; transition: opacity 0.2s ease-in-out;
 }
 .it-c-init--open button.it-d20 { opacity: 1; pointer-events: auto; }
@@ -281,20 +285,26 @@ export const css: string = `
 .it-root button.it-d20::before { inset: 3px; clip-path: ${HEXAGON}; background: var(--_accent); }
 .it-root button.it-d20:hover:not(:disabled) { --edge: transparent; filter: brightness(1.15); }
 
-.it-marker { display: inline-flex; align-items: center; justify-content: center; width: 1.4rem; flex: none; color: var(--_accent); font-size: 0.8rem; }
+.it-marker {
+  position: absolute; z-index: 1; left: 0; top: 0; bottom: 0; width: 1.6rem; pointer-events: none;
+  display: flex; align-items: center; justify-content: center; color: var(--_accent); font-size: 0.8rem;
+}
 .it-row--active .it-marker { color: var(--_row-fg); }
-.it-c-name { padding-left: 4px; }
+.it-td .it-name { padding-left: 1.6rem; }
 .it-name-wrap { position: relative; flex: 1 1 auto; min-width: 0; align-self: stretch; }
 .it-root button.it-link { --edge: transparent; --fill: transparent; --ink: var(--_row-fg); flex: none; width: 1.75rem; min-height: 2rem; padding: 0; clip-path: none; opacity: 0.8; }
 .it-root button.it-link::before { display: none; }
 .it-root button.it-link:hover:not(:disabled) { --edge: transparent; opacity: 1; --ink: var(--_row-fg); }
 .it-name { min-width: 0; }
 .it-c-hp { gap: 0; }
-.it-c-hp .it-hp { width: 3.4rem; flex: 0 1 3.4rem; }
-.it-c-hp .it-maxhp { width: 3.2rem; flex: 0 1 3.2rem; padding-left: 2px; opacity: 0.8; font-size: 0.95rem; }
-.it-slash { opacity: 0.6; }
+.it-c-hp .it-hp { flex: 1 1 auto; width: auto; }
+.it-c-hp .it-maxhp { flex: none; width: 3.4rem; padding-left: 1rem; padding-right: 6px; opacity: 0.8; font-size: 0.9rem; }
+.it-slash { position: absolute; right: 2.75rem; top: 50%; transform: translateY(-50%); pointer-events: none; opacity: 0.6; font-size: 0.9rem; }
 /* an empty row shows empty cells: no lone / until something is typed or the cell is in use */
 .it-c-hp:not(:focus-within):not(:hover):has(.it-hp:placeholder-shown):has(.it-maxhp:placeholder-shown) .it-slash { visibility: hidden; }
+/* a corner cell drops its cut while its - / + box is open, or the box would be clipped */
+.it-root .it-table .it-rows > .it-row > .it-td.it-c-init--open,
+.it-root .it-table .it-rows > .it-row > .it-td.it-c-hp--open { clip-path: none; }
 /* the - / + box under the HP field: an amount between two buttons, over the row below */
 .it-hp-pop {
   display: none; position: absolute; z-index: 10; left: 0; top: 100%; margin-top: 2px; padding: 6px; gap: 6px;
@@ -361,14 +371,13 @@ export const css: string = `
   .it-table { padding: 6px; }
   .it-rows > .it-row:last-child { margin-bottom: 0; }
   .it-rows > .it-row:last-child > .it-td:first-child, .it-rows > .it-row:last-child > .it-td:last-child { clip-path: none; }
-  .it-rows > .it-row:first-child > .it-c-grip { clip-path: ${cutCorner('top left', CELL_CUT_NARROW)}; }
+  .it-rows > .it-row:first-child > .it-c-init { clip-path: ${cutCorner('top left', CELL_CUT_NARROW)}; }
   .it-rows > .it-row:first-child > .it-c-remove { clip-path: ${cutCorner('top right', CELL_CUT_NARROW)}; }
   .it-row {
-    grid-template-columns: 2.25rem minmax(0, 1fr) minmax(0, 1fr) 2.75rem;
-    grid-template-areas: 'grip init init remove' 'name name name name' 'hp hp ac ac';
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.75rem;
+    grid-template-areas: 'init init remove' 'name name name' 'hp ac ac';
     margin-bottom: 8px;
   }
-  .it-row .it-c-grip { grid-area: grip; }
   .it-row .it-c-init { grid-area: init; }
   .it-row .it-c-remove { grid-area: remove; }
   .it-row .it-c-name { grid-area: name; }
@@ -378,6 +387,7 @@ export const css: string = `
     content: attr(data-label); position: absolute; left: 10px; top: 2px; font-size: 0.65rem; opacity: 0.7;
   }
   .it-c-hp, .it-c-ac { padding-top: 10px; }
+  .it-c-hp .it-slash { top: calc(50% + 5px); } /* the fields sit 10px lower, under their label */
   .it-c-hp .it-hp { padding-left: 10px; }
   .it-c-ac input { padding-left: 10px; }
   .it-enc-name { flex: 1 1 0; width: auto; min-width: 0; }

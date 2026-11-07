@@ -185,7 +185,6 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   });
   const head = el(doc, 'div', { class: 'it-head', role: 'row' });
   [
-    ['grip', '', 'Reorder'],
     ['init', 'Initiative', ''],
     ['name', 'Name', ''],
     ['hp', 'HP', ''],
@@ -349,17 +348,15 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     const label = labelOf(row, index);
     const tr = el(doc, 'div', { class: 'it-row', role: 'row', 'data-id': row.id });
 
-    const gripCell = cellOf('grip', '');
-    gripCell.append(
-      el(
-        doc,
-        'button',
-        { type: 'button', class: 'it-grip', 'data-grip': 'true', title: 'Drag to reorder' },
-        '\u22EE\u22EE',
-      ),
+    // The initiative cell starts with the drag handle (no column of its own, so no extra line),
+    // then the number, which takes the rest of the cell; the bonus and the d20 sit over its right
+    // end, as on the first tracker.
+    const grip = el(
+      doc,
+      'button',
+      { type: 'button', class: 'it-grip', 'data-grip': 'true', title: 'Drag to reorder' },
+      '\u22EE\u22EE',
     );
-
-    // initiative: the d20 roll button sits in the cell, with the number and the bonus
     const initCell = cellOf('init', 'Initiative');
     const initInput = el(doc, 'input', {
       type: 'number',
@@ -372,13 +369,15 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     // say their total, and a creature from the list brings its own.
     const mod = el(doc, 'span', { class: 'it-mod' }, modText(row));
     initCell.append(
-      button('roll', 'Roll initiative for ' + label, '20', 'it-d20'),
+      grip,
       initInput,
       mod,
+      button('roll', 'Roll initiative for ' + label, '20', 'it-d20'),
       stepBox('init', 'Change initiative'),
     );
 
     const listId = `it-list-${instance}-${row.id}`;
+    // the name field fills the cell; the turn arrow sits over its left padding
     const nameCell = cellOf('name', 'Name');
     nameCell.append(el(doc, 'span', { class: 'it-marker' }));
     const wrap = el(doc, 'div', { class: 'it-name-wrap' });
@@ -427,7 +426,8 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       autocomplete: 'off',
     });
     maxInput.value = blankZero(row.maxHp);
-    // The - / + box comes after max HP so Tab goes HP, max HP, -, amount, +.
+    // Current HP takes most of the cell, max HP a small part on the right (the / sits over its
+    // left padding). The - / + box comes after max HP so Tab goes HP, max HP, -, amount, +.
     const hpPop = stepBox('hp', 'Change HP');
     hpCell.append(
       hpInput,
@@ -446,7 +446,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     const removeCell = cellOf('remove', '');
     removeCell.append(button('remove', 'Remove ' + label, '\u2715', 'it-x'));
 
-    tr.append(gripCell, initCell, nameCell, hpCell, ac.td, removeCell);
+    tr.append(initCell, nameCell, hpCell, ac.td, removeCell);
     relabel(tr, row, index);
     return tr;
   }

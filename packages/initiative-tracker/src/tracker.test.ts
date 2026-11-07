@@ -178,7 +178,9 @@ describe('rendering and actions', () => {
     expect(row.querySelector('.it-actions')).toBeNull();
     expect(row.querySelector('.it-c-init [data-action="roll"]')).toBeTruthy();
     expect(row.querySelector('[data-action="up"]')).toBeNull();
-    expect(row.querySelectorAll('[role="cell"]')).toHaveLength(6);
+    // the drag handle is in the initiative cell, not a column of its own
+    expect(row.querySelectorAll('[role="cell"]')).toHaveLength(5);
+    expect(row.querySelector('.it-c-init [data-grip]')).toBeTruthy();
   });
 
   it('drags a row: it follows the pointer, the others shift, and the order changes on release', async () => {
