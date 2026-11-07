@@ -99,6 +99,8 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   const doc = container.ownerDocument;
   const rng = options.rng || Math.random;
   const creatures: CreatureTemplate[] = options.creatures || defaultCreatures;
+  // suggestions only carry a game-system tag when there is more than one system to tell apart
+  const mixedRulesets = new Set(creatures.map((c) => c.ruleset || '')).size > 1;
   const autosaveDelay = options.autosaveDelay === undefined ? 400 : options.autosaveDelay;
 
   let storage: EncounterStorage | null = null;
@@ -764,10 +766,14 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
         'data-index': i,
         'aria-selected': 'false',
       });
-      li.append(
-        el(doc, 'span', {}, c.name),
-        el(doc, 'small', {}, `${c.ruleset ? c.ruleset + ' · ' : ''}AC ${c.ac} · HP ${c.hp}`),
-      );
+      // When the list mixes game systems, a small tag in front of the name says which one
+      const name = el(doc, 'span', { class: 'it-suggest-name' });
+      if (mixedRulesets && c.ruleset) {
+        const tag = c.ruleset.toLowerCase().replace(/[^a-z0-9]/g, '');
+        name.append(el(doc, 'span', { class: `it-tag it-tag--${tag}` }, c.ruleset));
+      }
+      name.append(c.name);
+      li.append(name, el(doc, 'small', {}, `AC ${c.ac} · HP ${c.hp}`));
       ul.append(li);
     });
     (input.parentElement as HTMLElement).append(ul);

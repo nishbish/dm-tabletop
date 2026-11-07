@@ -21,7 +21,7 @@ describe('theme variables', () => {
   });
 
   it('uses no literal colours outside the variable table', () => {
-    const rules = css.replace(/--_[a-z-]+: var\([^;]*\);/g, '');
+    const rules = css.replace(/--_[a-z0-9-]+: var\([^;]*\);/g, '');
     expect(rules).not.toMatch(/#[0-9a-f]{3,8}\b/i);
   });
 });

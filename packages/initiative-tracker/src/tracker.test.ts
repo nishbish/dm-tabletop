@@ -340,6 +340,8 @@ describe('autocomplete', () => {
     click(action('add'));
     const name = field(rows()[0], 'name');
     type(name, 'owlb');
+    // the SRD creature carries the 5e badge
+    expect($('.it-suggest [role="option"] .it-tag--5e').textContent).toBe('5e');
     name.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     expect(name.getAttribute('aria-activedescendant')).toBeTruthy();
     name.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -352,7 +354,8 @@ describe('autocomplete', () => {
     const option = $$('.it-suggest [role="option"]').find((o) =>
       o.textContent.includes('Goblin Warrior'),
     );
-    expect(option.textContent).toContain('PF2e');
+    // a small badge says which game system each suggestion is from
+    expect(option.querySelector('.it-tag.it-tag--pf2e').textContent).toBe('PF2e');
     click(option);
     expect(tracker.getState().rows[0]).toMatchObject({
       name: 'Goblin Warrior',
@@ -371,6 +374,8 @@ describe('autocomplete', () => {
     click(action('add'));
     type(field(rows()[0], 'name'), 'gob');
     expect($('.it-suggest')).toBeNull();
+    type(field(rows()[0], 'name'), 'xyz');
+    expect($('.it-tag')).toBeNull(); // one game system only: no badges
     type(field(rows()[0], 'name'), 'xyz');
     click($('.it-suggest [role="option"]'));
     expect(tracker.getState().rows[0]).toMatchObject({ ac: 4, hp: 9, initiativeBonus: 4 });
