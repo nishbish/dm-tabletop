@@ -192,3 +192,15 @@ test('on a phone the stat block is a sheet along the bottom', async ({ page }) =
   expect(box.width).toBe(390);
   expect(box.height).toBeLessThanOrEqual(800 * 0.72 + 1);
 });
+
+test('a Pathfinder creature shows its own stat block and the ORC notice', async ({ page }) => {
+  await page.goto('/');
+  await addCreature(page, 'goblin warr', 'Goblin Warrior');
+  await page.getByRole('button', { name: 'Stat block for Goblin Warrior' }).click();
+  const panel = page.getByRole('dialog', { name: 'Goblin Warrior' });
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText('Creature −1');
+  await expect(panel).toContainText('Goblin Scuttle');
+  await expect(panel.getByRole('img', { name: 'Reaction' }).first()).toBeVisible();
+  await expect(panel).toContainText('ORC License');
+});
