@@ -253,7 +253,6 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     const label = labelOf(row, index);
     const names: Record<string, string> = {
       '[data-field="initiative"]': 'Initiative, ' + label,
-      '[data-field="bonus"]': 'Initiative bonus, ' + label,
       '[data-field="hp"]': 'Hit points, ' + label + '. Type a number, or +3 / -5 to change it',
       '[data-field="maxhp"]': 'Maximum hit points, ' + label,
       '[data-field="hpstep"]': 'Amount to add or subtract, ' + label,
@@ -308,6 +307,11 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   // when the creature has a max HP (it is down).
   const blankZero = (n: number) => (n ? String(n) : '');
   const hpText = (row: TrackerRow) => (row.hp || row.maxHp ? String(row.hp) : '');
+
+  const modText = (row: TrackerRow) => {
+    if (!row.initiativeBonus && !row.monsterId) return '';
+    return `(${row.initiativeBonus >= 0 ? '+' : ''}${row.initiativeBonus})`;
+  };
 
   function cellOf(cls: string, label: string) {
     return el(doc, 'div', { class: 'it-td it-c-' + cls, role: 'cell', 'data-label': label });
@@ -364,16 +368,9 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       autocomplete: 'off',
     });
     initInput.value = blankZero(row.initiative);
-    const mod = el(doc, 'label', { class: 'it-mod' });
-    const bonusInput = el(doc, 'input', {
-      type: 'number',
-      class: 'it-bonus',
-      'data-field': 'bonus',
-      placeholder: ' ', // lets the stylesheet hide the + while there is no bonus
-      autocomplete: 'off',
-    });
-    bonusInput.value = blankZero(row.initiativeBonus);
-    mod.append(el(doc, 'span', { 'aria-hidden': 'true' }, '+'), bonusInput);
+    // A picked creature's bonus, in brackets as on the first tracker. It is not typed in: players
+    // say their total, and a creature from the list brings its own.
+    const mod = el(doc, 'span', { class: 'it-mod' }, modText(row));
     initCell.append(
       button('roll', 'Roll initiative for ' + label, '20', 'it-d20'),
       initInput,
@@ -476,7 +473,8 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       input.value = value;
     };
     set('initiative', blankZero(row.initiative));
-    set('bonus', blankZero(row.initiativeBonus));
+    const mod = tr.querySelector('.it-mod');
+    if (mod && mod.textContent !== modText(row)) mod.textContent = modText(row);
     set('name', row.name);
     set('hp', hpText(row));
     set('maxhp', blankZero(row.maxHp));
@@ -1029,8 +1027,6 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       openSuggest(input, id);
     } else if (field === 'initiative') {
       commit(updateRow(state, id, { initiative: intOr(input.value, 0) }));
-    } else if (field === 'bonus') {
-      commit(updateRow(state, id, { initiativeBonus: intOr(input.value, 0) }));
     } else if (field === 'ac') {
       commit(updateRow(state, id, { ac: Math.max(0, intOr(input.value, 0)) }));
       edited(id);

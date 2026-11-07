@@ -103,13 +103,16 @@ describe('rendering and actions', () => {
     expect($('.it-round-num').textContent).toBe('1');
   });
 
-  it('rolls a single row using its bonus', async () => {
+  it("rolls a single row using a picked creature's bonus, shown in brackets", async () => {
     await make({ rng: () => 0.5 }).ready;
-    click(action('add'));
-    type(field(rows()[0], 'bonus'), '3');
+    expect(field(rows()[0], 'bonus')).toBeNull(); // the bonus is not typed in
+    expect(rows()[0].querySelector('.it-mod').textContent).toBe('');
+    type(field(rows()[0], 'name'), 'gobl');
+    click($('.it-suggest [role="option"]'));
+    expect(rows()[0].querySelector('.it-mod').textContent).toBe('(+2)');
     click(rows()[0].querySelector('[data-action="roll"]'));
-    expect(tracker.getState().rows[0].initiative).toBe(14);
-    expect(field(rows()[0], 'initiative').value).toBe('14');
+    expect(tracker.getState().rows[0].initiative).toBe(13);
+    expect(field(rows()[0], 'initiative').value).toBe('13');
   });
 
   it('clear needs a second press and leaves five empty rows', async () => {

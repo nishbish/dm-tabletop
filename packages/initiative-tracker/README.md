@@ -129,7 +129,9 @@ A row can carry a `link`, a string the tracker only stores, to tie it to somethi
 
 - A new encounter starts with five empty rows; **Add creature** (the big **+**) adds more. Type a
   name: suggestions come from the creature list, and picking one fills AC, HP and the initiative
-  bonus. Any other name is fine, fill the numbers in by hand. Empty rows show empty fields.
+  bonus, shown in brackets beside the initiative ("(+2)"). Any other name is fine, fill the
+  numbers in by hand; players give their total, so there is no bonus to type in. Empty rows show
+  empty fields.
 - The d20 button in the initiative cell (shown on hover, or while the cell is in use on a touch
   screen) rolls d20 + bonus for one row, **Roll all** for every filled-in row, **Sort** orders by
   initiative with empty rows last (ties: higher bonus, then the order they were in). **Next** moves

@@ -262,8 +262,7 @@ export const css: string = `
 .it-root button.it-grip:hover:not(:disabled) { --edge: transparent; opacity: 0.75; }
 .it-c-init { gap: 2px; }
 .it-c-init .it-init { width: 3.4rem; flex: 0 1 3.4rem; padding-left: 4px; }
-.it-mod { display: inline-flex; align-items: baseline; margin-left: auto; padding-right: 8px; font-size: 0.85rem; color: inherit; opacity: 0.85; }
-.it-td .it-bonus { width: 2.6rem; padding: 0 2px; font-size: 0.85rem; min-height: 2rem; height: 2rem; }
+.it-mod { margin-left: auto; padding-right: 10px; font-size: 0.85rem; opacity: 0.85; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* the d20 button inside the initiative cell: only there while the pointer is over the cell, or
    while the cell is in use (focused or tapped), as on the first tracker */
@@ -291,8 +290,7 @@ export const css: string = `
 .it-c-hp .it-hp { width: 3.4rem; flex: 0 1 3.4rem; }
 .it-c-hp .it-maxhp { width: 3.2rem; flex: 0 1 3.2rem; padding-left: 2px; opacity: 0.8; font-size: 0.95rem; }
 .it-slash { opacity: 0.6; }
-/* an empty row shows empty cells: no lone + or / until something is typed or the cell is in use */
-.it-c-init:not(:focus-within):not(:hover) .it-mod:has(.it-bonus:placeholder-shown) > span,
+/* an empty row shows empty cells: no lone / until something is typed or the cell is in use */
 .it-c-hp:not(:focus-within):not(:hover):has(.it-hp:placeholder-shown):has(.it-maxhp:placeholder-shown) .it-slash { visibility: hidden; }
 /* the - / + box under the HP field: an amount between two buttons, over the row below */
 .it-hp-pop {
