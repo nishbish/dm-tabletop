@@ -157,3 +157,50 @@ test('initiative - / + buttons, and the d20 shows on hover', async ({ page }) =>
   await cell.getByRole('button', { name: /^Add the amount to initiative/ }).click();
   await expect(cell.locator('[data-field="initiative"]')).toHaveValue('11');
 });
+
+test('the book button opens the stat block beside the tracker; Escape closes it', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await addCreature(page, 'adult red', 'Adult Red Dragon');
+  const book = page.getByRole('button', { name: 'Stat block for Adult Red Dragon' });
+  await book.click();
+  const panel = page.getByRole('dialog', { name: 'Adult Red Dragon' });
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'Legendary Actions' })).toBeVisible();
+  await expect(panel).toContainText('256 (19d12 + 133)');
+  await expect(panel).toContainText('System Reference Document 5.1');
+  // the panel is at the right of the window and the tracker is still usable beside it
+  const box = await panel.boundingBox();
+  const width = page.viewportSize().width;
+  expect(Math.round(box.x + box.width)).toBe(width);
+  await page.getByRole('button', { name: 'Next turn' }).click();
+  await expect(panel).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(panel).toBeHidden();
+});
+
+test('on a phone the stat block is a sheet along the bottom', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto('/');
+  await addCreature(page, 'gobl', 'Goblin');
+  await page.getByRole('button', { name: 'Stat block for Goblin' }).click();
+  const panel = page.getByRole('dialog', { name: 'Goblin' });
+  await expect(panel).toBeVisible();
+  const box = await panel.boundingBox();
+  expect(Math.round(box.y + box.height)).toBe(800);
+  expect(box.width).toBe(390);
+  expect(box.height).toBeLessThanOrEqual(800 * 0.72 + 1);
+});
+
+test('a Pathfinder creature shows its own stat block and the ORC notice', async ({ page }) => {
+  await page.goto('/');
+  await addCreature(page, 'goblin warr', 'Goblin Warrior');
+  await page.getByRole('button', { name: 'Stat block for Goblin Warrior' }).click();
+  const panel = page.getByRole('dialog', { name: 'Goblin Warrior' });
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText('Creature −1');
+  await expect(panel).toContainText('Goblin Scuttle');
+  await expect(panel.getByRole('img', { name: 'Reaction' }).first()).toBeVisible();
+  await expect(panel).toContainText('ORC License');
+});

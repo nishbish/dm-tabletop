@@ -664,3 +664,183 @@ describe('linked rows', () => {
     expect($('[data-action="link"]')).toBeNull();
   });
 });
+
+describe('stat block panel', () => {
+  const goblin = {
+    id: 'goblin',
+    name: 'Goblin',
+    size: 'Small',
+    type: 'humanoid (goblinoid)',
+    alignment: 'neutral evil',
+    armorClass: '15 (leather armor, shield)',
+    ac: 15,
+    hp: 7,
+    hitDice: '2d6',
+    speed: '30 ft.',
+    str: 8,
+    dex: 14,
+    con: 10,
+    int: 10,
+    wis: 8,
+    cha: 8,
+    challenge: '1/4',
+    cr: 0.25,
+    xp: 50,
+    traits: [{ name: 'Nimble Escape', text: 'The goblin can take the Disengage action.' }],
+  };
+  const panel = () => document.querySelector('.it-panel') as HTMLElement | null;
+  const info = (row: Element) => row.querySelector('[data-action="info"]') as HTMLButtonElement;
+
+  async function pickGoblin(row: Element) {
+    type(field(row, 'name'), 'gobl');
+    click($$('.it-suggest [role="option"]')[0]);
+  }
+
+  it('is off without the option', async () => {
+    await make().ready;
+    await pickGoblin(rows()[0]);
+    expect(info(rows()[0])).toBeNull();
+  });
+
+  it('shows the button on rows from the creature list, and opens the stat block beside the tracker', async () => {
+    const load = vi.fn(async (id: string) => (id === 'goblin' ? goblin : null));
+    await make({ statBlocks: { load, pageUrl: (id) => `/monsters/${id}` } }).ready;
+    expect(info(rows()[0]).hidden).toBe(true);
+    type(field(rows()[1], 'name'), 'Bob');
+    expect(info(rows()[1]).hidden).toBe(true);
+    // a Pathfinder creature has its stat block too
+    type(field(rows()[2], 'name'), 'Adamant Sentinel');
+    click($$('.it-suggest [role="option"]')[0]);
+    expect(tracker.getState().rows[2].monsterId).toBe('pf2e-adamant-sentinel');
+    expect(info(rows()[2]).hidden).toBe(false);
+    await pickGoblin(rows()[0]);
+    const btn = info(rows()[0]);
+    expect(btn.hidden).toBe(false);
+    expect(btn.getAttribute('aria-label')).toBe('Stat block for Goblin');
+
+    click(btn);
+    expect(panel().hidden).toBe(false);
+    expect(btn.getAttribute('aria-expanded')).toBe('true');
+    expect(document.activeElement).toBe(panel().querySelector('.it-panel-close'));
+    await wait(0);
+    expect(load).toHaveBeenCalledWith('goblin');
+    expect(panel().querySelector('h2').textContent).toBe('Goblin');
+    expect(panel().getAttribute('aria-labelledby')).toBe(panel().querySelector('h2').id);
+    expect(panel().textContent).toContain('Nimble Escape.');
+    const page = panel().querySelector('.it-panel-page a') as HTMLAnchorElement;
+    expect(page.getAttribute('href')).toBe('/monsters/goblin');
+    expect(page.target).toBe('_blank');
+    expect(panel().querySelector('.it-panel-credit').textContent).toContain(
+      'System Reference Document 5.1',
+    );
+    // the tracker is still there and usable
+    click(action('add'));
+    expect(rows()).toHaveLength(6);
+    expect(panel().hidden).toBe(false);
+  });
+
+  it('closes with the button, with Escape and on a second press, and focus goes back', async () => {
+    const load = vi.fn(async () => goblin);
+    await make({ statBlocks: { load } }).ready;
+    await pickGoblin(rows()[0]);
+    click(info(rows()[0]));
+    await wait(0);
+    expect(panel().querySelector('.it-panel-page')).toBeNull(); // no pageUrl, no link
+    click(panel().querySelector('.it-panel-close'));
+    expect(panel().hidden).toBe(true);
+    expect(document.activeElement).toBe(info(rows()[0]));
+    expect(info(rows()[0]).getAttribute('aria-expanded')).toBe('false');
+
+    click(info(rows()[0]));
+    panel().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(panel().hidden).toBe(true);
+
+    click(info(rows()[0]));
+    click(info(rows()[0]));
+    expect(panel().hidden).toBe(true);
+    expect(load).toHaveBeenCalledTimes(1); // kept after the first load
+  });
+
+  it('says so when there is no stat block or it fails to load, and tries again', async () => {
+    let fail = true;
+    const load = vi.fn(async () => {
+      if (fail) throw new Error('offline');
+      return null;
+    });
+    await make({ statBlocks: { load } }).ready;
+    await pickGoblin(rows()[0]);
+    click(info(rows()[0]));
+    await wait(0);
+    expect(panel().textContent).toContain('did not load');
+    fail = false;
+    click(info(rows()[0]));
+    click(info(rows()[0]));
+    await wait(0);
+    expect(panel().textContent).toContain('No stat block');
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows the ORC credit for a Pathfinder creature, and lets the host choose the rows', async () => {
+    const sentinel = {
+      id: 'pf2e-adamant-sentinel',
+      slug: 'adamant-sentinel',
+      name: 'Adamant Sentinel',
+      level: 18,
+      rarity: 'common',
+      size: 'Huge',
+      traits: ['construct'],
+      source: 'Monster Core',
+      perception: 26,
+      perceptionNote: '',
+      senses: 'darkvision',
+      languages: '',
+      skills: 'Athletics +36',
+      str: 9,
+      dex: 2,
+      con: 7,
+      int: -5,
+      wis: 0,
+      cha: -5,
+      items: '',
+      interactions: [],
+      ac: 42,
+      acNote: '',
+      fort: 34,
+      ref: 28,
+      will: 26,
+      saveNote: '',
+      hp: 255,
+      hpNote: '',
+      immunities: 'bleed',
+      weaknesses: '',
+      resistances: '',
+      defenses: [],
+      speed: '30 feet',
+      strikes: [],
+      spells: [],
+      offenses: [],
+    };
+    const has = vi.fn((id: string) => id.startsWith('pf2e-'));
+    await make({ statBlocks: { load: async () => sentinel, has } }).ready;
+    await pickGoblin(rows()[0]);
+    expect(info(rows()[0]).hidden).toBe(true); // the host said no to the SRD goblin
+    type(field(rows()[1], 'name'), 'Adamant Sentinel');
+    click($$('.it-suggest [role="option"]')[0]);
+    click(info(rows()[1]));
+    await wait(0);
+    expect(panel().querySelector('h2').textContent).toBe('Adamant Sentinel');
+    expect(panel().textContent).toContain('Creature 18');
+    expect(panel().querySelector('.it-panel-credit').textContent).toContain('ORC License');
+  });
+
+  it('closes when its row is removed, and goes with destroy', async () => {
+    await make({ statBlocks: { load: async () => goblin } }).ready;
+    await pickGoblin(rows()[0]);
+    click(info(rows()[0]));
+    await wait(0);
+    click(rows()[0].querySelector('[data-action="remove"]'));
+    expect(panel().hidden).toBe(true);
+    tracker.destroy();
+    expect(panel()).toBeNull();
+  });
+});

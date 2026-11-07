@@ -14,6 +14,7 @@
 // rule whenever the source books change.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { fullBlock, RESERVED_CREATURES, scrub } from './pf2e-block.mjs';
 
 const BOOKS = ['pathfinder-monster-core', 'pathfinder-monster-core-2'];
 
@@ -38,6 +39,12 @@ if (!root) {
 }
 
 const creatures = [];
+const blocks = [];
+const slugOf = (name) =>
+  name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 const left = { reserved: [], unique: [], notOrc: 0 };
 for (const book of BOOKS) {
   const dir = path.join(root, 'packs/pf2e', book);
@@ -58,10 +65,21 @@ for (const book of BOOKS) {
       left.unique.push(j.name);
       continue;
     }
-    if (RESERVED.some((re) => re.test(j.name))) {
+    if (RESERVED.some((re) => re.test(j.name)) || RESERVED_CREATURES.test(j.name)) {
       left.reserved.push(j.name);
       continue;
     }
+    // the full stat block for the pages and the tracker's panel (same id as in src/creatures.ts)
+    blocks.push(
+      scrub(
+        fullBlock(
+          j,
+          'pf2e-' + slugOf(j.name),
+          slugOf(j.name),
+          pub.title.replace(/^Pathfinder /, ''),
+        ),
+      ),
+    );
     // Pathfinder rolls initiative with Perception
     creatures.push({
       name: j.name,
@@ -86,6 +104,10 @@ for (const c of creatures) {
 // Compact rows, [name, AC, HP, initiative bonus, level], to keep the download small.
 const rows = creatures.map((c) => [c.name, c.ac, c.hp, c.initiativeBonus, c.level]);
 fs.writeFileSync(out, '[\n' + rows.map((r) => JSON.stringify(r)).join(',\n') + '\n]\n');
+blocks.sort((a, b) => a.name.localeCompare(b.name));
+const fullOut = path.join(path.dirname(out), 'pf2e-monsters.json');
+fs.writeFileSync(fullOut, JSON.stringify(blocks) + '\n');
+console.log(`${blocks.length} stat blocks written to ${fullOut}`);
 console.log(
   `${creatures.length} creatures written to ${out}; left out: ${left.reserved.length} with reserved names, ` +
     `${left.unique.length} unique, ${left.notOrc} not ORC`,
