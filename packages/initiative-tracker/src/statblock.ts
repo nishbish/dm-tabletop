@@ -171,7 +171,7 @@ export function renderStatBlock(m: Monster, options: StatBlockOptions = {}): str
  * can set: `--sb-accent` (the name and section headings) and `--sb-rule` (the lines between the
  * parts). Nothing else is styled outside `.sb`.
  */
-export const statBlockCss = `
+export const baseStatBlockCss = `
 .sb { --_sb-accent: var(--sb-accent, currentColor); --_sb-rule: var(--sb-rule, currentColor); line-height: 1.45; }
 .sb > * { margin: 0; }
 .sb .sb-name { color: var(--_sb-accent); font-size: 1.5em; line-height: 1.2; margin: 0; }
@@ -198,3 +198,248 @@ export const statBlockCss = `
   .sb .sb-abilities { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 8px; }
 }
 `;
+
+// ---------- Pathfinder 2e ----------
+// Creatures of Pathfinder Monster Core and Monster Core 2 (Paizo, ORC License), from
+// src/data/pf2e-monsters.json (scripts/build-pf2e-creatures.mjs). The ids are the tracker's
+// `pf2e-` ids. Wherever they are shown, show `PF2E_CREDIT_HTML` too (see NOTICE.md).
+
+export interface Pf2eAbility {
+  name: string;
+  /** '1', '2', '3', 'reaction' or 'free'; none for a passive ability */
+  actions?: string;
+  traits?: string[];
+  /** Paragraphs separated by "\n"; **bold**, *italic*, and [one-action] style action icons. */
+  text: string;
+}
+
+export interface Pf2eStrike {
+  kind: 'Melee' | 'Ranged';
+  name: string;
+  bonus: number;
+  traits: string[];
+  damage: string;
+}
+
+export interface Pf2eSpellList {
+  name: string;
+  dc?: number;
+  attack?: number;
+  ranks: { label: string; spells: string[] }[];
+}
+
+export interface Pf2eMonster {
+  id: string;
+  /** The page address: /monsters/pathfinder/<slug> on dm.tools */
+  slug: string;
+  name: string;
+  level: number;
+  rarity: string;
+  size: string;
+  traits: string[];
+  /** "Monster Core" or "Monster Core 2" */
+  source: string;
+  perception: number;
+  perceptionNote: string;
+  senses: string;
+  languages: string;
+  skills: string;
+  str: number;
+  dex: number;
+  con: number;
+  int: number;
+  wis: number;
+  cha: number;
+  items: string;
+  interactions: Pf2eAbility[];
+  ac: number;
+  acNote: string;
+  fort: number;
+  ref: number;
+  will: number;
+  saveNote: string;
+  hp: number;
+  hpNote: string;
+  immunities: string;
+  weaknesses: string;
+  resistances: string;
+  defenses: Pf2eAbility[];
+  speed: string;
+  strikes: Pf2eStrike[];
+  spells: Pf2eSpellList[];
+  offenses: Pf2eAbility[];
+}
+
+const ORC_URL = 'https://paizo.com/orclicense';
+
+/** The ORC Notice and the attribution, as one short paragraph of HTML. */
+export const PF2E_CREDIT_HTML =
+  `From Pathfinder Monster Core (© 2024 Paizo Inc.) and Monster Core 2 (© 2025 Paizo Inc.). ` +
+  `This product is licensed under the ORC License held in the Library of Congress at TX 9-307-067 and ` +
+  `available online at various locations including <a href="${ORC_URL}">www.paizo.com/orclicense</a>, ` +
+  `www.azoralaw.com/orclicense and others. All warranties are disclaimed as set forth therein. ` +
+  `"Pathfinder" is a trademark of Paizo Inc.; this site is not published, endorsed or approved by Paizo Inc.`;
+
+/** True for a Pathfinder stat block (its id starts with "pf2e-"). */
+export function isPf2e(m: { id: string }): boolean {
+  return m.id.startsWith('pf2e-');
+}
+
+const ACTION_LABEL: Record<string, string> = {
+  '1': 'Single Action',
+  '2': 'Two Actions',
+  '3': 'Three Actions',
+  reaction: 'Reaction',
+  free: 'Free Action',
+};
+const ACTION_GLYPH: Record<string, string> = {
+  '1': '◆',
+  '2': '◆◆',
+  '3': '◆◆◆',
+  reaction: '⟲',
+  free: '◇',
+};
+const GLYPH_WORDS: Record<string, string> = {
+  'one-action': '1',
+  'two-actions': '2',
+  'three-actions': '3',
+  reaction: 'reaction',
+  'free-action': 'free',
+};
+
+export function actionIcon(actions: string | undefined): string {
+  if (!actions || !ACTION_GLYPH[actions]) return '';
+  return `<span class="sb-act" role="img" aria-label="${ACTION_LABEL[actions]}" title="${ACTION_LABEL[actions]}">${ACTION_GLYPH[actions]}</span>`;
+}
+
+/** Escapes, then **bold**, *italic* and [one-action] icons. */
+function richText(text: string): string {
+  return escapeHtml(text)
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/\[(one-action|two-actions|three-actions|reaction|free-action)\]/g, (_, w) =>
+      actionIcon(GLYPH_WORDS[w]),
+    );
+}
+
+export function signedNumber(n: number): string {
+  return n >= 0 ? `+${n}` : `−${-n}`;
+}
+
+function pf2eAbilities(list: Pf2eAbility[]): string {
+  return list
+    .map((a) => {
+      const [first, ...rest] = (a.text || '').split('\n');
+      const traits = a.traits && a.traits.length ? ` (${escapeHtml(a.traits.join(', '))})` : '';
+      const icon = a.actions ? ` ${actionIcon(a.actions)}` : '';
+      const more = rest.map((p) => `<p class="sb-more">${richText(p)}</p>`).join('');
+      return `<p><strong>${escapeHtml(a.name)}</strong>${icon}${traits}${first ? ' ' + richText(first) : ''}</p>${more}`;
+    })
+    .join('');
+}
+
+const line = (label: string, value: string) =>
+  value ? `<div><dt>${escapeHtml(label)}</dt> <dd>${value}</dd></div>` : '';
+
+/** "Small goblin humanoid", for descriptions */
+export function pf2eKindText(m: Pf2eMonster): string {
+  const rarity = m.rarity && m.rarity !== 'common' ? `${m.rarity} ` : '';
+  return `${rarity}${m.size} ${m.traits.join(' ')}`.trim();
+}
+
+export function renderPf2eStatBlock(m: Pf2eMonster, options: StatBlockOptions = {}): string {
+  const level = Math.min(5, Math.max(1, options.headingLevel || 2));
+  const h = `h${level}`;
+  const id = options.headingId ? ` id="${escapeHtml(options.headingId)}"` : '';
+  const tags = [
+    ...(m.rarity && m.rarity !== 'common'
+      ? [`<li class="sb-tag sb-tag-${escapeHtml(m.rarity)}">${escapeHtml(m.rarity)}</li>`]
+      : []),
+    `<li class="sb-tag sb-tag-size">${escapeHtml(m.size)}</li>`,
+    ...m.traits.map((t) => `<li class="sb-tag">${escapeHtml(t)}</li>`),
+  ].join('');
+  const perception =
+    `${signedNumber(m.perception)}${m.perceptionNote ? ' ' + escapeHtml(m.perceptionNote) : ''}` +
+    (m.senses ? `; ${escapeHtml(m.senses)}` : '');
+  const abilities = (['str', 'dex', 'con', 'int', 'wis', 'cha'] as const)
+    .map((k) => `<strong>${k.charAt(0).toUpperCase() + k.slice(1)}</strong> ${signedNumber(m[k])}`)
+    .join(', ');
+  const saves =
+    `${m.ac}${m.acNote ? ' ' + escapeHtml(m.acNote) : ''}; <strong>Fort</strong> ${signedNumber(m.fort)}, ` +
+    `<strong>Ref</strong> ${signedNumber(m.ref)}, <strong>Will</strong> ${signedNumber(m.will)}` +
+    (m.saveNote ? `; ${escapeHtml(m.saveNote)}` : '');
+  let hp = `${m.hp}${m.hpNote ? ', ' + escapeHtml(m.hpNote) : ''}`;
+  if (m.immunities) hp += `; <strong>Immunities</strong> ${escapeHtml(m.immunities)}`;
+  if (m.weaknesses) hp += `; <strong>Weaknesses</strong> ${escapeHtml(m.weaknesses)}`;
+  if (m.resistances) hp += `; <strong>Resistances</strong> ${escapeHtml(m.resistances)}`;
+  const strikes = m.strikes
+    .map(
+      (s) =>
+        `<p><strong>${s.kind}</strong> ${actionIcon('1')} ${escapeHtml(s.name)} ${signedNumber(s.bonus)}` +
+        `${s.traits.length ? ` (${escapeHtml(s.traits.join(', '))})` : ''}, <strong>Damage</strong> ${escapeHtml(s.damage)}</p>`,
+    )
+    .join('');
+  const spells = m.spells
+    .map((e) => {
+      const head = [e.dc ? `DC ${e.dc}` : '', e.attack ? `attack ${signedNumber(e.attack)}` : '']
+        .filter(Boolean)
+        .join(', ');
+      const ranks = e.ranks
+        .map(
+          (r) =>
+            `<strong>${escapeHtml(r.label)}</strong> ${r.spells.map((s) => `<em>${escapeHtml(s)}</em>`).join(', ')}`,
+        )
+        .join('; ');
+      return `<p><strong>${escapeHtml(e.name)}</strong> ${head}${head && ranks ? '; ' : ''}${ranks}</p>`;
+    })
+    .join('');
+  return (
+    `<div class="sb sb-pf2e">` +
+    `<div class="sb-head"><${h} class="sb-name"${id}>${escapeHtml(m.name)}</${h}>` +
+    `<span class="sb-level">Creature ${signedNumber(m.level).replace('+', '')}</span></div>` +
+    `<ul class="sb-tags" aria-label="Traits">${tags}</ul>` +
+    `<dl class="sb-props">` +
+    line('Perception', perception) +
+    line('Languages', escapeHtml(m.languages)) +
+    line('Skills', escapeHtml(m.skills)) +
+    `<div><dd>${abilities}</dd></div>` +
+    line('Items', escapeHtml(m.items)) +
+    `</dl>` +
+    (m.interactions.length ? `<div class="sb-traits">${pf2eAbilities(m.interactions)}</div>` : '') +
+    `<dl class="sb-props">` +
+    line('AC', saves) +
+    line('HP', hp) +
+    `</dl>` +
+    (m.defenses.length ? `<div class="sb-traits">${pf2eAbilities(m.defenses)}</div>` : '') +
+    `<dl class="sb-props">${line('Speed', escapeHtml(m.speed))}</dl>` +
+    `<div class="sb-traits">${strikes}${spells}${pf2eAbilities(m.offenses)}</div>` +
+    `</div>`
+  );
+}
+
+/** Either kind of stat block. */
+export function renderAnyStatBlock(
+  m: Monster | Pf2eMonster,
+  options: StatBlockOptions = {},
+): string {
+  return isPf2e(m)
+    ? renderPf2eStatBlock(m as Pf2eMonster, options)
+    : renderStatBlock(m as Monster, options);
+}
+
+export const pf2eStatBlockCss = `
+.sb .sb-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.sb .sb-level { flex: none; font-weight: 700; font-size: 1.05em; white-space: nowrap; }
+.sb .sb-tags { display: flex; flex-wrap: wrap; gap: 4px; list-style: none; margin: 6px 0 0; padding: 0; }
+.sb .sb-tag {
+  padding: 1px 7px; font-size: 0.75em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  border: 1px solid var(--_sb-rule); color: inherit;
+}
+.sb .sb-tag-uncommon, .sb .sb-tag-rare, .sb .sb-tag-unique { border-width: 2px; }
+.sb-pf2e .sb-props > div > dd:only-child { display: inline; }
+.sb .sb-act { font-size: 0.85em; letter-spacing: -0.1em; white-space: nowrap; }
+.sb-pf2e .sb-traits p { margin: 6px 0 0; }
+`;
+
+/** The stat block styles, both kinds. */
+export const statBlockCss = baseStatBlockCss + pf2eStatBlockCss;

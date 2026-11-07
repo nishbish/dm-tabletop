@@ -14,8 +14,20 @@ export {
   abilityModifier,
   challengeText,
   metaText,
+  renderPf2eStatBlock,
+  renderAnyStatBlock,
+  PF2E_CREDIT_HTML,
+  isPf2e,
 } from './statblock';
-export type { Monster, MonsterEntry, StatBlockOptions } from './statblock';
+export type {
+  Monster,
+  MonsterEntry,
+  StatBlockOptions,
+  Pf2eMonster,
+  Pf2eAbility,
+  Pf2eStrike,
+  Pf2eSpellList,
+} from './statblock';
 export { themeVariables } from './styles';
 export type { ThemeVariable } from './styles';
 export { LocalStorageEncounterStorage, LAST_SESSION_ID, localStorageAvailable } from './storage';

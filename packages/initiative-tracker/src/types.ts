@@ -1,4 +1,4 @@
-import type { Monster } from './statblock';
+import type { Monster, Pf2eMonster } from './statblock';
 
 // Plain interfaces for the tracker's state and options. The state is JSON-serialisable and
 // versioned (`version`) so saved encounters can be migrated when the shape changes.
@@ -103,7 +103,7 @@ export interface TrackerOptions {
   /** Milliseconds to wait after the last change before autosaving. Default 400. */
   autosaveDelay?: number;
   /**
-   * When given, a row filled from the creature list (by default the SRD part of it) gets a small button in its name cell that
+   * When given, a row filled from the creature list (by default the built-in list) gets a small button in its name cell that
    * opens the creature's stat block in a panel beside the tracker. `load` is called with the
    * row's `monsterId` the first time (the result is kept) and resolves to the stat block, or
    * null when there is none. `pageUrl`, when given, adds a link to a full page.
@@ -112,8 +112,8 @@ export interface TrackerOptions {
 }
 
 export interface StatBlockSource {
-  load(id: string): Promise<Monster | null>;
-  /** Which rows get the button. Default: the SRD creatures (`srdCreatures`). */
+  load(id: string): Promise<Monster | Pf2eMonster | null>;
+  /** Which rows get the button. Default: the built-in creatures (`defaultCreatures`). */
   has?: (id: string) => boolean;
   pageUrl?: (id: string) => string;
 }

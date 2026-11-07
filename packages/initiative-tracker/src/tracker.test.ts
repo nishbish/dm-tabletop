@@ -708,11 +708,11 @@ describe('stat block panel', () => {
     expect(info(rows()[0]).hidden).toBe(true);
     type(field(rows()[1], 'name'), 'Bob');
     expect(info(rows()[1]).hidden).toBe(true);
-    // a Pathfinder creature has no SRD stat block: no button
+    // a Pathfinder creature has its stat block too
     type(field(rows()[2], 'name'), 'Adamant Sentinel');
     click($$('.it-suggest [role="option"]')[0]);
     expect(tracker.getState().rows[2].monsterId).toBe('pf2e-adamant-sentinel');
-    expect(info(rows()[2]).hidden).toBe(true);
+    expect(info(rows()[2]).hidden).toBe(false);
     await pickGoblin(rows()[0]);
     const btn = info(rows()[0]);
     expect(btn.hidden).toBe(false);
@@ -778,6 +778,59 @@ describe('stat block panel', () => {
     await wait(0);
     expect(panel().textContent).toContain('No stat block');
     expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows the ORC credit for a Pathfinder creature, and lets the host choose the rows', async () => {
+    const sentinel = {
+      id: 'pf2e-adamant-sentinel',
+      slug: 'adamant-sentinel',
+      name: 'Adamant Sentinel',
+      level: 18,
+      rarity: 'common',
+      size: 'Huge',
+      traits: ['construct'],
+      source: 'Monster Core',
+      perception: 26,
+      perceptionNote: '',
+      senses: 'darkvision',
+      languages: '',
+      skills: 'Athletics +36',
+      str: 9,
+      dex: 2,
+      con: 7,
+      int: -5,
+      wis: 0,
+      cha: -5,
+      items: '',
+      interactions: [],
+      ac: 42,
+      acNote: '',
+      fort: 34,
+      ref: 28,
+      will: 26,
+      saveNote: '',
+      hp: 255,
+      hpNote: '',
+      immunities: 'bleed',
+      weaknesses: '',
+      resistances: '',
+      defenses: [],
+      speed: '30 feet',
+      strikes: [],
+      spells: [],
+      offenses: [],
+    };
+    const has = vi.fn((id: string) => id.startsWith('pf2e-'));
+    await make({ statBlocks: { load: async () => sentinel, has } }).ready;
+    await pickGoblin(rows()[0]);
+    expect(info(rows()[0]).hidden).toBe(true); // the host said no to the SRD goblin
+    type(field(rows()[1], 'name'), 'Adamant Sentinel');
+    click($$('.it-suggest [role="option"]')[0]);
+    click(info(rows()[1]));
+    await wait(0);
+    expect(panel().querySelector('h2').textContent).toBe('Adamant Sentinel');
+    expect(panel().textContent).toContain('Creature 18');
+    expect(panel().querySelector('.it-panel-credit').textContent).toContain('ORC License');
   });
 
   it('closes when its row is removed, and goes with destroy', async () => {

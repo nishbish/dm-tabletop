@@ -8,7 +8,7 @@ The material used is the creature statistics in `src/data/srd-creatures.json` (n
 
 ## Pathfinder creatures (ORC License)
 
-The material used is the creature statistics in `src/data/pf2e-creatures.json` (name, armor class, hit points, Perception modifier and level of the creatures in Pathfinder Monster Core and Monster Core 2), extracted by `scripts/build-pf2e-creatures.mjs` from the game data of the Foundry VTT PF2e system (https://github.com/foundryvtt/pf2e), using only entries marked as published under the ORC License.
+The material used is the creature statistics in `src/data/pf2e-creatures.json` (name, armor class, hit points, Perception modifier and level of the creatures in Pathfinder Monster Core and Monster Core 2), extracted by `scripts/build-pf2e-creatures.mjs` from the game data of the Foundry VTT PF2e system (https://github.com/foundryvtt/pf2e), using only entries marked as published under the ORC License. The full stat blocks in `src/data/pf2e-monsters.json` (traits, Perception and senses, languages, skills, attribute modifiers, items, AC, saves, HP, immunities, weaknesses and resistances, speed, Strikes, spells and abilities, without the descriptive text) come from the same entries, with Foundry's markup turned into plain text. Proper nouns of the setting (deities, Pathfinder planes, places and regional languages, named individuals) are left out or replaced with plain words by `scripts/pf2e-block.mjs`, and the build fails if one is left.
 
 **ORC Notice.** This product is licensed under the ORC License held in the Library of Congress at TX 9-307-067 and available online at various locations including www.paizo.com/orclicense, www.azoralaw.com/orclicense and others. All warranties are disclaimed as set forth therein.
 

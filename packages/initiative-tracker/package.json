@@ -10,6 +10,7 @@
     "dist/initiative-tracker.js",
     "dist/statblock.js",
     "dist/srd-monsters.json",
+    "dist/pf2e-monsters.json",
     "dist/types",
     "NOTICE.md"
   ],
@@ -23,13 +24,14 @@
       "import": "./dist/statblock.js",
       "default": "./dist/statblock.js"
     },
-    "./srd-monsters.json": "./dist/srd-monsters.json"
+    "./srd-monsters.json": "./dist/srd-monsters.json",
+    "./pf2e-monsters.json": "./dist/pf2e-monsters.json"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "dev": "vite dev/ --host 127.0.0.1 --port 5174",
-    "build": "vite build && vite build -c vite.statblock.config.mjs && cp src/data/srd-monsters.json dist/ && tsc -p tsconfig.build.json && vite build -c vite.page.config.mjs",
+    "build": "vite build && vite build -c vite.statblock.config.mjs && cp src/data/srd-monsters.json src/data/pf2e-monsters.json dist/ && tsc -p tsconfig.build.json && vite build -c vite.page.config.mjs",
     "e2e": "npm run build && playwright test"
   },
   "devDependencies": {

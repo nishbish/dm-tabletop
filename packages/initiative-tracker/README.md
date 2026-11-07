@@ -209,13 +209,20 @@ node packages/initiative-tracker/scripts/build-pf2e-creatures.mjs path/to/pf2e
 
 `defaultCreatures` is both lists, SRD first.
 
+The same script writes the full Pathfinder stat blocks, `pf2e-monsters.json` (shipped as
+`@dm-tabletop/initiative-tracker/pf2e-monsters.json`, about 2.2 MB, 450 kB gzipped; the type is
+`Pf2eMonster`). `renderPf2eStatBlock` draws one, `renderAnyStatBlock` either kind (a Pathfinder id
+starts with `pf2e-`), and `PF2E_CREDIT_HTML` is the ORC Notice and attribution to show beside it.
+Setting names that are Reserved Material under the ORC License are removed by
+`scripts/pf2e-block.mjs`; the build stops if one is left.
+
 It writes both files. The stat blocks are read from the PDF's fonts (bold italic trait names,
 bold section headings); a test checks a sample of them against the printed stat blocks.
 
 ### Stat blocks
 
-With the `statBlocks` option, a row filled from the SRD creature list shows a small book button in
-its name cell (`has(monsterId)` picks other rows, for a host with stat blocks of its own). It opens the creature's full stat block in a panel at the side of the window (along the
+With the `statBlocks` option, a row filled from the built-in creature list (SRD or Pathfinder) shows
+a small book button in its name cell (`has(monsterId)` picks other rows, for a host with stat blocks of its own). It opens the creature's full stat block in a panel at the side of the window (along the
 bottom on a phone), without leaving the tracker; × or Escape closes it. `load(monsterId)` returns
 the stat block (it is called once per creature), `pageUrl(monsterId)` adds a "Full page" link.
 

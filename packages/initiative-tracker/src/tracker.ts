@@ -1,4 +1,10 @@
-import { creatureBonus, defaultCreatures, searchCreatures, srdCreatures } from './creatures';
+import {
+  creatureBonus,
+  defaultCreatures,
+  searchCreatures,
+  srdCreatures,
+  pf2eCreatures,
+} from './creatures';
 import {
   addRow,
   applyHpInput,
@@ -20,8 +26,14 @@ import {
   withoutBlankRows,
 } from './logic';
 import { css, STYLE_ID } from './styles';
-import { escapeHtml, renderStatBlock, SRD_CREDIT_HTML } from './statblock';
-import type { Monster } from './statblock';
+import {
+  escapeHtml,
+  isPf2e,
+  PF2E_CREDIT_HTML,
+  renderAnyStatBlock,
+  SRD_CREDIT_HTML,
+} from './statblock';
+import type { Monster, Pf2eMonster } from './statblock';
 import { LAST_SESSION_ID, LocalStorageEncounterStorage, localStorageAvailable } from './storage';
 import {
   CreatureTemplate,
@@ -839,17 +851,17 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
   // the tracker stays usable beside it. It lives on <body> (the tracker is a size container, which
   // would otherwise hold a fixed panel inside its own box).
   const panelId = `it-panel-${instance}`;
-  const srdIds = new Set(srdCreatures.map((c) => c.id));
+  const builtInIds = new Set(srdCreatures.concat(pf2eCreatures).map((c) => c.id));
   const hasStatBlock = (id: string | undefined) => {
     const source = options.statBlocks;
     if (!id || !source) return false;
-    return source.has ? source.has(id) : srdIds.has(id);
+    return source.has ? source.has(id) : builtInIds.has(id);
   };
   let panel: HTMLElement | null = null;
   let panelBody: HTMLElement | null = null;
   let panelRowId: string | null = null;
   let panelToken = 0;
-  const statCache = new Map<string, Promise<Monster | null>>();
+  const statCache = new Map<string, Promise<Monster | Pf2eMonster | null>>();
 
   function ensurePanel(): HTMLElement {
     if (panel) return panel;
@@ -922,11 +934,11 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     const titleId = `${panelId}-title`;
     const page = source.pageUrl ? source.pageUrl(monster.id) : '';
     panelBody.innerHTML =
-      renderStatBlock(monster, { headingLevel: 2, headingId: titleId }) +
+      renderAnyStatBlock(monster, { headingLevel: 2, headingId: titleId }) +
       (page
         ? `<p class="it-panel-page"><a href="${escapeHtml(page)}" target="_blank" rel="noopener">Full page</a></p>`
         : '') +
-      `<p class="it-panel-credit">${SRD_CREDIT_HTML}</p>`;
+      `<p class="it-panel-credit">${isPf2e(monster) ? PF2E_CREDIT_HTML : SRD_CREDIT_HTML}</p>`;
     box.removeAttribute('aria-label');
     box.setAttribute('aria-labelledby', titleId);
   }
