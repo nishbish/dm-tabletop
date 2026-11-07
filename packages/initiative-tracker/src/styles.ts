@@ -75,6 +75,12 @@ export const themeVariables: ThemeVariable[] = [
     dark: '#07241a',
     description: 'Text and icons on the accent colour',
   },
+  {
+    name: 'remove',
+    light: '#8c3a35',
+    dark: '#8a4540',
+    description: 'The small remove button on each row (a muted red)',
+  },
   { name: 'focus', light: '#a35200', dark: '#ffc566', description: 'Keyboard focus ring' },
   { name: 'danger', light: '#a4161a', dark: '#ff9a9d', description: 'Clear and Delete buttons' },
   {
@@ -232,7 +238,7 @@ export const css: string = `
 .it-rows > .it-row:last-child > .it-td:last-child { clip-path: ${cutCorner('bottom right', CELL_CUT)}; }
 .it-head, .it-row {
   display: grid; align-items: stretch; gap: 3px; margin: 0 0 2px;
-  grid-template-columns: minmax(10.5rem, 13.5rem) minmax(0, 1fr) 8.5rem 4.5rem 2.75rem;
+  grid-template-columns: minmax(10.5rem, 13.5rem) minmax(0, 1fr) 8.5rem 6.5rem;
 }
 .it-th {
   padding: 6px 12px; background: var(--_head-bg); color: var(--_head-fg);
@@ -250,7 +256,8 @@ export const css: string = `
   width: 100%; height: 100%; min-height: 3.25rem; padding: 0 10px; color: inherit; background: transparent;
   border: 0; clip-path: none; font-size: 1.1rem;
 }
-.it-td input:focus-visible { outline-offset: -3px; background: rgba(255, 255, 255, 0.08); }
+/* a field in use shows no outline, only a slightly lighter fill */
+.it-root .it-td input:focus, .it-root .it-td input:focus-visible { outline: none; background: rgba(255, 255, 255, 0.06); }
 .it-td input::placeholder { color: inherit; opacity: 0.6; }
 .it-td input[type='number'] { -moz-appearance: textfield; appearance: textfield; text-align: left; }
 .it-td input::-webkit-outer-spin-button, .it-td input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -332,9 +339,14 @@ export const css: string = `
 .it-suggest li small { color: var(--_muted); }
 .it-suggest li[aria-selected='true'] { background: var(--_accent); color: var(--_accent-fg); }
 .it-suggest li[aria-selected='true'] small { color: inherit; }
-.it-root button.it-x { --edge: transparent; --fill: transparent; --ink: var(--_row-fg); width: 100%; min-height: 3.25rem; padding: 0; font-size: 1rem; clip-path: none; opacity: 0.8; }
-.it-root button.it-x::before { display: none; }
-.it-root button.it-x:hover:not(:disabled) { --edge: transparent; opacity: 1; --ink: var(--_row-fg); }
+/* remove: a small muted red button at the end of the AC cell */
+.it-c-ac input { flex: 1 1 auto; width: auto; }
+.it-root button.it-x {
+  --edge: color-mix(in srgb, var(--_remove) 75%, var(--_row-fg)); --fill: var(--_remove); --ink: var(--_row-fg);
+  flex: none; width: 1.9rem; height: 1.9rem; min-height: 1.9rem; margin-right: 8px; padding: 0; font-size: 0.8rem; line-height: 1;
+}
+.it-root button.it-x::before { inset: 1px; }
+.it-root button.it-x:hover:not(:disabled) { --edge: color-mix(in srgb, var(--_remove) 55%, var(--_row-fg)); --fill: color-mix(in srgb, var(--_remove) 88%, var(--_row-fg)); }
 
 /* Next, Sort and Clear under the list; the round and the big add button on the right */
 .it-toolbar { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; justify-content: space-between; margin: 16px 0 4px; }
@@ -371,15 +383,16 @@ export const css: string = `
   .it-table { padding: 6px; }
   .it-rows > .it-row:last-child { margin-bottom: 0; }
   .it-rows > .it-row:last-child > .it-td:first-child, .it-rows > .it-row:last-child > .it-td:last-child { clip-path: none; }
-  .it-rows > .it-row:first-child > .it-c-init { clip-path: ${cutCorner('top left', CELL_CUT_NARROW)}; }
-  .it-rows > .it-row:first-child > .it-c-remove { clip-path: ${cutCorner('top right', CELL_CUT_NARROW)}; }
+  /* the head is hidden: the first row's initiative has both top corners, the last row's HP and AC the bottom ones */
+  .it-rows > .it-row:first-child > .it-c-init { clip-path: polygon(${CELL_CUT_NARROW} 0, calc(100% - ${CELL_CUT_NARROW}) 0, 100% ${CELL_CUT_NARROW}, 100% 100%, 0 100%, 0 ${CELL_CUT_NARROW}); }
+  .it-rows > .it-row:last-child > .it-c-hp { clip-path: ${cutCorner('bottom left', CELL_CUT_NARROW)}; }
+  .it-rows > .it-row:last-child > .it-c-ac { clip-path: ${cutCorner('bottom right', CELL_CUT_NARROW)}; }
   .it-row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.75rem;
-    grid-template-areas: 'init init remove' 'name name name' 'hp ac ac';
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: 'init init' 'name name' 'hp ac';
     margin-bottom: 8px;
   }
   .it-row .it-c-init { grid-area: init; }
-  .it-row .it-c-remove { grid-area: remove; }
   .it-row .it-c-name { grid-area: name; }
   .it-row .it-c-hp { grid-area: hp; }
   .it-row .it-c-ac { grid-area: ac; }
