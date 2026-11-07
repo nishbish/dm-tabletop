@@ -34,7 +34,7 @@ describe('Pathfinder stat blocks', () => {
 
   it('holds no Reserved Material of the setting', () => {
     expect(RESERVED_TEXT.exec(JSON.stringify(all))).toBeNull();
-    for (const name of ['Volnagur', 'Sorvuth-Ka', 'Treerazer']) {
+    for (const name of ['Volnagur', 'Sorvuth-Ka', 'Treerazer', 'Grim Reaper']) {
       expect(all.find((m) => m.name === name)).toBeUndefined();
     }
   });
