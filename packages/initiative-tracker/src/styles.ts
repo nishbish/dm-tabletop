@@ -205,6 +205,11 @@ export const css: string = `
 .it-root button.it-folder, .it-root button.it-new { width: 2.25rem; }
 .it-root button.it-folder svg { display: block; margin: auto; }
 .it-root button.it-new { font-size: 1.7rem; font-weight: var(--_weight); line-height: 1; }
+.it-saved-note {
+  margin-left: 10px; font-size: 0.85rem; color: var(--_muted);
+  opacity: 0; transition: opacity 0.6s ease-in-out; pointer-events: none;
+}
+.it-saved-note--shown { opacity: 1; transition-duration: 0.2s; }
 .it-message:not(.it-sr) { margin: 0 0 0 10px; color: var(--_danger); font-weight: var(--_weight-strong); }
 
 /* the saved encounters, under the folder button: a name to open, a cross to delete */
@@ -379,6 +384,7 @@ export const css: string = `
 @media (prefers-reduced-motion: reduce) {
   .it-root button:active:not(:disabled) { transform: none; }
   .it-root button.it-d20 { transition: none; }
+  .it-saved-note { transition: none; }
   .it-row--shifted, .it-row--settling { transition: none; }
 }
 /* the narrow layout follows the tracker's own width, so it also fits a side panel on a wide screen */

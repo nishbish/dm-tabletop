@@ -422,6 +422,16 @@ describe('storage', () => {
     expect(await storage.list()).toHaveLength(1);
   });
 
+  it('shows "All changes saved" for a moment after an autosave', async () => {
+    await make().ready;
+    const note = $('.it-saved-note');
+    expect(note.classList.contains('it-saved-note--shown')).toBe(false);
+    type(field(rows()[0], 'name'), 'Ann');
+    await wait();
+    expect(note.textContent).toBe('All changes saved');
+    expect(note.classList.contains('it-saved-note--shown')).toBe(true);
+  });
+
   it('hides the encounter controls when there is no storage', async () => {
     await make({ storage: null }).ready;
     expect(action('saved')).toBeNull();

@@ -240,7 +240,19 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     role: 'status',
     'aria-live': 'polite',
   });
-  header.append(message);
+  // "All changes saved", shown for a moment after each autosave, as on the first tracker: with no
+  // Save button it is the sign that the encounter was kept. Screen readers are not told every
+  // time; a problem saving is announced (see `say`).
+  const savedNote = el(doc, 'span', { class: 'it-saved-note', 'aria-hidden': 'true' });
+  let savedNoteTimer: ReturnType<typeof setTimeout> | null = null;
+  function showSaved() {
+    if (destroyed || !storage || shown) return;
+    savedNote.textContent = 'All changes saved';
+    savedNote.classList.add('it-saved-note--shown');
+    if (savedNoteTimer) clearTimeout(savedNoteTimer);
+    savedNoteTimer = setTimeout(() => savedNote.classList.remove('it-saved-note--shown'), 2500);
+  }
+  header.append(savedNote, message);
 
   root.append(header, turnLine, table, toolbar);
   container.appendChild(root);
@@ -806,6 +818,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     if (enc !== current) return;
     try {
       await storage.save(LAST_SESSION_ID, { ...snapshot, encounterId: enc.id || undefined });
+      showSaved();
     } catch (err) {
       reportSaveError(err, false);
     }
@@ -1320,6 +1333,7 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
       destroyed = true;
       if (autosaveTimer) clearTimeout(autosaveTimer);
       armTimers.forEach((t) => clearTimeout(t));
+      if (savedNoteTimer) clearTimeout(savedNoteTimer);
       armTimers.clear();
       listeners.forEach(([type, fn]) => root.removeEventListener(type, fn));
       if (view) view.removeEventListener('pagehide', onPageHide);
