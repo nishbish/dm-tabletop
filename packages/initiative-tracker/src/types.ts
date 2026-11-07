@@ -50,7 +50,10 @@ export interface CreatureTemplate {
   cr?: number;
   /** Creature level, for game systems that use levels (Pathfinder). */
   level?: number;
-  /** A short tag shown with the suggestion when the list mixes game systems, e.g. "PF2e". */
+  /**
+   * A short tag for the game system, e.g. "5e" or "PF2e". When the list mixes systems, each
+   * suggestion shows it as a small badge in front of the name.
+   */
   ruleset?: string;
 }
 

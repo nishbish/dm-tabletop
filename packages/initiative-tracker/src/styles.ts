@@ -78,6 +78,12 @@ export const themeVariables: ThemeVariable[] = [
     description: 'Text and icons on the accent colour',
   },
   { name: 'focus', light: '#a35200', dark: '#ffc566', description: 'Keyboard focus ring' },
+  {
+    name: 'tag-pf2e',
+    light: '#e2c48a',
+    dark: '#7a5c2a',
+    description: 'Fill of the "PF2e" badge in the suggestions (the "5e" one uses the accent)',
+  },
   { name: 'danger', light: '#a4161a', dark: '#ff9a9d', description: 'Clear and Delete buttons' },
   {
     name: 'cut',
@@ -354,7 +360,16 @@ export const css: string = `
   border: 1px solid var(--_border-strong); box-shadow: var(--_shadow); min-width: 14rem;
 }
 .it-suggest li { padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; }
-.it-suggest li small { color: var(--_muted); }
+.it-suggest li small { color: var(--_muted); white-space: nowrap; }
+/* the game-system badge in front of a suggestion: a small cut-corner chip, a different quiet tint
+   for each system */
+.it-tag {
+  display: inline-block; margin-right: 7px; padding: 0 5px; vertical-align: 1px;
+  font-size: 0.66rem; line-height: 1.55; font-weight: var(--_weight-strong); letter-spacing: 0.03em;
+  color: var(--_fg); background: color-mix(in srgb, var(--_accent) 24%, transparent); clip-path: ${poly('3px')};
+}
+.it-tag--pf2e { background: var(--_tag-pf2e); }
+.it-suggest li[aria-selected='true'] .it-tag { color: inherit; background: color-mix(in srgb, var(--_accent-fg) 22%, transparent); }
 .it-suggest li[aria-selected='true'] { background: var(--_accent); color: var(--_accent-fg); }
 .it-suggest li[aria-selected='true'] small { color: inherit; }
 /* remove: a minus in a thin ring, faint until the pointer is on the row (or it has focus) */
