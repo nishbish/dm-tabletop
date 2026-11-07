@@ -12,7 +12,7 @@ npm run dev -w @dm-tabletop/initiative-tracker     # demo page on http://127.0.0
 npm run build -w @dm-tabletop/initiative-tracker   # dist/initiative-tracker.js + dist/types
 ```
 
-The built file is about 65 kB (16 kB gzipped); about 28 kB of that is the creature list.
+The built file is about 120 kB (33 kB gzipped); most of that is the two creature lists.
 
 ## Use
 
@@ -83,18 +83,18 @@ start with `it-`; they are not a stable API, the variables are.
 
 ### Options
 
-| Option          | Type                       | Default        | Meaning                                                                                       |
-| --------------- | -------------------------- | -------------- | --------------------------------------------------------------------------------------------- |
-| `storage`       | `EncounterStorage \| null` | localStorage   | Where encounters are saved. `null` turns saving off and hides the folder and new buttons.     |
-| `creatures`     | `CreatureTemplate[]`       | `srdCreatures` | Autocomplete list. It replaces the built-in list; spread `srdCreatures` into yours to extend. |
-| `rng`           | `() => number` in [0, 1)   | `Math.random`  | Random source for rolls (inject a fake one in tests).                                         |
-| `onChange`      | `(state) => void`          | none           | Called after every change the user makes (not after `setState`).                              |
-| `onRowEdit`     | `(row) => void`            | none           | Called when the user changes the HP, max HP or AC of a linked row.                            |
-| `onLoad`        | `(state) => void`          | none           | Called after an encounter was opened or the last session restored.                            |
-| `onLinkClick`   | `(row) => void`            | none           | When given, linked rows show a button that calls this.                                        |
-| `onLimit`       | `(reason: string) => void` | none           | Called when `storage.save` rejects with `code === 'LIMIT'`.                                   |
-| `initialState`  | `TrackerState`             | last session   | Start from this state instead of restoring the last session.                                  |
-| `autosaveDelay` | `number` (ms)              | `400`          | Wait after the last change before the working state is autosaved.                             |
+| Option          | Type                       | Default            | Meaning                                                                                                                    |
+| --------------- | -------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `storage`       | `EncounterStorage \| null` | localStorage       | Where encounters are saved. `null` turns saving off and hides the folder and new buttons.                                  |
+| `creatures`     | `CreatureTemplate[]`       | `defaultCreatures` | Autocomplete list. It replaces the built-in list (`srdCreatures` then `pf2eCreatures`); spread those into yours to extend. |
+| `rng`           | `() => number` in [0, 1)   | `Math.random`      | Random source for rolls (inject a fake one in tests).                                                                      |
+| `onChange`      | `(state) => void`          | none               | Called after every change the user makes (not after `setState`).                                                           |
+| `onRowEdit`     | `(row) => void`            | none               | Called when the user changes the HP, max HP or AC of a linked row.                                                         |
+| `onLoad`        | `(state) => void`          | none               | Called after an encounter was opened or the last session restored.                                                         |
+| `onLinkClick`   | `(row) => void`            | none               | When given, linked rows show a button that calls this.                                                                     |
+| `onLimit`       | `(reason: string) => void` | none               | Called when `storage.save` rejects with `code === 'LIMIT'`.                                                                |
+| `initialState`  | `TrackerState`             | last session       | Start from this state instead of restoring the last session.                                                               |
+| `autosaveDelay` | `number` (ms)              | `400`              | Wait after the last change before the working state is autosaved.                                                          |
 
 ### State
 
@@ -191,6 +191,20 @@ directly instead of `dex`. To regenerate the file (it is committed), download th
 npm install --no-save pdfjs-dist@4
 node packages/initiative-tracker/scripts/build-creatures.mjs path/to/SRD_CC_v5.1.pdf
 ```
+
+`pf2eCreatures` has the creatures of Pathfinder Monster Core and Monster Core 2 (Paizo, ORC License,
+see [NOTICE.md](NOTICE.md)): `{ id, name, ac, hp, initiativeBonus, level, ruleset: 'PF2e' }`. The
+initiative bonus is the creature's Perception, which Pathfinder rolls initiative with; there are no
+hit dice (fixed hit points). Names that are Reserved Material under the ORC License (deities, planes
+and other places, named characters) are left out. Suggestions show the `ruleset` tag. To regenerate
+the file (it is committed), check out the Foundry VTT PF2e system
+(https://github.com/foundryvtt/pf2e) and run:
+
+```
+node packages/initiative-tracker/scripts/build-pf2e-creatures.mjs path/to/pf2e
+```
+
+`defaultCreatures` is both lists, SRD first.
 
 ### Accessibility
 
