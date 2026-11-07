@@ -68,18 +68,6 @@ export const themeVariables: ThemeVariable[] = [
     dark: '#773636',
     description: 'Fill of a row whose creature is down (0 hit points)',
   },
-  {
-    name: 'bevel-light',
-    light: 'rgba(255, 255, 255, 0.2)',
-    dark: 'rgba(255, 255, 255, 0.16)',
-    description: 'Lit edge along the bottom and right of each cell, so the lines look raised',
-  },
-  {
-    name: 'bevel-dark',
-    light: 'rgba(0, 0, 0, 0.45)',
-    dark: 'rgba(0, 0, 0, 0.55)',
-    description: 'Shaded edge along the top and left of each cell (transparent for flat lines)',
-  },
   { name: 'accent', light: '#1d6a4c', dark: '#9be3b4', description: 'Primary buttons and markers' },
   {
     name: 'accent-fg',
@@ -246,14 +234,6 @@ export const css: string = `
   display: grid; align-items: stretch; gap: 3px; margin: 0 0 2px;
   grid-template-columns: 2.25rem minmax(8.5rem, 11.5rem) minmax(0, 1fr) 8.5rem 4.5rem 2.75rem;
 }
-/* Raised lines, like the moulding on a metal box: every cell is shaded along its top and left
-   and lit along its bottom and right, so the lines between the cells look embossed with the
-   light coming from the top left. Inset, so the cut corner cells keep it too. */
-.it-root .it-th, .it-root .it-td {
-  --bevel: inset 1px 1px 0 var(--_bevel-dark), inset 2px 2px 4px var(--_bevel-dark),
-    inset -1px -1px 0 var(--_bevel-light);
-  box-shadow: var(--bevel);
-}
 .it-th {
   padding: 6px 12px; background: var(--_head-bg); color: var(--_head-fg);
   font-size: 1.15rem; font-weight: var(--_weight);
@@ -261,8 +241,8 @@ export const css: string = `
 .it-td { position: relative; display: flex; align-items: center; min-width: 0; background: var(--_row-bg); color: var(--_row-fg); min-height: 3.25rem; }
 .it-row--active .it-td { background: var(--_active-bg); }
 .it-row--down .it-td { background: var(--_down-bg); }
-.it-root .it-row--active.it-row--down .it-td { background: var(--_down-bg); box-shadow: inset 0 0 0 2px var(--_row-fg), var(--bevel); }
-.it-root .it-row--active .it-c-grip { box-shadow: inset 4px 0 0 var(--_accent), var(--bevel); }
+.it-row--active.it-row--down .it-td { background: var(--_down-bg); box-shadow: inset 0 0 0 2px var(--_row-fg); }
+.it-row--active .it-c-grip { box-shadow: inset 4px 0 0 var(--_accent); }
 .it-td input {
   width: 100%; height: 100%; min-height: 3.25rem; padding: 0 10px; color: inherit; background: transparent;
   border: 0; clip-path: none; font-size: 1.1rem;
@@ -271,7 +251,7 @@ export const css: string = `
 .it-td input::placeholder { color: inherit; opacity: 0.6; }
 .it-td input[type='number'] { -moz-appearance: textfield; appearance: textfield; text-align: left; }
 .it-td input::-webkit-outer-spin-button, .it-td input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.it-root .it-row--dragging .it-td { box-shadow: var(--bevel), var(--_shadow); }
+.it-row--dragging .it-td { box-shadow: var(--_shadow); }
 
 .it-c-grip { justify-content: center; }
 .it-root button.it-grip {
