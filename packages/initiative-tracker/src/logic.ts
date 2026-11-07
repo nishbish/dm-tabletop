@@ -130,7 +130,11 @@ export function rollInitiative(bonus: number, rng: () => number = Math.random): 
  * for anything else.
  */
 export function rollHitDice(hitDice: string, rng: () => number = Math.random): number | null {
-  const m = /^\s*(\d+)\s*d\s*(\d+)\s*(?:([+-])\s*(\d+))?\s*$/i.exec(String(hitDice || ''));
+  // spaces are dropped first, so the pattern has nothing ambiguous to backtrack over
+  const text = String(hitDice || '')
+    .slice(0, 40)
+    .replace(/\s/g, '');
+  const m = /^(\d{1,4})d(\d{1,4})(?:([+-])(\d{1,6}))?$/i.exec(text);
   if (!m) return null;
   const count = Number(m[1]);
   const sides = Number(m[2]);
