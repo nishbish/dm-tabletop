@@ -18,7 +18,7 @@ class MemoryStorage implements StorageLike {
 }
 
 function sample(name: string) {
-  return addRow({ ...createState(), name }, { name: 'Goblin', hp: 7, maxHp: 7 }, 'g1');
+  return addRow({ ...createState(), name, rows: [] }, { name: 'Goblin', hp: 7, maxHp: 7 }, 'g1');
 }
 
 describe('LocalStorageEncounterStorage', () => {

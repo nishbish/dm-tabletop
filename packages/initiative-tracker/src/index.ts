@@ -6,7 +6,11 @@ export { LocalStorageEncounterStorage, LAST_SESSION_ID, localStorageAvailable } 
 export type { LocalStorageOptions, StorageLike } from './storage';
 export {
   STATE_VERSION,
+  BLANK_ROWS,
   createState,
+  isBlankRow,
+  hasContent,
+  withoutBlankRows,
   addRow,
   removeRow,
   clear,

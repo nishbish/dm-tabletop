@@ -5,6 +5,8 @@ import {
   changeHp,
   clear,
   createState,
+  hasContent,
+  isBlankRow,
   migrate,
   moveRow,
   nextTurn,
@@ -13,11 +15,15 @@ import {
   rollInitiative,
   sortByInitiative,
   linkRow,
+  withoutBlankRows,
 } from './logic';
 import { TrackerState } from './types';
 
+// a state with no rows at all (a new encounter has five empty ones)
+const empty = (): TrackerState => ({ ...createState(), rows: [] });
+
 function withRows(specs: Array<[string, number, number?]>): TrackerState {
-  let s = createState();
+  let s = empty();
   for (const [name, initiative, bonus] of specs) {
     s = addRow(s, { name, initiative, initiativeBonus: bonus || 0 }, name);
   }
@@ -117,8 +123,18 @@ describe('nextTurn', () => {
   });
 
   it('with no rows, nothing changes', () => {
-    const s = createState();
+    const s = empty();
     expect(nextTurn(s)).toEqual(s);
+  });
+
+  it('skips empty rows, and steps through them when nothing is filled in', () => {
+    let s = addRow(addRow(addRow(empty(), {}, 'x'), { name: 'a' }, 'a'), {}, 'y');
+    s = nextTurn(s); // from the empty first row to a
+    expect([s.turn, s.round]).toEqual([1, 1]);
+    s = nextTurn(s); // past the empty last row, round 2
+    expect([s.turn, s.round]).toEqual([1, 2]);
+    const blank = nextTurn(createState());
+    expect([blank.turn, blank.round]).toEqual([1, 1]);
   });
 });
 
@@ -135,9 +151,11 @@ describe('resetRound, clear, removeRow, moveRow', () => {
     expect([s.round, s.turn]).toEqual([1, 0]);
   });
 
-  it('clear removes rows and resets, keeping the name', () => {
+  it('clear removes the creatures and leaves five empty rows, keeping the name', () => {
     const s = clear({ ...withRows([['a', 1]]), name: 'Ambush', round: 3 });
-    expect(s).toMatchObject({ name: 'Ambush', rows: [], round: 1, turn: 0 });
+    expect(s).toMatchObject({ name: 'Ambush', round: 1, turn: 0 });
+    expect(s.rows).toHaveLength(5);
+    expect(s.rows.every(isBlankRow)).toBe(true);
   });
 
   it('removeRow keeps the active creature active', () => {
@@ -248,17 +266,13 @@ describe('applyHpInput', () => {
 
 describe('migrate', () => {
   it('returns a fresh state for junk', () => {
-    expect(migrate(null).rows).toEqual([]);
+    expect(migrate(null).rows).toHaveLength(5);
     expect(migrate('x').version).toBe(1);
     expect(migrate(42).round).toBe(1);
   });
 
   it('keeps a valid state unchanged', () => {
-    const s = addRow(
-      createState(),
-      { name: 'Orc', hp: 15, maxHp: 15, ac: 13, monsterId: 'orc' },
-      'x1',
-    );
+    const s = addRow(empty(), { name: 'Orc', hp: 15, maxHp: 15, ac: 13, monsterId: 'orc' }, 'x1');
     expect(migrate(JSON.parse(JSON.stringify(s)))).toEqual(s);
   });
 
@@ -280,11 +294,15 @@ describe('migrate', () => {
   it('accepts a state with no version', () => {
     expect(migrate({ name: 'Old', rows: [] }).name).toBe('Old');
   });
+
+  it('keeps the encounter id of a last session, and adds none', () => {
+    expect(migrate({ rows: [], encounterId: 'e1' }).encounterId).toBe('e1');
+    expect('encounterId' in migrate({ rows: [] })).toBe(false);
+  });
 });
 
 describe('linkRow', () => {
-  const base = () =>
-    addRow(addRow(createState(), { name: 'Goblin', hp: 7 }, 'a'), { name: 'Orc' }, 'b');
+  const base = () => addRow(addRow(empty(), { name: 'Goblin', hp: 7 }, 'a'), { name: 'Orc' }, 'b');
 
   it('adds a row when nothing matches', () => {
     const state = linkRow(base(), 'r:1', { name: 'Troll', hp: 84, maxHp: 84 }, 'c');
@@ -309,9 +327,41 @@ describe('linkRow', () => {
     expect(linkRow(one, 'r:1', { name: 'Goblin' }).rows).toHaveLength(2);
   });
 
+  it('fills the first empty row before adding one', () => {
+    const state = linkRow(createState(), 'r:1', { name: 'Troll', hp: 84 });
+    expect(state.rows).toHaveLength(5);
+    expect(state.rows[0]).toMatchObject({ name: 'Troll', hp: 84, link: 'r:1' });
+  });
+
   it('survives saving, and old saved rows need nothing', () => {
     const state = linkRow(base(), 'r:1', { name: 'Goblin' });
     expect(migrate(JSON.parse(JSON.stringify(state))).rows[0].link).toBe('r:1');
     expect('link' in migrate(JSON.parse(JSON.stringify(base()))).rows[0]).toBe(false);
+  });
+});
+
+describe('empty rows', () => {
+  it('a new encounter has five of them and nothing worth saving', () => {
+    const s = createState();
+    expect(s.rows).toHaveLength(5);
+    expect(s.rows.every(isBlankRow)).toBe(true);
+    expect(new Set(s.rows.map((r) => r.id)).size).toBe(5);
+    expect(hasContent(s)).toBe(false);
+    expect(hasContent(addRow(s, { name: 'Orc' }))).toBe(true);
+  });
+
+  it('sort puts them at the bottom', () => {
+    const s = addRow(addRow(addRow(empty(), {}, 'x'), { name: 'a', initiative: -2 }, 'a'), {}, 'y');
+    expect(sortByInitiative(s).rows.map((r) => r.id)).toEqual(['a', 'x', 'y']);
+  });
+
+  it('are left out of a saved encounter, and the active creature stays active', () => {
+    let s = addRow(addRow(addRow(empty(), {}, 'x'), { name: 'a' }, 'a'), { name: 'b' }, 'b');
+    s = { ...s, turn: 2 };
+    const kept = withoutBlankRows(s);
+    expect(kept.rows.map((r) => r.id)).toEqual(['a', 'b']);
+    expect(kept.turn).toBe(1);
+    const full = withRows([['a', 1]]);
+    expect(withoutBlankRows(full)).toBe(full);
   });
 });

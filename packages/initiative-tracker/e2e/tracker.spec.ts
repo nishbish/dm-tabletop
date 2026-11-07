@@ -1,9 +1,12 @@
 import { expect, test, Page } from '@playwright/test';
 
+// A new encounter has five empty rows: fill the first one that has no name yet.
 async function addCreature(page: Page, typed: string, option: string) {
-  await page.getByRole('button', { name: 'Add creature' }).click();
   const names = page.locator('input.it-name');
-  const field = names.last();
+  const values = await names.evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value));
+  const free = values.indexOf('');
+  if (free < 0) await page.getByRole('button', { name: 'Add creature' }).click();
+  const field = free < 0 ? names.last() : names.nth(free);
   await field.fill(typed);
   await page.getByRole('option', { name: option }).first().click();
 }
@@ -13,7 +16,7 @@ test('add, roll, sort, next, and restore after reload', async ({ page }) => {
 
   await addCreature(page, 'gobl', 'Goblin');
   await addCreature(page, 'ogre', 'Ogre');
-  await expect(page.locator('.it-row')).toHaveCount(2);
+  await expect(page.locator('.it-row')).toHaveCount(5);
   // Autocomplete filled the stats (SRD goblin: AC 15, 7 HP).
   await expect(page.getByLabel(/^Armor class, Goblin/)).toHaveValue('15');
   await expect(page.getByLabel(/^Hit points, Goblin/)).toHaveValue('7');
@@ -30,7 +33,7 @@ test('add, roll, sort, next, and restore after reload', async ({ page }) => {
   await expect(rows.nth(1)).toContainText('Turn');
   await expect(page.locator('.it-turn')).toContainText('Round 1, turn:');
 
-  await page.getByRole('button', { name: 'Next turn' }).click();
+  await page.getByRole('button', { name: 'Next turn' }).click(); // the empty rows are skipped
   await expect(page.locator('.it-round-num')).toHaveText('2');
   await expect(rows.first()).toHaveAttribute('aria-current', 'true');
 
@@ -40,7 +43,7 @@ test('add, roll, sort, next, and restore after reload', async ({ page }) => {
     .toContain('"round":2');
 
   await page.reload();
-  await expect(page.locator('.it-row')).toHaveCount(2);
+  await expect(page.locator('.it-row')).toHaveCount(5);
   await expect(page.locator('.it-round-num')).toHaveText('2');
   await expect(page.getByLabel(/^Armor class, /).first()).not.toHaveValue('');
   await expect(page.locator('.it-row').first()).toHaveAttribute('aria-current', 'true');
@@ -54,7 +57,7 @@ test('dragging a row moves it under the pointer while the others slide, then reo
   await addCreature(page, 'ogre', 'Ogre');
   await addCreature(page, 'orc', 'Orc');
   const rows = page.locator('.it-row');
-  await expect(rows).toHaveCount(3);
+  await expect(rows).toHaveCount(5);
   const first = await rows.nth(0).boundingBox();
   const grip = await rows.nth(0).locator('[data-grip]').boundingBox();
   const startX = grip!.x + grip!.width / 2;
@@ -126,4 +129,31 @@ test.describe('on a phone', () => {
     expect(box!.x + box!.width).toBeLessThanOrEqual(375);
     await page.screenshot({ path: 'e2e/.results/hp-box-phone.png' });
   });
+});
+
+test('a new encounter autosaves and is opened again from the folder button', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.it-row')).toHaveCount(5);
+  await page.getByLabel('Encounter name').fill('Bridge');
+  await addCreature(page, 'gobl', 'Goblin');
+  await page.getByRole('button', { name: 'New encounter' }).click();
+  await expect(page.getByLabel('Encounter name')).toHaveValue('New encounter');
+  await expect(page.locator('input.it-name').first()).toHaveValue('');
+
+  await page.getByRole('button', { name: 'Saved encounters' }).click();
+  await page.getByRole('button', { name: 'Bridge', exact: true }).click();
+  await expect(page.getByLabel('Encounter name')).toHaveValue('Bridge');
+  await expect(page.locator('input.it-name').first()).toHaveValue('Goblin');
+});
+
+test('initiative - / + buttons, and the d20 shows on hover', async ({ page }) => {
+  await page.goto('/');
+  const cell = page.locator('.it-row').first().locator('.it-c-init');
+  const d20 = cell.getByRole('button', { name: /^Roll initiative/ });
+  await expect(d20).toHaveCSS('opacity', '0');
+  await cell.hover();
+  await expect(d20).toHaveCSS('opacity', '1');
+  await cell.locator('[data-field="initiative"]').fill('10');
+  await cell.getByRole('button', { name: /^Add the amount to initiative/ }).click();
+  await expect(cell.locator('[data-field="initiative"]')).toHaveValue('11');
 });

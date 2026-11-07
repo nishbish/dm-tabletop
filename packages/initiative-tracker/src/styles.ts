@@ -81,7 +81,8 @@ export const themeVariables: ThemeVariable[] = [
     name: 'cut',
     light: '0px',
     dark: '0px',
-    description: 'Size of the cut corners of buttons, fields and rows (0 = square corners)',
+    description:
+      'Size of the cut corners of the widget, the creature list, buttons and fields (0 = square)',
   },
   { name: 'font', light: FONT, dark: FONT, description: 'Font family' },
   { name: 'weight', light: '500', dark: '500', description: 'Normal font weight' },
@@ -122,6 +123,17 @@ const CUT_INNER = poly('max(0px, calc(var(--_cut) - 0.83px))');
 const slant = (dir: string) =>
   `linear-gradient(to ${dir}, transparent 50%, var(--_border-strong) 50%, var(--_border-strong) calc(50% + 1px), transparent calc(50% + 1px))`;
 const SLANTS = ['bottom right', 'bottom left', 'top left', 'top right'].map(slant).join(', ');
+// A corner cut of one cell sitting inside a cut panel: the panel's cut, made smaller so the
+// line of panel colour along the slant is as thick as along the straight sides (inset 2px).
+const CELL_CUT = 'max(0px, calc(var(--_cut) - 1.17px))';
+const CELL_CUT_NARROW = 'max(0px, calc(var(--_cut) - 3.51px))'; // inset 6px (narrow layout)
+const cutCorner = (corner: string, c: string) =>
+  ({
+    'top left': `polygon(${c} 0, 100% 0, 100% 100%, 0 100%, 0 ${c})`,
+    'top right': `polygon(0 0, calc(100% - ${c}) 0, 100% ${c}, 100% 100%, 0 100%)`,
+    'bottom right': `polygon(0 0, 100% 0, 100% calc(100% - ${c}), calc(100% - ${c}) 100%, 0 100%)`,
+    'bottom left': `polygon(0 0, 100% 0, 100% 100%, ${c} 100%, 0 calc(100% - ${c}))`,
+  })[corner];
 const OCTAGON = 'polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%)';
 const HEXAGON = 'polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)';
 
@@ -132,9 +144,14 @@ export const css: string = `
 }
 .it-root {
   box-sizing: border-box; max-width: 100%; min-width: 0; padding: var(--_pad); container: it / inline-size;
-  background: var(--_bg); color: var(--_fg);
+  position: relative; isolation: isolate; color: var(--_fg);
   font: var(--_weight) 16px/1.4 var(--_font);
 }
+/* The widget's background and the creature list's panel are cut shapes drawn behind the content
+   (not clip-path on the boxes themselves), so the suggestion list and the - / + boxes can still
+   hang out past the last row. */
+.it-root::before, .it-table::before { content: ''; position: absolute; inset: 0; z-index: -1; clip-path: ${CUT}; }
+.it-root::before { background: var(--_bg); }
 .it-root [hidden] { display: none !important; }
 .it-root *, .it-root *::before, .it-root *::after { box-sizing: border-box; }
 .it-root :focus-visible { outline: 3px solid var(--_focus); outline-offset: 2px; }
@@ -172,19 +189,44 @@ export const css: string = `
 .it-root button.it-danger:hover:not(:disabled) { --fill: var(--_surface); }
 .it-root button.it-armed { --edge: var(--_danger); --fill: var(--_danger); --ink: var(--_bg); }
 
-.it-header { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-end; justify-content: space-between; }
-.it-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.it-field > span, .it-root .it-label { font-size: 0.8rem; color: var(--_muted); }
+.it-header { position: relative; display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; margin-bottom: 12px; }
+/* the name reads as the encounter's title; a faint line under it shows it can be typed in */
 .it-enc-name {
-  font-size: 1.3rem; font-weight: var(--_weight-strong); min-width: 14rem; max-width: 100%;
+  font-size: 1.3rem; font-weight: var(--_weight-strong); width: 18rem; max-width: 100%;
   background: transparent !important; border-color: transparent !important; border-bottom-color: var(--_border-strong) !important;
 }
 /* only an underline, no box: a cut would clip the line short at both ends (beats .it-root input) */
 .it-root .it-enc-name { clip-path: none; }
-.it-turn { margin: 8px 0; font-weight: var(--_weight-strong); min-height: 1.4em; }
+.it-root button.it-folder svg { display: block; margin: auto; }
+.it-root button.it-new { font-size: 1.7rem; font-weight: var(--_weight); line-height: 1; }
+.it-message:not(.it-sr) { margin: 0 0 0 10px; color: var(--_danger); font-weight: var(--_weight-strong); }
+
+/* the saved encounters, under the folder button: a name to open, a cross to delete */
+.it-saved {
+  position: absolute; z-index: 20; top: 100%; left: 0; margin-top: 4px; width: 26rem; max-width: 100%;
+  max-height: 22rem; overflow-y: auto; padding: 8px; background: var(--_bg); color: var(--_fg);
+  border: 1px solid var(--_border-strong); box-shadow: var(--_shadow);
+}
+.it-saved ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.it-saved li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px; }
+.it-root button.it-saved-open {
+  --edge: var(--_row-bg); --fill: var(--_row-bg); --ink: var(--_row-fg);
+  text-align: left; font-weight: var(--_weight); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.it-root button.it-saved-open:hover:not(:disabled) { --edge: var(--_active-bg); --fill: var(--_active-bg); }
+.it-root button.it-saved-open[aria-current='true'] { --edge: var(--_active-bg); }
+.it-root button.it-saved-delete { --edge: var(--_danger); --fill: var(--_danger); --ink: var(--_bg); min-width: var(--_control-height); padding: 0 10px; }
+.it-root button.it-saved-delete:hover:not(:disabled) { --edge: var(--_danger); filter: brightness(1.12); }
+.it-saved-empty { margin: 4px; color: var(--_muted); }
 
 /* the creature list: a cream panel with dark cells, as on the first tracker */
-.it-table { background: var(--_rule); padding-bottom: 8px; margin-top: 4px; }
+.it-table { position: relative; margin-top: 4px; padding: 2px 2px 0; }
+.it-table::before { background: var(--_rule); }
+/* the four corner cells are cut too, so the panel colour runs along the slants */
+.it-head > .it-th:first-child { clip-path: ${cutCorner('top left', CELL_CUT)}; }
+.it-head > .it-th:last-child { clip-path: ${cutCorner('top right', CELL_CUT)}; }
+.it-rows > .it-row:last-child > .it-td:first-child { clip-path: ${cutCorner('bottom left', CELL_CUT)}; }
+.it-rows > .it-row:last-child > .it-td:last-child { clip-path: ${cutCorner('bottom right', CELL_CUT)}; }
 .it-head, .it-row {
   display: grid; align-items: stretch; gap: 3px; margin: 0 0 2px;
   grid-template-columns: 2.25rem minmax(8.5rem, 11.5rem) minmax(0, 1fr) 8.5rem 4.5rem 2.75rem;
@@ -220,10 +262,16 @@ export const css: string = `
 .it-mod { display: inline-flex; align-items: baseline; margin-left: auto; padding-right: 8px; font-size: 0.85rem; color: inherit; opacity: 0.85; }
 .it-td .it-bonus { width: 2.6rem; padding: 0 2px; font-size: 0.85rem; min-height: 2rem; height: 2rem; }
 
-/* the d20 button inside the initiative cell */
+/* the d20 button inside the initiative cell: only there while the pointer is over the cell, or
+   while the cell is in use (focused or tapped), as on the first tracker */
 .it-root button.it-d20 {
   --edge: transparent; --fill: var(--_accent); --ink: var(--_accent-fg);
   flex: none; width: 2.5rem; min-height: 2.5rem; height: 2.5rem; padding: 0; margin-left: 6px; font-size: 0.72rem; background: transparent; clip-path: none;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s ease-in-out;
+}
+.it-c-init--open button.it-d20 { opacity: 1; pointer-events: auto; }
+@media (hover: hover) {
+  .it-c-init:hover button.it-d20 { opacity: 1; pointer-events: auto; }
 }
 .it-root button.it-d20::before { inset: 3px; clip-path: ${HEXAGON}; background: var(--_accent); }
 .it-root button.it-d20:hover:not(:disabled) { --edge: transparent; filter: brightness(1.15); }
@@ -240,13 +288,16 @@ export const css: string = `
 .it-c-hp .it-hp { width: 3.4rem; flex: 0 1 3.4rem; }
 .it-c-hp .it-maxhp { width: 3.2rem; flex: 0 1 3.2rem; padding-left: 2px; opacity: 0.8; font-size: 0.95rem; }
 .it-slash { opacity: 0.6; }
+/* an empty row shows empty cells: no lone + or / until something is typed or the cell is in use */
+.it-c-init:not(:focus-within):not(:hover) .it-mod:has(.it-bonus:placeholder-shown) > span,
+.it-c-hp:not(:focus-within):not(:hover):has(.it-hp:placeholder-shown):has(.it-maxhp:placeholder-shown) .it-slash { visibility: hidden; }
 /* the - / + box under the HP field: an amount between two buttons, over the row below */
 .it-hp-pop {
   display: none; position: absolute; z-index: 10; left: 0; top: 100%; margin-top: 2px; padding: 6px; gap: 6px;
   align-items: center; background: var(--_bg); color: var(--_fg);
   border: 1px solid var(--_border-strong); box-shadow: var(--_shadow);
 }
-.it-c-hp--open .it-hp-pop { display: flex; }
+.it-c-hp--open .it-hp-pop, .it-c-init--open .it-hp-pop { display: flex; }
 .it-root button.it-hp-step { width: var(--_control-height); padding: 0; font-size: 1.3rem; line-height: 1; }
 /* a normal boxed field again (the cell inputs above are bare) */
 .it-td .it-hp-pop .it-hp-amount {
@@ -270,7 +321,6 @@ export const css: string = `
 .it-root button.it-x { --edge: transparent; --fill: transparent; --ink: var(--_row-fg); width: 100%; min-height: 3.25rem; padding: 0; font-size: 1rem; clip-path: none; opacity: 0.8; }
 .it-root button.it-x::before { display: none; }
 .it-root button.it-x:hover:not(:disabled) { --edge: transparent; opacity: 1; --ink: var(--_row-fg); }
-.it-empty { color: var(--_muted); margin: 12px 0; }
 
 /* Next, Sort and Clear under the list; the round and the big add button on the right */
 .it-toolbar { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; justify-content: space-between; margin: 16px 0 4px; }
@@ -286,9 +336,6 @@ export const css: string = `
 .it-root button.it-add::before { display: none; }
 .it-root button.it-add:hover:not(:disabled) { filter: brightness(1.12); }
 
-.it-storage { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--_border-strong); }
-.it-storage select { min-width: 12rem; max-width: 100%; }
-.it-message { min-height: 1.4em; margin: 8px 0 0; color: var(--_muted); }
 
 /* dragging: the row follows the pointer, the others slide aside */
 .it-rows--dragging { user-select: none; }
@@ -298,6 +345,7 @@ export const css: string = `
 
 @media (prefers-reduced-motion: reduce) {
   .it-root button:active:not(:disabled) { transform: none; }
+  .it-root button.it-d20 { transition: none; }
   .it-row--shifted, .it-row--settling { transition: none; }
 }
 /* the narrow layout follows the tracker's own width, so it also fits a side panel on a wide screen */
@@ -307,6 +355,9 @@ export const css: string = `
 @container it (max-width: 720px) {
   .it-head { display: none; }
   .it-table { padding: 6px; }
+  .it-rows > .it-row:last-child > .it-td:first-child, .it-rows > .it-row:last-child > .it-td:last-child { clip-path: none; }
+  .it-rows > .it-row:first-child > .it-c-grip { clip-path: ${cutCorner('top left', CELL_CUT_NARROW)}; }
+  .it-rows > .it-row:first-child > .it-c-remove { clip-path: ${cutCorner('top right', CELL_CUT_NARROW)}; }
   .it-row {
     grid-template-columns: 2.25rem minmax(0, 1fr) minmax(0, 1fr) 2.75rem;
     grid-template-areas: 'grip init init remove' 'name name name name' 'hp hp ac ac';
@@ -324,11 +375,9 @@ export const css: string = `
   .it-c-hp, .it-c-ac { padding-top: 10px; }
   .it-c-hp .it-hp { padding-left: 10px; }
   .it-c-ac input { padding-left: 10px; }
-  .it-enc-name { min-width: 0; width: 100%; }
-  .it-field { flex: 1 1 100%; }
+  .it-enc-name { flex: 1 1 0; width: auto; min-width: 0; }
   .it-tools-left { flex: 1 1 100%; }
   .it-tools-left button { flex: 1 1 0; padding-inline: 8px; }
   .it-tools-right { flex: 1 1 100%; justify-content: space-between; }
-  .it-storage select { min-width: 0; width: 100%; }
 }
 `;

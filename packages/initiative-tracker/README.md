@@ -51,32 +51,32 @@ small rule:
 }
 ```
 
-| Variable              | Light default                                              | Dark default                     | Used for                                                                           |
-| --------------------- | ---------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------- |
-| `--it-bg`             | `#f4f1e4`                                                  | `#0e2a24`                        | Background of the whole widget                                                     |
-| `--it-fg`             | `#16261f`                                                  | `#eef0e2`                        | Main text on the background                                                        |
-| `--it-muted`          | `#4d5b52`                                                  | `#b6c4b9`                        | Secondary text and labels                                                          |
-| `--it-border-strong`  | `#5f6f63`                                                  | `#8fae9f`                        | Borders of fields and buttons                                                      |
-| `--it-surface`        | `#e7e5d2`                                                  | `#17382f`                        | Buttons and raised parts                                                           |
-| `--it-input-bg`       | `#ffffff`                                                  | `#0a211c`                        | Fill of text fields                                                                |
-| `--it-rule`           | `#c9c9ad`                                                  | `#dbdbc7`                        | The panel behind the creature list: shows between the cells and under the headings |
-| `--it-head-bg`        | `#244e44`                                                  | `#2b5a4e`                        | Background of the column headings                                                  |
-| `--it-head-fg`        | `#f4f1e4`                                                  | same                             | Text of the column headings                                                        |
-| `--it-row-bg`         | `#244e44`                                                  | `#1c4137`                        | Fill of a creature row                                                             |
-| `--it-row-fg`         | `#f4f1e4`                                                  | `#eef0e2`                        | Text in a creature row                                                             |
-| `--it-active-bg`      | `#2f7a5e`                                                  | same                             | Fill of the row whose turn it is                                                   |
-| `--it-down-bg`        | `#7a3535`                                                  | `#773636`                        | Fill of a row whose creature is down (0 hit points)                                |
-| `--it-accent`         | `#1d6a4c`                                                  | `#9be3b4`                        | Primary buttons and markers                                                        |
-| `--it-accent-fg`      | `#ffffff`                                                  | `#07241a`                        | Text and icons on the accent colour                                                |
-| `--it-focus`          | `#a35200`                                                  | `#ffc566`                        | Keyboard focus ring                                                                |
-| `--it-danger`         | `#a4161a`                                                  | `#ff9a9d`                        | Clear and Delete buttons                                                           |
-| `--it-cut`            | `0px`                                                      | same                             | Size of the cut corners of buttons, fields and rows (0 = square corners)           |
-| `--it-font`           | `system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | same                             | Font family                                                                        |
-| `--it-weight`         | `500`                                                      | same                             | Normal font weight                                                                 |
-| `--it-weight-strong`  | `700`                                                      | same                             | Bold font weight (buttons, headings, the round number)                             |
-| `--it-shadow`         | `0 2px 10px rgba(0, 0, 0, 0.12)`                           | `0 2px 12px rgba(0, 0, 0, 0.45)` | Shadow of the suggestion list and of a row being dragged                           |
-| `--it-control-height` | `44px`                                                     | same                             | Minimum height of buttons and fields (touch target)                                |
-| `--it-pad`            | `14px`                                                     | same                             | Padding inside the widget                                                          |
+| Variable              | Light default                                              | Dark default                     | Used for                                                                                  |
+| --------------------- | ---------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------- |
+| `--it-bg`             | `#f4f1e4`                                                  | `#0e2a24`                        | Background of the whole widget                                                            |
+| `--it-fg`             | `#16261f`                                                  | `#eef0e2`                        | Main text on the background                                                               |
+| `--it-muted`          | `#4d5b52`                                                  | `#b6c4b9`                        | Secondary text and labels                                                                 |
+| `--it-border-strong`  | `#5f6f63`                                                  | `#8fae9f`                        | Borders of fields and buttons                                                             |
+| `--it-surface`        | `#e7e5d2`                                                  | `#17382f`                        | Buttons and raised parts                                                                  |
+| `--it-input-bg`       | `#ffffff`                                                  | `#0a211c`                        | Fill of text fields                                                                       |
+| `--it-rule`           | `#c9c9ad`                                                  | `#dbdbc7`                        | The panel behind the creature list: shows between the cells and under the headings        |
+| `--it-head-bg`        | `#244e44`                                                  | `#2b5a4e`                        | Background of the column headings                                                         |
+| `--it-head-fg`        | `#f4f1e4`                                                  | same                             | Text of the column headings                                                               |
+| `--it-row-bg`         | `#244e44`                                                  | `#1c4137`                        | Fill of a creature row                                                                    |
+| `--it-row-fg`         | `#f4f1e4`                                                  | `#eef0e2`                        | Text in a creature row                                                                    |
+| `--it-active-bg`      | `#2f7a5e`                                                  | same                             | Fill of the row whose turn it is                                                          |
+| `--it-down-bg`        | `#7a3535`                                                  | `#773636`                        | Fill of a row whose creature is down (0 hit points)                                       |
+| `--it-accent`         | `#1d6a4c`                                                  | `#9be3b4`                        | Primary buttons and markers                                                               |
+| `--it-accent-fg`      | `#ffffff`                                                  | `#07241a`                        | Text and icons on the accent colour                                                       |
+| `--it-focus`          | `#a35200`                                                  | `#ffc566`                        | Keyboard focus ring                                                                       |
+| `--it-danger`         | `#a4161a`                                                  | `#ff9a9d`                        | Clear and Delete buttons                                                                  |
+| `--it-cut`            | `0px`                                                      | same                             | Size of the cut corners of the widget, the creature list, buttons and fields (0 = square) |
+| `--it-font`           | `system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | same                             | Font family                                                                               |
+| `--it-weight`         | `500`                                                      | same                             | Normal font weight                                                                        |
+| `--it-weight-strong`  | `700`                                                      | same                             | Bold font weight (buttons, headings, the round number)                                    |
+| `--it-shadow`         | `0 2px 10px rgba(0, 0, 0, 0.12)`                           | `0 2px 12px rgba(0, 0, 0, 0.45)` | Shadow of the suggestion list and of a row being dragged                                  |
+| `--it-control-height` | `44px`                                                     | same                             | Minimum height of buttons and fields (touch target)                                       |
+| `--it-pad`            | `14px`                                                     | same                             | Padding inside the widget                                                                 |
 
 The same list is exported as `themeVariables` (name, defaults, description). Layout classes all
 start with `it-`; they are not a stable API, the variables are.
@@ -85,7 +85,7 @@ start with `it-`; they are not a stable API, the variables are.
 
 | Option          | Type                       | Default        | Meaning                                                                                       |
 | --------------- | -------------------------- | -------------- | --------------------------------------------------------------------------------------------- |
-| `storage`       | `EncounterStorage \| null` | localStorage   | Where encounters are saved. `null` turns saving off and hides the open/save/new/delete UI.    |
+| `storage`       | `EncounterStorage \| null` | localStorage   | Where encounters are saved. `null` turns saving off and hides the folder and new buttons.     |
 | `creatures`     | `CreatureTemplate[]`       | `srdCreatures` | Autocomplete list. It replaces the built-in list; spread `srdCreatures` into yours to extend. |
 | `rng`           | `() => number` in [0, 1)   | `Math.random`  | Random source for rolls (inject a fake one in tests).                                         |
 | `onChange`      | `(state) => void`          | none           | Called after every change the user makes (not after `setState`).                              |
@@ -123,22 +123,31 @@ functions the UI uses (`sortByInitiative`, `nextTurn`, `resetRound`, `rollInitia
 
 ### Linking rows
 
-A row can carry a `link`, a string the tracker only stores, to tie it to something outside it such as a token on a map. `tracker.linkRow(link, fields)` finds the row that has the link, else the first unlinked row with the same name, else adds one, and returns it. `tracker.updateLinked(link, patch)` changes the linked row (`link: undefined` unties it) without calling `onRowEdit`, so two sides can follow each other without a loop.
+A row can carry a `link`, a string the tracker only stores, to tie it to something outside it such as a token on a map. `tracker.linkRow(link, fields)` finds the row that has the link, else the first unlinked row with the same name, else the first empty row, else adds one, and returns it. `tracker.updateLinked(link, patch)` changes the linked row (`link: undefined` unties it) without calling `onRowEdit`, so two sides can follow each other without a loop.
 
 ### Using it
 
-- Press **Add creature**, type a name. Suggestions come from the creature list; picking one fills
-  AC, HP and the initiative bonus. Any other name is fine, fill the numbers in by hand.
-- The d20 button in the initiative column rolls d20 + bonus for one row, **Roll all** for everyone, **Sort** orders by initiative
-  (ties: higher bonus, then the order they were in). **Next** moves the turn on; after the last
-  creature the round counter goes up. **Reset round** goes back to round 1.
+- A new encounter starts with five empty rows; **Add creature** (the big **+**) adds more. Type a
+  name: suggestions come from the creature list, and picking one fills AC, HP and the initiative
+  bonus. Any other name is fine, fill the numbers in by hand. Empty rows show empty fields.
+- The d20 button in the initiative cell (shown on hover, or while the cell is in use on a touch
+  screen) rolls d20 + bonus for one row, **Roll all** for every filled-in row, **Sort** orders by
+  initiative with empty rows last (ties: higher bonus, then the order they were in). **Next** moves
+  the turn on, skipping empty rows; after the last creature the round counter goes up. **Reset
+  round** goes back to round 1.
+- While the initiative field has focus, a small box under it has an amount (1 to start with) and
+  **-** / **+** buttons that change the initiative by that much.
 - In the HP field type a number to set it, or `-5` / `+3` to change it. Max HP is the next field.
   While the HP field has focus, a small box under it has an amount (1 to start with) and **-** /
   **+** buttons that take that many hit points away or add them, by the same rules: never below 0,
   never above max HP when one is set. **Escape** closes the box.
 - Reorder by dragging the handle (the row follows the pointer while the others slide aside), or
   focus the handle and press the up and down arrow keys.
-- **Clear** and **Delete** ask for a second press.
+- The encounter's name sits above the list. Changes are saved on their own a moment after the
+  last one (there is no Save button): an encounter is kept once it has a filled-in row, without
+  its empty rows. The folder button beside the name lists the saved encounters, to open one or
+  delete it; the **+** beside it starts a new encounter.
+- **Clear** (which leaves five empty rows) and deleting a saved encounter ask for a second press.
 
 ### Storage
 
@@ -153,13 +162,17 @@ interface EncounterStorage {
 
 The default `LocalStorageEncounterStorage({ prefix = 'it-tracker', storage? })` keeps encounters in
 the browser; it treats damaged JSON as empty and rejects `save` (instead of throwing) when the disk
-is full. The tracker also autosaves the working state under the reserved id `LAST_SESSION_ID`
-(`'_last_session'`) and restores it on start, so a custom storage must accept that id and should
-not count it as one of the user's encounters.
+is full. The tracker autosaves the open encounter with `save(id, state)` (`save(null, state)` the first
+time), and the working state under the reserved id `LAST_SESSION_ID` (`'_last_session'`), which it
+restores on start. That copy carries `encounterId`, so after a reload the tracker carries on saving
+into the same encounter; a custom storage must accept the reserved id, keep `encounterId`, and
+should not count it as one of the user's encounters. If `save(id, ...)` rejects with `status` 404
+or `code` `'NOT_FOUND'` (deleted elsewhere), the tracker saves the encounter again as a new one.
 
 The package sets no limits. A host that wants to cap saved encounters rejects `save` with an error
 whose `code` is `'LIMIT'`; the tracker then calls `onLimit(error.message)` and shows the message
-without blocking.
+beside the name without blocking. It stops trying to create that encounter until one is deleted
+or another is started.
 
 ### Creature data
 
@@ -177,7 +190,8 @@ node packages/initiative-tracker/scripts/build-creatures.mjs path/to/SRD_CC_v5.1
 
 Every input has a label, every button an `aria-label`, and focus is always visible. The current
 turn is marked with the text "Turn" and a bar, not only a colour, and announced in a polite live
-region ("Round 2, turn: Goblin"); messages like "Saved" use another. Rows can be reordered with
+region ("Round 2, turn: Goblin") that is not shown on screen; other messages ("Opened Lair") use
+another, shown only when something went wrong. Rows can be reordered with
 the arrow keys on their handle as well as dragging, and the name field is an ARIA combobox (arrow keys, Enter, Escape).
 
 ## Attribution

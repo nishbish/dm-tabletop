@@ -27,6 +27,11 @@ export interface TrackerState {
   /** Index into `rows` of the creature whose turn it is. */
   turn: number;
   rows: TrackerRow[];
+  /**
+   * Only in the autosaved last session: the id of the saved encounter it is a copy of, so the
+   * tracker carries on saving into that encounter after a reload.
+   */
+  encounterId?: string;
 }
 
 /** A creature the name field can autocomplete. */
@@ -49,10 +54,13 @@ export interface EncounterSummary {
 }
 
 /**
- * Where named encounters (and the autosaved "last session") live. All methods are async so a
- * host can back it with a server. `save(null, state)` creates a new encounter and resolves to
- * its id. A host that wants to cap how many encounters a user may keep rejects `save` with an
- * error whose `code` is 'LIMIT'; the tracker then calls `onLimit` and shows a short message.
+ * Where saved encounters (and the autosaved "last session") live. All methods are async so a
+ * host can back it with a server. Every encounter with something in it is saved on its own:
+ * `save(null, state)` creates it and resolves to its id, later changes call `save(id, state)`.
+ * A host that wants to cap how many encounters a user may keep rejects `save` with an error
+ * whose `code` is 'LIMIT'; the tracker then calls `onLimit` and shows a short message. A
+ * rejection with `status` 404 or `code` 'NOT_FOUND' (the encounter was deleted elsewhere) makes
+ * the tracker save it again as a new one.
  */
 export interface EncounterStorage {
   list(): Promise<EncounterSummary[]>;
