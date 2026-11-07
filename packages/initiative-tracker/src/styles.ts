@@ -339,9 +339,18 @@ export const css: string = `
 .it-suggest li small { color: var(--_muted); }
 .it-suggest li[aria-selected='true'] { background: var(--_accent); color: var(--_accent-fg); }
 .it-suggest li[aria-selected='true'] small { color: inherit; }
-.it-root button.it-x { --edge: transparent; --fill: transparent; --ink: var(--_row-fg); width: 100%; min-height: 3.25rem; padding: 0; font-size: 1.35rem; clip-path: none; opacity: 0.8; }
+/* remove: a minus in a thin ring, faint until the pointer is on the row (or it has focus) */
+.it-root button.it-x { --edge: transparent; --fill: transparent; --ink: var(--_row-fg); width: 100%; min-height: 3.25rem; padding: 0; clip-path: none; opacity: 0.5; transition: opacity 0.15s ease-in-out; }
 .it-root button.it-x::before { display: none; }
+.it-row:hover button.it-x, .it-root button.it-x:focus-visible { opacity: 0.85; }
 .it-root button.it-x:hover:not(:disabled) { --edge: transparent; opacity: 1; --ink: var(--_row-fg); }
+.it-x-mark {
+  display: inline-flex; align-items: center; justify-content: center; width: 1.35rem; height: 1.35rem;
+  border: 1.5px solid currentColor; border-radius: 50%; font-size: 1rem; line-height: 1;
+}
+@media (hover: none) {
+  .it-root button.it-x { opacity: 0.85; } /* no hover on a touch screen: always plain to see */
+}
 
 /* Next, Sort and Clear under the list; the round and the big add button on the right */
 .it-toolbar { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; justify-content: space-between; margin: 16px 0 4px; }

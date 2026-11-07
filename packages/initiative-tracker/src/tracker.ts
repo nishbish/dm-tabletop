@@ -444,8 +444,11 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
     );
 
     const removeCell = cellOf('remove', '');
-    // a minus, the pair of the big + that adds a row (a cross reads as "close")
-    removeCell.append(button('remove', 'Remove ' + label, '\u2212', 'it-x'));
+    // a minus in a thin ring: the pair of the big + that adds a row (a cross reads as "close"),
+    // and the ring tells it apart from the - buttons that subtract hit points
+    const removeButton = button('remove', 'Remove ' + label, '', 'it-x');
+    removeButton.append(el(doc, 'span', { class: 'it-x-mark', 'aria-hidden': 'true' }, '\u2212'));
+    removeCell.append(removeButton);
 
     tr.append(initCell, nameCell, hpCell, ac.td, removeCell);
     relabel(tr, row, index);
