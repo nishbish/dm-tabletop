@@ -151,7 +151,8 @@ export function toServer(name: string, a: Args): Translated | null {
     case 'saveCamera':
       return null; // the original server ignored it too
     default:
-      // updateDaylight, updateMoonlight, updateGridSize and host-app events pass through.
+      // updateDaylight, updateMoonlight, updateClock, updateWeather, updateGridSize and host-app
+      // events pass through.
       return { name, args: a };
   }
 }
@@ -258,7 +259,7 @@ export function fromServerUpdate(name: string, a: Args, from?: string): Translat
       return [{ name, args: { x: a.x, z: a.z, user_id: str(from) } }];
     default:
       // removeToken, updateTokenPosition/Scale/Model, removePlane, removeDoor, door transform,
-      // wall point removal/update, daylight, moonlight, grid size and host-app events.
+      // wall point removal/update, daylight, moonlight, clock, weather, grid size and host-app events.
       return [{ name, args: a }];
   }
 }
@@ -291,6 +292,9 @@ export function stateToRoom(
     dm: self.role === 'host' ? self.userId : host ? host.userId : '',
     daylight: state.daylight,
     moonlight: state.moonlight,
+    // absent in rooms that never had a clock or weather
+    clock: typeof state.clock === 'number' ? state.clock : null,
+    weather: typeof state.weather === 'string' ? state.weather : 'clear',
     grid: state.grid,
     clients,
     tokens: state.tokens || {},

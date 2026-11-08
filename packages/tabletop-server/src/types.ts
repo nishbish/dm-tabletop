@@ -75,6 +75,11 @@ export interface RoomState {
   grid: { width: number; height: number };
   daylight: number;
   moonlight: number;
+  // The in-game clock, in minutes since midnight at the start of day 1, and the weather. Both are
+  // optional: a room without a clock looks as it always did, and rooms saved before they existed
+  // need no migration. See WEATHERS in handlers.ts for the weather names.
+  clock?: number;
+  weather?: string;
   // Next id the server will hand out (one counter for all entity kinds, so ids never collide).
   nextId: number;
   tokens: { [id: string]: TokenState };

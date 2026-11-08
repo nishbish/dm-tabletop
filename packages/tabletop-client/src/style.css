@@ -1291,6 +1291,95 @@
 	}
 }
 
+/*-- time of day and weather: a small card beside the compass that everyone sees, and the host's
+   panel (tabletop.js, buildTimeWeatherPanel). The card is cut, so no border on it. --*/
+#time-weather {
+	position: absolute;
+	bottom: 104px;
+	left: 76px;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	max-width: calc(100% - 150px);
+	padding: 6px 12px 6px 10px;
+	background: rgba(7, 48, 39, 0.75);
+	background: color-mix(in srgb, var(--_bar) 75%, transparent);
+	color: var(--_on-bar);
+	clip-path: var(--_clip-sm);
+	font-size: 14px;
+	line-height: 1.2;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
+#time-weather[hidden] {
+	display: none;
+}
+
+#time-weather .material-icons {
+	font-size: 20px;
+	color: var(--_gold);
+}
+
+#time-weather .tw-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.dmt-popover .tw-clock {
+	padding: 0 0 10px 36px;
+}
+
+.dmt-popover .popover-switch[hidden],
+.dmt-popover .tw-clock[hidden] {
+	display: none;
+}
+
+.dmt-popover .tw-readout {
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+.dmt-popover .tw-hour {
+	width: 100%;
+	margin: 8px 0 4px;
+	accent-color: var(--_accent);
+}
+
+.dmt-popover .tw-weather {
+	flex-wrap: wrap;
+}
+
+.dmt-popover .tw-weather button {
+	flex: 1 1 30%;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+}
+
+.dmt-popover .tw-weather .material-icons {
+	font-size: 18px;
+	color: inherit;
+}
+
+/* the compass gets smaller at the same width */
+@media (max-width: 768px) {
+	#time-weather {
+		bottom: 79px;
+		left: 54px;
+		max-width: calc(100% - 110px);
+		padding: 4px 10px 4px 8px;
+		font-size: 13px;
+	}
+
+	#time-weather .tw-period,
+	#time-weather .tw-period + .tw-dot {
+		display: none;
+	}
+}
+
 /*-- token portraits along the bottom: hexagons with the token's colour as the edge --*/
 #avatarContainer {
 	position: absolute;

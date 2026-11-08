@@ -22,6 +22,11 @@ const MAX_TOKEN_NAME = 100;
 // Above the number validators' own limit nobody is keeping score any more.
 const MAX_HP = 1000000;
 const MAX_AC = 1000;
+// The in-game clock counts minutes from midnight at the start of day 1, up to the end of day 600.
+export const MINUTES_PER_DAY = 1440;
+export const MAX_CLOCK = MINUTES_PER_DAY * 600 - 1;
+// The weather a host can pick. 'clear' is also what a room without any weather shows.
+export const WEATHERS = ['clear', 'cloudy', 'rain', 'storm', 'snow', 'fog'];
 
 function newId(room: Room, collection: object): string {
   if (Object.keys(collection).length >= MAX_ENTITIES) {
@@ -205,6 +210,29 @@ const handlers: { [name: string]: Handler } = {
     requireHost(ctx);
     ctx.room.state.moonlight = num(requireObject(ctx.args), 'moonlight');
     changed(ctx, { moonlight: ctx.room.state.moonlight });
+  },
+  // The clock: a whole number of minutes, or null to take the clock away (the room then looks as
+  // it did before it had one).
+  updateClock(ctx) {
+    requireHost(ctx);
+    const a = requireObject(ctx.args);
+    if (a.clock === null) {
+      delete ctx.room.state.clock;
+      changed(ctx, { clock: null });
+      return;
+    }
+    ctx.room.state.clock = int(a, 'clock', 0, MAX_CLOCK);
+    changed(ctx, { clock: ctx.room.state.clock });
+  },
+  updateWeather(ctx) {
+    requireHost(ctx);
+    const weather = str(requireObject(ctx.args), 'weather');
+    if (WEATHERS.indexOf(weather) === -1) {
+      throw new HandlerError(`weather must be one of ${WEATHERS.join(', ')}`);
+    }
+    if (weather === 'clear') delete ctx.room.state.weather;
+    else ctx.room.state.weather = weather;
+    changed(ctx, { weather });
   },
   updateGridSize(ctx) {
     requireHost(ctx);

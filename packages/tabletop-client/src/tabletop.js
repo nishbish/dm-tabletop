@@ -27,6 +27,8 @@ import { createConnection } from './connection';
 import { DEFAULT_MODEL_PREFIX, builtInModelList, swatchUrl } from './models';
 import { createDemoRoom } from './demo';
 import { createSkyboxMaterials } from './skybox';
+import { createWeather } from './weather.js';
+import * as timeWeather from './time-weather';
 import { createFog } from './fog';
 import { createPing } from './ping.js';
 import { addWallUvs, createWallMaterial, wallTileSize } from './wall-texture';
@@ -205,6 +207,12 @@ const map = {
 		animating: true,
 		dmLight: 1,
 		daylight: 0,
+		// the room's in-game clock (minutes, null = none) and weather (see time-weather.ts)
+		clock: null,
+		weather: 'clear',
+		// light strength and the lightning added to it (applyTimeWeather, animate)
+		lightBase: null,
+		flash: 0,
 		planeListOffset: 0,
 		planeImageTarget: null,
 		planeListLimit: 24,
@@ -586,6 +594,8 @@ function init() {
 	map.skybox.scale.set(map.settings.viewDistance, map.settings.viewDistance, map.settings.viewDistance);
 	map.skybox.renderOrder = -1000;	//drawn first; its materials do not write depth (skybox.js)
     map.scene.add(map.skybox);
+
+	map.weather = createWeather(THREE, map.scene);
 
 	//plane
 	var material = new THREE.MeshStandardMaterial( { color: 0xcbcbcb, dithering: true } );
@@ -4959,9 +4969,193 @@ function syncLightingPanel() {
 
 	panel.querySelector('[data-button="daylight"]').setAttribute('aria-checked', map.local.daylight ? 'true' : 'false');
 	panel.querySelector('[data-button="moonlight"]').setAttribute('aria-checked', map.local.moonlight ? 'true' : 'false');
+	// with a clock the night comes by itself
+	panel.querySelector('[data-button="moonlight"]').hidden = map.local.clock !== null;
 
 	for (const button of panel.querySelectorAll('[data-dm-light]')) {
 		button.setAttribute('aria-checked', Number(button.dataset.dmLight) === map.local.dmLight ? 'true' : 'false');
+	}
+}
+
+// ---- time of day and weather (time-weather.ts, weather.js) ----
+
+// Light and sky from the clock, the weather and (without a clock) the Moonlight switch. A room
+// with neither keeps exactly the light the Daylight and Moonlight switches give it.
+function applyTimeWeather() {
+	syncTimeWeatherBadge();
+
+	if (map.local.clock === null && map.local.weather === 'clear') {
+		// only when a clock or weather is taken away: the Moonlight switch's look comes back
+		if (map.local.lightBase !== null) {
+			map.local.lightBase = null;
+			map.local.flash = 0;
+			map.objects.light.intensity = lightLevel(map.local.moonlight ? 0.8 : 1);
+			map.objects.light.color.setHex(map.local.moonlight ? 0x8cb9ff : 0xffffff);
+			map.skybox.material = map.local.moonlight ? map.skybox.nightMats : map.skybox.dayMats;
+			tintSky(0xffffff);
+		}
+		return;
+	}
+
+	var look = timeWeather.look(map.local.clock, map.local.weather, !!map.local.moonlight);
+	map.local.lightBase = lightLevel(look.light);
+	map.objects.light.intensity = map.local.lightBase;
+	map.objects.light.color.setHex(look.lightColor);
+	map.skybox.material = look.night ? map.skybox.nightMats : map.skybox.dayMats;
+	tintSky(look.skyTint);
+	map.weather.setFogColor(look.fogColor);
+}
+
+function tintSky(hex) {
+	map.skybox.dayMats.concat(map.skybox.nightMats).forEach(function(material) {
+		material.color.setHex(hex);
+	});
+}
+
+// Once a frame: moves the rain with the view and adds the storm's lightning to the light.
+function updateWeatherFrame() {
+	var flash = map.weather.update(performance.now(), map.objects.camera, map.orbitControls.target, viewHeight(), !!map.settings.view2d);
+	if (flash === map.local.flash || map.local.lightBase === null) { return; }
+	map.local.flash = flash;
+	map.objects.light.intensity = map.local.lightBase * (1 + 1.5 * flash);
+}
+
+function setClock(clock) {
+	map.local.clock = clock === null ? null : timeWeather.clampClock(clock);
+	applyTimeWeather();
+	syncTimeWeatherPanel();
+	syncLightingPanel();
+}
+
+function setWeather(weather) {
+	map.local.weather = timeWeather.weatherKind(weather).id;
+	map.weather.set(map.local.weather);
+	applyTimeWeather();
+	syncTimeWeatherPanel();
+}
+
+function sendClock(clock) {
+	setClock(clock);
+	sendMessage('update', 'updateClock', { clock: map.local.clock });
+}
+
+function sendWeather(weather) {
+	setWeather(weather);
+	sendMessage('update', 'updateWeather', { weather: map.local.weather });
+}
+
+// The small card beside the compass that everyone sees: day, time and weather.
+var timeWeatherBadge = null;
+
+function syncTimeWeatherBadge() {
+	var clock = map.local.clock;
+	var weather = timeWeather.weatherKind(map.local.weather);
+
+	if (clock === null && weather.id === 'clear') {
+		if (timeWeatherBadge) { timeWeatherBadge.hidden = true; }
+		return;
+	}
+
+	if (!timeWeatherBadge) {
+		timeWeatherBadge = document.createElement('div');
+		timeWeatherBadge.id = 'time-weather';
+		timeWeatherBadge.className = 'noselect';
+		timeWeatherBadge.setAttribute('role', 'status');
+		timeWeatherBadge.innerHTML = '<span class="material-icons" aria-hidden="true"></span><span class="tw-text"></span>';
+		root.appendChild(timeWeatherBadge);
+	}
+
+	var icon = weather.id !== 'clear' ? weather.icon : timeWeather.isNight(clock) ? 'nights_stay' : 'wb_sunny';
+	var parts = [];
+	if (clock !== null) {
+		parts.push('<b>Day ' + timeWeather.dayOf(clock) + ' · ' + timeWeather.timeText(clock) + '</b>');
+		parts.push('<span class="tw-period">' + timeWeather.periodName(clock) + '</span>');
+	}
+	if (weather.id !== 'clear') { parts.push('<span>' + weather.label + '</span>'); }
+
+	timeWeatherBadge.hidden = false;
+	timeWeatherBadge.firstChild.textContent = icon;
+	timeWeatherBadge.lastChild.innerHTML = parts.join('<span class="tw-dot" aria-hidden="true"> · </span>');
+}
+
+// The host's panel: the clock (on or off, the hour, steps forward and back) and the weather.
+var CLOCK_STEPS = [[-60, '−1h', 'Back one hour'], [10, '+10m', 'Forward ten minutes'], [60, '+1h', 'Forward one hour'], [480, '+8h', 'Forward eight hours, a long rest']];
+var CLOCK_START = 8 * 60;
+
+function buildTimeWeatherPanel() {
+	var panel = buildPopover('time-weather-panel', 'timeWeather', 'Time and Weather');
+	panel.innerHTML +=
+		'<button type="button" class="popover-switch" role="switch" data-button="clock">' +
+			'<span class="material-icons" aria-hidden="true">schedule</span>' +
+			'<span class="popover-label"><b>Clock</b><small>Shows the day and time to everyone. The light and sky follow the hour.</small></span>' +
+			'<span class="popover-track" aria-hidden="true"></span>' +
+		'</button>' +
+		'<div class="tw-clock" data-tw-clock>' +
+			'<div class="tw-readout" data-tw-readout></div>' +
+			'<input type="range" class="tw-hour" min="0" max="1425" step="15" aria-label="Time of day" data-tw-hour>' +
+			'<div class="popover-segment">' +
+				CLOCK_STEPS.map(function(step) {
+					return '<button type="button" data-tw-step="' + step[0] + '" aria-label="' + step[2] + '">' + step[1] + '</button>';
+				}).join('') +
+			'</div>' +
+		'</div>' +
+		'<div class="popover-sub"><span class="material-icons" aria-hidden="true">cloud</span><span class="popover-label"><b>Weather</b><small>Rain and snow fall for everyone, storms flash now and then.</small></span></div>' +
+		'<div class="popover-segment tw-weather" role="radiogroup" aria-label="Weather">' +
+			timeWeather.WEATHERS.map(function(w) {
+				return '<button type="button" role="radio" data-tw-weather="' + w.id + '"><span class="material-icons" aria-hidden="true">' + w.icon + '</span>' + w.label + '</button>';
+			}).join('') +
+		'</div>';
+
+	panel.querySelector('[data-button="clock"]').addEventListener('click', function() {
+		if (!isDM) { return; }
+		sendClock(map.local.clock === null ? CLOCK_START : null);
+	}, false);
+
+	var hour = panel.querySelector('[data-tw-hour]');
+	var dayStart = function() { return map.local.clock - timeWeather.minuteOfDay(map.local.clock); };
+	// dragging shows the light at once here; the others hear the time when the slider is let go
+	hour.addEventListener('input', function() {
+		if (!isDM || map.local.clock === null) { return; }
+		setClock(dayStart() + Number(hour.value));
+	}, false);
+	hour.addEventListener('change', function() {
+		if (!isDM || map.local.clock === null) { return; }
+		sendClock(dayStart() + Number(hour.value));
+	}, false);
+
+	for (const button of panel.querySelectorAll('[data-tw-step]')) {
+		button.addEventListener('click', function() {
+			if (!isDM || map.local.clock === null) { return; }
+			sendClock(map.local.clock + Number(button.dataset.twStep));
+		}, false);
+	}
+
+	for (const button of panel.querySelectorAll('[data-tw-weather]')) {
+		button.addEventListener('click', function() {
+			if (!isDM) { return; }
+			sendWeather(button.dataset.twWeather);
+		}, false);
+	}
+
+	return panel;
+}
+
+function syncTimeWeatherPanel() {
+	var panel = byId('time-weather-panel');
+	if (!panel) { return; }
+
+	var clock = map.local.clock;
+	panel.querySelector('[data-button="clock"]').setAttribute('aria-checked', clock !== null ? 'true' : 'false');
+	panel.querySelector('[data-tw-clock]').hidden = clock === null;
+	if (clock !== null) {
+		panel.querySelector('[data-tw-readout]').textContent = timeWeather.clockText(clock);
+		var hour = panel.querySelector('[data-tw-hour]');
+		hour.value = String(timeWeather.minuteOfDay(clock));
+		hour.setAttribute('aria-valuetext', timeWeather.timeText(clock));
+	}
+
+	for (const button of panel.querySelectorAll('[data-tw-weather]')) {
+		button.setAttribute('aria-checked', button.dataset.twWeather === map.local.weather ? 'true' : 'false');
 	}
 }
 
@@ -4988,6 +5182,7 @@ function togglePopover(panel, anchor) {
 
 	closePopover();
 	if (panel.id == 'lighting-panel') { syncLightingPanel(); }
+	if (panel.id == 'time-weather-panel') { syncTimeWeatherPanel(); }
 	hideSideTip();
 	panel.hidden = false;
 	openPopoverPanel = panel;
@@ -5930,6 +6125,14 @@ function buildGui() {
 		togglePopover(lightingPanel, lightingButton.element);
 	}, false);
 
+	//time of day and weather: the host sets them, everyone sees them (a host app can lock it)
+	var timeButton = buildSideButton('timeWeather', 'Time and Weather', 'wb_twilight', true, 'The time of day and the weather everyone sees on the map.');
+	var timePanel = buildTimeWeatherPanel();
+	timeButton.element.addEventListener('click', function() {
+		if (options.timeWeatherLocked) { showNotice(options.timeWeatherLocked); return; }
+		togglePopover(timePanel, timeButton.element);
+	}, false);
+
 	//initiative tracker: a drawer on the right (the host app draws the tracker into it)
 	var trackerButton = buildSideButton('tracker', 'Initiative Tracker', 'format_list_numbered', true, 'Opens the initiative tracker beside the table.');
 	if (!options.mountTracker && !options.trackerUrl) {
@@ -6202,6 +6405,12 @@ function buildRoom(room) {
 		});
 	}
 	
+	//time of day and weather (absent in rooms that never had them)
+	map.local.clock = null;
+	map.local.weather = 'clear';
+	setClock(typeof room.clock === 'number' ? room.clock : null);
+	setWeather(typeof room.weather === 'string' ? room.weather : 'clear');
+
 	//size grid
 	if ('grid' in room) {
 		map.settings.gridWidth = parseData.int(room.grid.width);
@@ -6842,6 +7051,7 @@ var updateClient = {
 		if (args !== false) {
 			map.local.daylight = args.daylight;
 			map.objects.light.intensity = lightLevel(map.local.daylight ? 1.1 : 0.9);
+			applyTimeWeather();
 
 			updateTokenVision();
 		}
@@ -6865,7 +7075,19 @@ var updateClient = {
 				map.objects.light.color.setHex(0xffffff);
 				map.skybox.material = map.skybox.dayMats;
 			}
+			applyTimeWeather();
 		}
+	},
+
+	// The host's clock and weather (time-weather.ts). A null clock takes the clock away.
+	updateClock: function(args) {
+		if (!args || (args.clock !== null && typeof args.clock !== 'number')) { return; }
+		setClock(args.clock);
+	},
+
+	updateWeather: function(args) {
+		if (!args || typeof args.weather !== 'string') { return; }
+		setWeather(args.weather);
 	},
 	
 	addPlane: function(args) {
@@ -7851,6 +8073,7 @@ function animate() {
 	keyCamera();
 	map.orbitControls.update();
 	map.mask.fog.update(performance.now(), map.objects.camera);
+	updateWeatherFrame();
 	
 	if (map.settings.lookAtCam && !map.settings.view2d) {
 		for (const [tokenId, token] of Object.entries(map.objects.tokens)) {
@@ -8037,6 +8260,7 @@ return {
 		map.composer.dispose();
 		map.mask.fog.dispose();
 		map.ping.dispose();
+		map.weather.dispose();
 		cancelAnimationFrame(wallModelFrame);
 		if (map.wallModel) { map.wallModel.dispose(); }
 		if (wallMaterial) {
@@ -8064,7 +8288,12 @@ return {
 			isHost: isDM,
 			userId: user_id,
 			tokenIds: Object.keys(map.objects.tokens),
-			status: connection.status
+			status: connection.status,
+			clock: map.local.clock,
+			weather: map.local.weather,
+			// rain or snow drawn, and fog on (the weather's own objects)
+			falling: !!map.scene.getObjectByName('weather')?.visible,
+			fog: !!map.scene.fog
 		};
 	},
 	getTokenPosition: function(tokenId) {
