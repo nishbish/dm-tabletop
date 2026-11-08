@@ -293,7 +293,8 @@ works out the polygon a token sees, and the fog draws that polygon (blurred) ont
 straight after the scene, not a set of planes: it reads the scene's depth and walks each view ray through a volume over
 the map, so unseen ground is covered from every angle (it cannot be seen under, and a close camera is covered too) and
 the floor fades out just inside the edge of what the token sees, so nothing past it shows (walls and tokens on the edge
-stay lit). Faint, slow swirls in two layers drift through the black. In the host's translucent view, what was seen
+stay lit). Where the token sees right up to the edge of the map, the view is carried on past it, so no fog lines the edge
+of the world or its corners. Faint, slow swirls in two layers drift through the black. In the host's translucent view, what was seen
 earlier in this visit shows through a thinner veil (kept in the browser only: the server's fog data is not touched or
 extended). Players see nothing outside what their token sees now. Changes of view fade over 0.4 s. The strength is the
 fog's `material.opacity` (1 for players, 0.6 for the host's translucent view, 0 for the clear view). Pings are drawn
