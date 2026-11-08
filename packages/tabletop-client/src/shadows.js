@@ -50,7 +50,9 @@ export function createShadows(scene, renderer, options) {
 
   function setEnabled(on) {
     on = !!on;
-    if (on === enabled) { return; }
+    if (on === enabled) {
+      return;
+    }
     enabled = on;
     renderer.shadowMap.enabled = on;
     renderer.shadowMap.autoUpdate = false;
@@ -59,31 +61,41 @@ export function createShadows(scene, renderer, options) {
       scene.add(light, light.target, catcher);
       lastSignature = '';
       renderer.shadowMap.needsUpdate = true;
-    }
-    else {
+    } else {
       scene.remove(light, light.target, catcher);
       // three keeps the old map; free it when shadows are switched off
-      if (light.shadow.map) { light.shadow.map.dispose(); light.shadow.map = null; }
+      if (light.shadow.map) {
+        light.shadow.map.dispose();
+        light.shadow.map = null;
+      }
     }
     catcherMaterial.needsUpdate = true;
-    casters.forEach(function (object) { setCasting(object, on); });
+    casters.forEach(function (object) {
+      setCasting(object, on);
+    });
   }
 
   function setCasting(object, on) {
     object.traverse(function (child) {
-      if (child.isMesh || child.isSkinnedMesh) { child.castShadow = on; }
+      if (child.isMesh || child.isSkinnedMesh) {
+        child.castShadow = on;
+      }
     });
   }
 
   // Covers the floor around `target` (the point the camera looks at); `viewSize` is how much floor
   // shows (its height, in world units). Snapped to whole shadow texels so panning does not shimmer.
   function fit(target, floorY, viewSize) {
-    if (!enabled) { return false; }
+    if (!enabled) {
+      return false;
+    }
     var half = Math.min(MAX_HALF, Math.max(MIN_HALF, viewSize * 0.75));
     var texel = (2 * half) / MAP_SIZE;
     var x = Math.round(target.x / texel) * texel;
     var z = Math.round(target.z / texel) * texel;
-    if (x === fitted.x && z === fitted.z && half === fitted.half && floorY === fitted.floorY) { return false; }
+    if (x === fitted.x && z === fitted.z && half === fitted.half && floorY === fitted.floorY) {
+      return false;
+    }
     fitted = { x: x, z: z, half: half, floorY: floorY };
     light.target.position.set(x, floorY, z);
     light.position.copy(LIGHT_DIRECTION).multiplyScalar(LIGHT_DISTANCE).add(light.target.position);
@@ -106,20 +118,31 @@ export function createShadows(scene, renderer, options) {
 
   // Call once a frame before drawing: redraws the shadow map only if a caster moved.
   function update() {
-    if (!enabled || casters.size === 0) { return false; }
+    if (!enabled || casters.size === 0) {
+      return false;
+    }
     var parts = [];
     casters.forEach(function (object) {
-      if (!object.visible || !object.parent) { return; }
+      if (!object.visible || !object.parent) {
+        return;
+      }
       object.updateMatrixWorld();
       var e = object.matrixWorld.elements;
       // position and turn are enough to notice a move (rounded: tiny jitter is not a move)
       parts.push(
-        Math.round(e[12] * 1000), Math.round(e[13] * 1000), Math.round(e[14] * 1000),
-        Math.round(e[0] * 1000), Math.round(e[2] * 1000), Math.round(e[5] * 1000), Math.round(e[8] * 1000)
+        Math.round(e[12] * 1000),
+        Math.round(e[13] * 1000),
+        Math.round(e[14] * 1000),
+        Math.round(e[0] * 1000),
+        Math.round(e[2] * 1000),
+        Math.round(e[5] * 1000),
+        Math.round(e[8] * 1000),
       );
     });
     var signature = parts.join(',');
-    if (signature === lastSignature) { return false; }
+    if (signature === lastSignature) {
+      return false;
+    }
     lastSignature = signature;
     renderer.shadowMap.needsUpdate = true;
     return true;
@@ -134,7 +157,10 @@ export function createShadows(scene, renderer, options) {
   }
 
   function removeCaster(object) {
-    if (casters.delete(object)) { lastSignature = ''; renderer.shadowMap.needsUpdate = enabled; }
+    if (casters.delete(object)) {
+      lastSignature = '';
+      renderer.shadowMap.needsUpdate = enabled;
+    }
   }
 
   // A shadow for something the host app draws itself (its dice, on their own canvas over the
@@ -144,7 +170,10 @@ export function createShadows(scene, renderer, options) {
     var geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(Array.from(positions), 3));
     geometry.computeBoundingSphere();
-    var mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }));
+    var mesh = new THREE.Mesh(
+      geometry,
+      new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }),
+    );
     mesh.layers.set(SHADOW_LAYER);
     mesh.frustumCulled = false;
     mesh.raycast = function () {};
@@ -178,7 +207,9 @@ export function createShadows(scene, renderer, options) {
   }
 
   return {
-    get enabled() { return enabled; },
+    get enabled() {
+      return enabled;
+    },
     setEnabled: setEnabled,
     fit: fit,
     update: update,
