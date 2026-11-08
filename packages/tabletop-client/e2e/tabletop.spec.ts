@@ -632,6 +632,9 @@ test('camera slides across the floor at one height, like a strategy game', async
 test('ping, and a pane opened from the token menu closes the menu', async ({ page }) => {
   await page.goto('/?demo=1');
   await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  // ping once the load screen is gone: behind it the shaders warm up, which on software WebGL can
+  // hold up the frames (and so the end of a ping) for longer than the poll below waits
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
   const pings = () =>
     page.evaluate(() => {
       const map = (window as any).tabletop.debug.map;
@@ -643,9 +646,9 @@ test('ping, and a pane opened from the token menu closes the menu', async ({ pag
     map.ping(null, 0x3232a8, { x: 6, z: 3 }, false);
   });
   expect(await pings()).toBe(4); // ripple and beam each
-  await expect.poll(pings).toBe(0);
+  // a ping lasts 1.5 s, but software WebGL on a slow runner can take a while to draw the frames
+  await expect.poll(pings, { timeout: 15_000 }).toBe(0);
 
-  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
   await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
   const tokenId = (await stats(page)).tokenIds[0];
   const at = await steadyScreenPosition(page, tokenId);
@@ -830,6 +833,89 @@ test('walls drawn with a model, and the loading title', async ({ page }) => {
   expect((await read()).boxesShown).toBe(0);
 });
 
+// Two 8 x 8 frames, red then blue, 100 ms each. On every engine but WebKit ImageDecoder plays it.
+const TWO_FRAME_GIF =
+  'R0lGODlhCAAIAIAAAExpcdweHiH/C05FVFNDQVBFMi4wAwEAAAAh+QQFCgAAACwAAAAACAAIAAACB4yPqcvtXQAAIfkEBQoAAAAsAAAAAAgACACATGlxHh7cAgeMj6nL7V0AADs=';
+
+// What the first token's picture looks like now: how it is turned, and which colours it has shown.
+async function samplePicture(page: Page) {
+  return page.evaluate(() => {
+    const map = (window as any).tabletop.debug.map;
+    const token: any = Object.values(map.objects.tokens)[0];
+    const picture = token.meshes.picture;
+    const image = picture?.material.map?.image;
+    let red = null;
+    if (image instanceof HTMLCanvasElement) {
+      red = image.getContext('2d').getImageData(4, 4, 1, 1).data[0];
+    }
+    return {
+      hasPicture: !!picture,
+      angle: picture?.rotation.z,
+      playing: !!picture?.material.map?.isCanvasTexture,
+      red,
+    };
+  });
+}
+
+async function openWithGif(page: Page, preset: number) {
+  await page.route(
+    (url) => url.pathname === '/token.gif',
+    (route) =>
+      route.fulfill({ contentType: 'image/gif', body: Buffer.from(TWO_FRAME_GIF, 'base64') }),
+  );
+  await page.addInitScript((preset) => {
+    localStorage.setItem('settings', JSON.stringify({ preset }));
+  }, preset);
+  await page.goto('/?demo=1&tokenImage=/token.gif');
+  await expect
+    .poll(async () => (await samplePicture(page).catch(() => null))?.hasPicture, {
+      timeout: 30_000,
+    })
+    .toBe(true);
+}
+
+test('on Medium, token pictures sway and GIFs play', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await openWithGif(page, 1);
+
+  await expect.poll(async () => (await samplePicture(page)).playing).toBe(true);
+
+  const angles = new Set();
+  const reds = new Set();
+  await expect
+    .poll(
+      async () => {
+        const sample = await samplePicture(page);
+        angles.add(sample.angle);
+        reds.add(sample.red);
+        return angles.size > 2 && reds.size > 1;
+      },
+      { timeout: 20_000, intervals: [100] },
+    )
+    .toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('on Low, token pictures hold still and GIFs show one frame', async ({ page }) => {
+  await openWithGif(page, 0);
+  await page.waitForTimeout(1500);
+  const sample = await samplePicture(page);
+  expect(sample.angle).toBe(0);
+  expect(sample.playing).toBe(false);
+});
+
+test('the system setting for less motion wins over the graphics preset', async ({ browser }) => {
+  const context = await browser.newContext({ reducedMotion: 'reduce' });
+  const page = await context.newPage();
+  await openWithGif(page, 2);
+  await page.waitForTimeout(1500);
+  const sample = await samplePicture(page);
+  expect(sample.angle).toBe(0);
+  expect(sample.playing).toBe(false);
+  await context.close();
+});
+
 test('box select: the rectangle goes away however the drag ends', async ({ page }) => {
   await page.goto('/?demo=1');
   await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
@@ -976,4 +1062,56 @@ test('map images: the floor and image menus, and Change Image keeps the place', 
     .getByText('Remove Image', { exact: true })
     .click();
   await expect.poll(async () => (await planes()).length).toBe(1);
+});
+
+test('hex grid: the host switches it, tokens snap to hexes, and nothing else moves', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text());
+  });
+  await page.goto('/?demo=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+  const grid = () =>
+    page.evaluate(() => {
+      const map = (window as any).tabletop.debug.map;
+      return { shape: map.settings.gridShape, drawn: map.gridHelper.name || 'squares' };
+    });
+  const positions = () =>
+    page.evaluate(() =>
+      Object.values<any>((window as any).tabletop.debug.map.objects.tokens).map((t) => [
+        t.position.x,
+        t.position.z,
+      ]),
+    );
+  // the demo room has no shape: squares, as in every room saved before hexes
+  expect(await grid()).toEqual({ shape: 'square', drawn: 'squares' });
+  const before = await positions();
+
+  const toggle = () =>
+    page.evaluate(() => (window as any).tabletop.debug.map.local.gridShapeInput.click());
+  await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
+  await toggle();
+  expect(await grid()).toEqual({ shape: 'hex', drawn: 'hex grid' });
+  expect(await positions()).toEqual(before);
+  await page.waitForTimeout(300); // a few frames with the hex shader
+  await page.screenshot({ path: 'e2e/.results/hex-grid.png' });
+
+  // a dropped token lands in the middle of the hex under it (row 12 is at z = 12 * sqrt(3) / 2)
+  const spot = await dragAndLook(page, '1', [
+    [8, 10],
+    [8.3, 10.6],
+  ]);
+  expect(spot.x).toBe(8);
+  expect(spot.z).toBeCloseTo((12 * Math.sqrt(3)) / 2, 5);
+  expect(spot.area).toBeGreaterThan(0);
+
+  await toggle();
+  expect(await grid()).toEqual({ shape: 'square', drawn: 'squares' });
+  const square = await dragAndLook(page, '1', [[8.3, 10.6]]);
+  expect([square.x, square.z]).toEqual([8, 11]);
+  expect(errors).toEqual([]);
 });

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyState, migrate } from './state';
 
+describe('createEmptyState', () => {
+  it('starts new rooms on a hex grid', () => {
+    expect(createEmptyState('x').grid).toEqual({ width: 20, height: 20, shape: 'hex' });
+  });
+});
+
 describe('migrate', () => {
   it('passes current-version states through', () => {
     const state = createEmptyState('x');

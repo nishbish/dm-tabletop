@@ -4,13 +4,14 @@
 // are kept ready, so players pinging at the same moment do not cut each other off.
 
 import * as THREE from 'three';
+import { OVERLAY_LAYER } from './fog.js';
 
 var POOL_SIZE = 6;
 var DURATION_MS = 1500;
 // the beam is this many times the radius of the ripples
 var BEAM_HEIGHT = 2.6;
 var BEAM_WIDTH = 0.34;
-// after the fog of war (renderOrder 100)
+// pings are drawn after the fog of war, on its overlay layer, so a ping in the fog still shows
 var RENDER_ORDER = 200;
 
 var vertexShader = [
@@ -80,6 +81,7 @@ function makeMesh(scene, geometry, material) {
   var mesh = new THREE.Mesh(geometry, material);
   mesh.name = 'ping';
   mesh.renderOrder = RENDER_ORDER;
+  mesh.layers.set(OVERLAY_LAYER);
   mesh.visible = false;
   scene.add(mesh);
 
@@ -169,6 +171,13 @@ export function createPing(scene) {
           }
         }
       }
+    },
+
+    // Whether any ping is showing (the fog pass draws them only then).
+    showing: function () {
+      return pings.some(function (p) {
+        return p.ripple.visible || p.beam.visible;
+      });
     },
 
     // The two meshes that compile the shaders while the load screen is up (they draw nothing yet).

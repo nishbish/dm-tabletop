@@ -86,6 +86,7 @@ names are not prefixed), so it is best used on a page of its own or in an iframe
 | `demoLibrary`     | the plain coloured pawns; maps by URL                          | Offline demo only: `(kind, request) => Promise<reply>` that lists a library in the Add Token and Add Image panes (folders and paging included, `kind` is `'model'` or `'plane'`). The reply has the shape a server gives for `getModels` / `getPlaneImages`; `src` goes through `imageUrl`, `badge` works as in `uploadBadge`. Nothing is saved in the demo                                  |
 | `appEvents`       | none                                                           | Names of room messages the host app handles itself (for example shared dice rolls). Incoming updates with these names go to `onAppEvent(name, args, fromUserId)` instead of the viewer; send them with `tabletop.sendAppEvent(name, args)`                                                                                                                                                   |
 | `debug`           | `false`                                                        | Exposes `tabletop.debug.map`, the internal state object                                                                                                                                                                                                                                                                                                                                      |
+| `modelLibrary`    | none                                                           | Built-in 3D characters and props, see "Built-in 3D models"                                                                                                                                                                                                                                                                                                                                   |
 
 `createTabletop` returns `{ destroy(), getSceneStats(), getTokenPosition(id), getTokenScreenPosition(id), sendAppEvent(name, args), showNotice(notice), getRoomId(), getTokens(), setTokenStats(id, stats), focusToken(id), openTracker(), getView(), attachOverlay(element), debug }`.
 `getView()` gives the camera as plain numbers (position, quaternion, target, fov, near, far, size, `floorY`; in the 2D view, a camera straight above the same spot that shows the floor at the same size) and `attachOverlay` puts an element (for example a transparent canvas) just above the 3D scene and below the panels, so a host app can draw its own layer, such as dice, with the same view.
@@ -139,6 +140,34 @@ The host and a token's owners see an HP bar above it and the numbers on its avat
 state, so they do reach every player's browser: the bar is not a secret.
 The same applies to map images: without an image library you can add one by URL.
 
+Token pictures sway slightly, lean as they travel and hop when they stop, and animated pictures play.
+All of this only happens on the Medium and High graphics presets, and never when the player's system
+asks for less motion. It changes how a picture looks and nothing else: positions, collisions, vision and
+what is sent to the server stay the same.
+
+A picture counts as animated if it is a GIF, or a WebP whose header says so. The viewer reads the first
+bytes of each picture to find out, so a host needs no extra field, but its image URLs must allow `fetch`.
+The first frame shows until playing starts. Playing needs `ImageDecoder`; a browser without it (Safari
+for now) keeps showing the first frame. Each file is one shared texture however many tokens use it, at
+most 8 files play at once and a GIF plays at no more than about 15 frames per second.
+
+### Built-in 3D models
+
+`options.modelLibrary` offers ready-made 3D models. The viewer ships none: the host app supplies the files, as with `wallModel`, and everything loads on first use, so a room without any downloads nothing.
+
+```js
+modelLibrary: {
+  characterFolder: '3D Characters',
+  characters: [{ id: '3d-orc', name: 'Orc', file: 'models/orc.glb', texture: 'models/orc.png', thumb: 'models/orc-thumb.png', height: 1.2 }],
+  props: [{ name: 'Furniture', items: [{ id: 'table', name: 'Table', file: 'models/table.glb', texture: 'models/colormap.png', thumb: 'models/table-thumb.png', size: 1.8 }] }],
+}
+```
+
+Paths resolve against `assetBaseUrl`. Models are glTF binaries without embedded pictures; `texture` paints them, one shared material per texture.
+
+- **Characters** appear as a folder in the Tokens pane. A character is a token like any other, on the usual base and with the usual vision and ownership, drawn as a model instead of a picture. It needs animations named `idle` and `walk`. It always stands on its base, turns to face the way it moves and plays its walk while moving on the Medium and High presets; on Low it stands still. Standing about, it takes turns resting (holding still, 4 to 12 seconds) and idling (3 to 6 seconds) on its own clock, and a character off screen or resting is not animated at all. `height` is in grid squares.
+- **Props** (tables, barrels, gravestones and the like) are added with Add Prop in the right-click menu. A prop is part of the map, not a token: no base, vision, owner or portrait, and only the host edits it, on the Images & Props tab. It comes at its set size and has no handles: the host drags it to move it, and R turns the picked prop (or every prop in a box selection) by 45 degrees. Its right-click menu has Turn and Resize, which shows the full turn and resize handles until the floor is clicked (drawn on top of the model and over everything: yellow resize squares just outside its edges and a turn ring round them, grabbed anywhere), and Remove Prop. To the server it is a map image whose `image` is `prop:<id>`, so a server needs no change for it. Props do not block movement or sight. `size` is the longest side in grid squares.
+
 ### Host-app extension points
 
 These events are not part of the core server. A hosting app can implement them as `handlers` in
@@ -189,6 +218,8 @@ Any folder, model or plane may also carry `badge`, a short word shown as a small
 | `src/time-weather.ts`, `src/weather.js`, `src/clouds.js`       | Ambience: the time and weather presets and the light, sky and cloud colours for each (tested on its own), the rain, snow, lightning and fog, and the clouds |
 | `src/sound.ts`, `src/audio.js`                                 | Sound: the scenes, music, mix and settings (tested on their own), and the Web Audio player                                                                  |
 | `src/walls.ts`, `src/doors.js`                                 | Wall geometry, door openings and snapping, room/corridor outlines; the shared door and wall look                                                            |
+| `src/token-motion.js`, `src/animated-picture.js`               | How token pictures move, and playing animated pictures (Medium and High graphics only)                                                                      |
+| `src/model-library.js`, `src/character-motion.js`              | The built-in 3D characters and props, and how a character follows its token                                                                                 |
 | `src/TranslateControls.js` and the other controls              | The original drag, rotate, scale and hover helpers                                                                                                          |
 | `src/context-menu.js`, `src/style.css`, `src/context-menu.css` | The original menu and styles                                                                                                                                |
 
@@ -259,12 +290,16 @@ Chromium's bundled software WebGL.
 
 ## Fog of war
 
-What a token cannot see is hidden by soft, animated fog (`src/fog.js`), not by a flat black box. The vision code is
-unchanged: it works out the polygon a token sees; the fog draws that polygon (blurred) and the shader shows deep,
-drifting fog over what was never seen (fully opaque for players), a thin dim veil over what was seen earlier in this visit (only in the host's translucent view: players see nothing outside what their token sees now) (kept in the browser
-only: the server's fog data is not touched or extended), nothing over what is visible, wisps that curl into the edge,
-and a 0.4 s fade whenever the view changes. The strength is the fog mesh's `material.opacity` (1 for players, 0.6 for the
-host's translucent view, 0 for the clear view). One transparent plane and a three-octave noise: it runs on software WebGL.
+What a token cannot see is hidden by solid black fog with a soft edge (`src/fog.js`). The vision code is unchanged: it
+works out the polygon a token sees, and the fog draws that polygon (blurred) onto small canvases. The fog is a screen pass
+straight after the scene, not a set of planes: it reads the scene's depth and walks each view ray through a volume over
+the map, so unseen ground is covered from every angle (it cannot be seen under, and a close camera is covered too) and
+the floor fades out just inside the edge of what the token sees, so nothing past it shows (walls and tokens on the edge
+stay lit). Faint, slow swirls in two layers drift through the black. In the host's translucent view, what was seen
+earlier in this visit shows through a thinner veil (kept in the browser only: the server's fog data is not touched or
+extended). Players see nothing outside what their token sees now. Changes of view fade over 0.4 s. The strength is the
+fog's `material.opacity` (1 for players, 0.6 for the host's translucent view, 0 for the clear view). Pings are drawn
+after the fog. The Low graphics setting uses half-size layers, fewer steps per ray and plain black; it runs on software WebGL.
 
 ## Ambience: time of day and weather
 
