@@ -27,6 +27,9 @@ import { createConnection } from './connection';
 import { DEFAULT_MODEL_PREFIX, builtInModelList, swatchUrl } from './models';
 import { createDemoRoom } from './demo';
 import { createSkyboxMaterials } from './skybox';
+import { createWeather } from './weather.js';
+import { createClouds } from './clouds.js';
+import * as timeWeather from './time-weather';
 import { createFog, attachDepth } from './fog';
 import { createPing } from './ping.js';
 import { addWallUvs, createWallMaterial, wallTileSize } from './wall-texture';
@@ -213,6 +216,13 @@ const map = {
 		animating: true,
 		dmLight: 1,
 		daylight: 0,
+		moonlight: 0,
+		// the room's ambience: time of day and weather (see time-weather.ts)
+		time: 'day',
+		weather: 'clear',
+		// light strength and the lightning added to it (applyTimeWeather, animate)
+		lightBase: null,
+		flash: 0,
 		planeListOffset: 0,
 		planeImageTarget: null,
 		planeListLimit: 24,
@@ -615,6 +625,9 @@ function init() {
 	map.skybox.scale.set(map.settings.viewDistance, map.settings.viewDistance, map.settings.viewDistance);
 	map.skybox.renderOrder = -1000;	//drawn first; its materials do not write depth (skybox.js)
     map.scene.add(map.skybox);
+
+	map.weather = createWeather(THREE, map.scene);
+	map.clouds = createClouds(THREE, map.skybox);
 
 	//plane
 	var material = new THREE.MeshStandardMaterial( { color: 0xcbcbcb, dithering: true } );
@@ -5218,75 +5231,184 @@ function buildSideButton(name, title, icon, dmOnly = false, helpText = false, in
 	return sideButton;
 }
 
-// Daylight, moonlight and the host's fog view, opened from the Lighting button.
+// ---- ambience: the time of day, the weather and the host's fog view (time-weather.ts, weather.js, clouds.js) ----
+
+// The panel's name, on its side button and its title. Kept here only, so it can change in one place.
+var AMBIENCE_TITLE = 'Ambience';
 var DM_LIGHT_NAMES = ['Solid', 'See-through', 'Off'];
 
-function buildLightingPanel() {
-	var panel = buildPopover('lighting-panel', 'lighting', 'Lighting');
+// Light, sky, clouds and fog from the room's time and weather. An ordinary clear day is the
+// room's normal light and day sky, night the old moonlight look.
+function applyTimeWeather() {
+	syncAmbienceBadge();
+
+	var look = timeWeather.look(map.local.time, map.local.weather);
+	map.local.lightBase = lightLevel(look.light);
+	map.local.flash = 0;
+	map.objects.light.intensity = map.local.lightBase;
+	map.objects.light.color.setHex(look.lightColor);
+	map.skybox.material = look.night ? map.skybox.nightMats : map.skybox.dayMats;
+	tintSky(look.skyTint);
+	map.clouds.set(look);
+	map.weather.setFogColor(look.fogColor);
+}
+
+function tintSky(hex) {
+	map.skybox.dayMats.concat(map.skybox.nightMats).forEach(function(material) {
+		material.color.setHex(hex);
+	});
+}
+
+// Once a frame: moves the rain with the view, drifts the clouds and adds the storm's lightning
+// to the light and the sky.
+function updateWeatherFrame() {
+	var now = performance.now();
+	var flash = map.weather.update(now, map.objects.camera, map.orbitControls.target, viewHeight(), !!map.settings.view2d);
+	map.clouds.update(now, flash);
+	if (flash === map.local.flash || map.local.lightBase === null) { return; }
+	map.local.flash = flash;
+	map.objects.light.intensity = map.local.lightBase * (1 + 1.5 * flash);
+}
+
+function setTime(time) {
+	map.local.time = timeWeather.timeKind(time).id;
+	// kept for anything that still reads the older switch
+	map.local.moonlight = map.local.time === 'night' ? 1 : 0;
+	applyTimeWeather();
+	syncAmbiencePanel();
+}
+
+// How far tokens see: daylight (their view distance) or only their own light.
+function setDaylight(daylight) {
+	map.local.daylight = daylight ? daylight : 0;
+	updateTokenVision();
+}
+
+function setWeather(weather) {
+	map.local.weather = timeWeather.weatherKind(weather).id;
+	map.weather.set(map.local.weather);
+	applyTimeWeather();
+	syncAmbiencePanel();
+}
+
+// A preset the host app keeps for some hosts (options.ambiencePremium): shows its notice instead.
+function ambienceLocked(id) {
+	return !!(options.ambienceLocked && Array.isArray(options.ambiencePremium) && options.ambiencePremium.indexOf(id) !== -1);
+}
+
+function sendTime(time) {
+	if (ambienceLocked(time)) { showNotice(options.ambienceLocked); return; }
+	setTime(time);
+	// the server sets the room's daylight the same way
+	setDaylight(timeWeather.hasDaylight(map.local.time) ? 100 : 0);
+	sendMessage('update', 'updateTime', { time: map.local.time });
+}
+
+function sendWeather(weather) {
+	if (ambienceLocked(weather)) { showNotice(options.ambienceLocked); return; }
+	setWeather(weather);
+	sendMessage('update', 'updateWeather', { weather: map.local.weather });
+}
+
+// The small card beside the compass that everyone sees ("Dusk · Rain"); none on a clear day.
+var ambienceBadge = null;
+
+function syncAmbienceBadge() {
+	var text = timeWeather.ambienceText(map.local.time, map.local.weather);
+
+	if (!text) {
+		if (ambienceBadge) { ambienceBadge.hidden = true; }
+		return;
+	}
+
+	if (!ambienceBadge) {
+		ambienceBadge = document.createElement('div');
+		ambienceBadge.id = 'ambience';
+		ambienceBadge.className = 'noselect';
+		ambienceBadge.setAttribute('role', 'status');
+		ambienceBadge.innerHTML = '<span class="material-icons" aria-hidden="true"></span><span class="tw-text"></span>';
+		root.appendChild(ambienceBadge);
+	}
+
+	var weather = timeWeather.weatherKind(map.local.weather);
+	ambienceBadge.hidden = false;
+	ambienceBadge.firstChild.textContent = weather.id !== 'clear' ? weather.icon : timeWeather.timeKind(map.local.time).icon;
+	ambienceBadge.lastChild.textContent = text;
+}
+
+// The host's panel: two rows of presets that combine (time, weather), then the host's own fog view.
+function presetButtons(kind, presets) {
+	return presets.map(function(preset) {
+		return '<button type="button" role="radio" data-tw-' + kind + '="' + preset.id + '"><span class="material-icons" aria-hidden="true">' + preset.icon + '</span>' + preset.label + '</button>';
+	}).join('');
+}
+
+function buildAmbiencePanel() {
+	var panel = buildPopover('ambience-panel', 'ambience', AMBIENCE_TITLE);
 	panel.innerHTML +=
-		'<button type="button" class="popover-switch" role="switch" data-button="daylight">' +
-			'<span class="material-icons" aria-hidden="true">brightness_6</span>' +
-			'<span class="popover-label"><b>Daylight</b><small>Tokens see as far as their view distance, not just their own light.</small></span>' +
-			'<span class="popover-track" aria-hidden="true"></span>' +
-		'</button>' +
-		'<button type="button" class="popover-switch" role="switch" data-button="moonlight">' +
-			'<span class="material-icons" aria-hidden="true">nightlight</span>' +
-			'<span class="popover-label"><b>Moonlight</b><small>A faint blue light over everything at night.</small></span>' +
-			'<span class="popover-track" aria-hidden="true"></span>' +
-		'</button>' +
-		'<div class="popover-sub"><span class="material-icons" aria-hidden="true">highlight</span><span class="popover-label"><b>Fog of war for you</b><small>Players always see it solid. Tokens bump into walls while it is solid.</small></span></div>' +
+		'<div class="popover-sub"><span class="material-icons" aria-hidden="true">schedule</span><span class="popover-label"><b>Time of day</b><small>Night limits how far tokens can see.</small></span></div>' +
+		'<div class="popover-segment tw-presets tw-time" role="radiogroup" aria-label="Time of day">' + presetButtons('time', timeWeather.TIMES) + '</div>' +
+		'<div class="popover-sub"><span class="material-icons" aria-hidden="true">cloud</span><span class="popover-label"><b>Weather</b></span></div>' +
+		'<div class="popover-segment tw-presets tw-weather" role="radiogroup" aria-label="Weather">' + presetButtons('weather', timeWeather.WEATHERS) + '</div>' +
+		'<div class="popover-sub" title="Only you see this. Players always see solid fog."><span class="material-icons" aria-hidden="true">highlight</span><span class="popover-label"><b>Fog of war for you</b></span></div>' +
 		'<div class="popover-segment" role="radiogroup" aria-label="Fog of war for you">' +
 			DM_LIGHT_NAMES.map(function(label, i) {
 				return '<button type="button" role="radio" data-button="dmView" data-dm-light="' + i + '">' + label + '</button>';
 			}).join('') +
 		'</div>';
 
-	panel.querySelector('[data-button="daylight"]').addEventListener('click', function() {
-		if (!isDM) { return; }
+	// the host app's word (for example the plan) on the presets it keeps for some hosts
+	if (Array.isArray(options.ambiencePremium)) {
+		for (const button of panel.querySelectorAll('[data-tw-time], [data-tw-weather]')) {
+			if (options.ambiencePremium.indexOf(button.dataset.twTime || button.dataset.twWeather) !== -1) {
+				addPaneBadge(button, options.ambienceBadge);
+				var badge = button.querySelector('.pane-item-badge');
+				if (badge) { button.title = badge.textContent; }
+			}
+		}
+	}
 
-		map.local.daylight = map.local.daylight ? 0 : 1;
-		map.objects.light.intensity = lightLevel(map.local.daylight ? 1.1 : 0.9);
+	for (const button of panel.querySelectorAll('[data-tw-time]')) {
+		button.addEventListener('click', function() {
+			if (!isDM) { return; }
+			sendTime(button.dataset.twTime);
+		}, false);
+	}
 
-		updateTokenVision();
-		sendMessage('update', 'updateDaylight', { daylight: map.local.daylight });
-		syncLightingPanel();
-	}, false);
-
-	panel.querySelector('[data-button="moonlight"]').addEventListener('click', function() {
-		if (!isDM) { return; }
-
-		var args = {
-			moonlight: map.local.moonlight ? 0 : 1
-		};
-
-		updateClient.updateMoonlight(args);
-		sendMessage('update', 'updateMoonlight', args);
-		syncLightingPanel();
-	}, false);
+	for (const button of panel.querySelectorAll('[data-tw-weather]')) {
+		button.addEventListener('click', function() {
+			if (!isDM) { return; }
+			sendWeather(button.dataset.twWeather);
+		}, false);
+	}
 
 	for (const button of panel.querySelectorAll('[data-dm-light]')) {
 		button.addEventListener('click', function() {
+			if (!isDM) { return; }
 			setDmLight(Number(button.dataset.dmLight));
-			syncLightingPanel();
+			syncAmbiencePanel();
 		}, false);
 	}
 
 	return panel;
 }
 
-function syncLightingPanel() {
-	var panel = byId('lighting-panel');
+function syncAmbiencePanel() {
+	var panel = byId('ambience-panel');
 	if (!panel) { return; }
 
-	panel.querySelector('[data-button="daylight"]').setAttribute('aria-checked', map.local.daylight ? 'true' : 'false');
-	panel.querySelector('[data-button="moonlight"]').setAttribute('aria-checked', map.local.moonlight ? 'true' : 'false');
-
+	for (const button of panel.querySelectorAll('[data-tw-time]')) {
+		button.setAttribute('aria-checked', button.dataset.twTime === map.local.time ? 'true' : 'false');
+	}
+	for (const button of panel.querySelectorAll('[data-tw-weather]')) {
+		button.setAttribute('aria-checked', button.dataset.twWeather === map.local.weather ? 'true' : 'false');
+	}
 	for (const button of panel.querySelectorAll('[data-dm-light]')) {
 		button.setAttribute('aria-checked', Number(button.dataset.dmLight) === map.local.dmLight ? 'true' : 'false');
 	}
 }
 
-// A small panel beside a side button (Menu, Lighting). One is open at a time; a click anywhere
+// A small panel beside a side button (Menu, Ambience). One is open at a time; a click anywhere
 // else or Esc closes it.
 var openPopoverPanel = null;
 
@@ -5308,7 +5430,7 @@ function togglePopover(panel, anchor) {
 	}
 
 	closePopover();
-	if (panel.id == 'lighting-panel') { syncLightingPanel(); }
+	if (panel.id == 'ambience-panel') { syncAmbiencePanel(); }
 	hideSideTip();
 	panel.hidden = false;
 	openPopoverPanel = panel;
@@ -5374,7 +5496,8 @@ DM Light (what the fog looks like to the host)
 2: transparent
 */
 function setDmLight(level) {
-	map.local.dmLight = level;
+	// only a host ever sees through the fog; a player's is always solid
+	map.local.dmLight = isDM ? level : 0;
 
 	switch (map.local.dmLight) {
 		case 0:
@@ -6254,11 +6377,11 @@ function buildGui() {
 	}, false);
 	buildToolbar();
 
-	//lighting: daylight, moonlight and how much fog the host sees, in one small panel
-	var lightingButton = buildSideButton('lighting', 'Lighting', 'wb_sunny', true, 'Daylight, moonlight and how much of the fog of war you see.');
-	var lightingPanel = buildLightingPanel();
-	lightingButton.element.addEventListener('click', function() {
-		togglePopover(lightingPanel, lightingButton.element);
+	//ambience: the time of day and weather everyone sees, and how much fog the host sees, in one small panel
+	var ambienceButton = buildSideButton('ambience', AMBIENCE_TITLE, 'wb_twilight', true, 'The time of day and the weather everyone sees, and how much of the fog of war you see.');
+	var ambiencePanel = buildAmbiencePanel();
+	ambienceButton.element.addEventListener('click', function() {
+		togglePopover(ambiencePanel, ambienceButton.element);
 	}, false);
 
 	//initiative tracker: a drawer on the right (the host app draws the tracker into it)
@@ -6514,25 +6637,12 @@ function buildRoom(room) {
 		}
 	}
 
-	//daylight
-	if ('daylight' in room) {
-		map.local.daylight = room.daylight;
-		map.objects.light.intensity = lightLevel(map.local.daylight ? 1.1 : 0.9);
+	//ambience: rooms saved before there were times show day or night from their Moonlight switch,
+	//and keep their own Daylight (how far tokens see) until the host picks a time
+	map.local.daylight = 'daylight' in room ? room.daylight : 0;
+	setTime(timeWeather.roomTime(room.time, room.moonlight));
+	setWeather(typeof room.weather === 'string' ? room.weather : 'clear');
 
-		updateClient.updateDaylight({
-			daylight: map.local.daylight
-		});
-	}
-
-	//moonlight
-	if ('moonlight' in room) {
-		map.local.moonlight = room.moonlight;
-
-		updateClient.updateMoonlight({
-			moonlight: map.local.moonlight
-		});
-	}
-	
 	//size grid
 	if ('grid' in room) {
 		map.settings.gridWidth = parseData.int(room.grid.width);
@@ -7179,32 +7289,31 @@ var updateClient = {
 		});
 
 		if (args !== false) {
-			map.local.daylight = args.daylight;
-			map.objects.light.intensity = lightLevel(map.local.daylight ? 1.1 : 0.9);
-
-			updateTokenVision();
+			setDaylight(args.daylight);
 		}
 	},
 
+	// The older Moonlight switch (still sent by older viewers): night when on, day when off.
 	updateMoonlight: function(args) {
 		args = validateArguments(args, {
 			moonlight: 'int'
 		});
 
 		if (args !== false) {
-			map.local.moonlight = args.moonlight;
-
-			if (map.local.moonlight) {
-				map.objects.light.intensity = lightLevel(0.8);
-				map.objects.light.color.setHex(0x8cb9ff);
-				map.skybox.material = map.skybox.nightMats;
-			}
-			else {
-				map.objects.light.intensity = lightLevel(1);
-				map.objects.light.color.setHex(0xffffff);
-				map.skybox.material = map.skybox.dayMats;
-			}
+			setTime(args.moonlight ? 'night' : 'day');
 		}
+	},
+
+	// The host's ambience (time-weather.ts). A new time also brings the room's daylight with it.
+	updateTime: function(args) {
+		if (!args || typeof args.time !== 'string') { return; }
+		setTime(args.time);
+		if (typeof args.daylight === 'number') { setDaylight(args.daylight); }
+	},
+
+	updateWeather: function(args) {
+		if (!args || typeof args.weather !== 'string') { return; }
+		setWeather(args.weather);
 	},
 	
 	addPlane: function(args) {
@@ -8242,6 +8351,7 @@ function animate() {
 	keyCamera();
 	map.orbitControls.update();
 	map.mask.fog.update(performance.now(), map.objects.camera);
+	updateWeatherFrame();
 	
 	if (map.settings.lookAtCam && !map.settings.view2d) {
 		for (const [tokenId, token] of Object.entries(map.objects.tokens)) {
@@ -8431,6 +8541,8 @@ return {
 		map.composer.dispose();
 		map.mask.fog.dispose();
 		map.ping.dispose();
+		map.weather.dispose();
+		map.clouds.dispose();
 		cancelAnimationFrame(wallModelFrame);
 		if (map.wallModel) { map.wallModel.dispose(); }
 		if (wallMaterial) {
@@ -8458,7 +8570,14 @@ return {
 			isHost: isDM,
 			userId: user_id,
 			tokenIds: Object.keys(map.objects.tokens),
-			status: connection.status
+			status: connection.status,
+			time: map.local.time,
+			weather: map.local.weather,
+			daylight: map.local.daylight,
+			// rain or snow drawn, fog on and clouds in the sky (the weather's own objects)
+			falling: !!map.scene.getObjectByName('weather')?.visible,
+			fog: !!map.scene.fog,
+			clouds: map.clouds.visible()
 		};
 	},
 	getTokenPosition: function(tokenId) {

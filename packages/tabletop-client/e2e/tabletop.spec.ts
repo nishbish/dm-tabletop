@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const repoRoot = join(__dirname, '..', '..', '..');
-const PORT = 3123;
+const PORT = Number(process.env.E2E_WS_PORT || 3123);
 const SERVER = `ws://127.0.0.1:${PORT}`;
 
 // Runs the real server (tsx cli) with file storage in a temp dir; can be stopped and restarted.
@@ -199,6 +199,85 @@ test('two players share a room, see token moves, and survive a server restart', 
       await expect(host.locator('#dmt-banner')).toBeHidden();
     }
 
+    expect(errors).toEqual([]);
+  } finally {
+    await server.stop();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('ambience: the host picks a time and weather, the player sees them, a rejoin keeps them', async ({
+  browser,
+}) => {
+  // two 3D pages and a reload on software WebGL
+  test.slow();
+  const dataDir = mkdtempSync(join(tmpdir(), 'tabletop-e2e-'));
+  const server = new ServerProcess(dataDir);
+  await server.start();
+
+  try {
+    const url = (token: string) =>
+      `/?server=${encodeURIComponent(SERVER)}&room=weather&token=${token}`;
+    const host = await (
+      await browser.newContext({ viewport: { width: 1280, height: 800 } })
+    ).newPage();
+    const guest = await (
+      await browser.newContext({ viewport: { width: 1280, height: 800 } })
+    ).newPage();
+    const errors: string[] = [];
+    for (const page of [host, guest]) page.on('pageerror', (e) => errors.push(e.message));
+    await host.goto(url('host'));
+    await waitConnected(host);
+    await guest.goto(url('guest'));
+    await waitConnected(guest);
+    await host.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+
+    // a new room: an ordinary clear day, no card, and players have no button for it
+    await expect(guest.locator('#ambience')).toHaveCount(0);
+    await expect(guest.locator('[data-button="ambience"]')).toBeHidden();
+    expect(await stats(guest)).toMatchObject({ time: 'day', weather: 'clear', clouds: false });
+
+    await host.locator('.side-button[data-button="ambience"]').click();
+    const panel = host.locator('#ambience-panel');
+    await expect(panel.getByRole('radio', { name: 'Day' })).toHaveAttribute('aria-checked', 'true');
+    await panel.getByRole('radio', { name: 'Night' }).click();
+    await panel.getByRole('radio', { name: 'Storm' }).click();
+
+    // two 3D pages on software WebGL: the player's page can take a while to get to the messages
+    const slow = { timeout: 20_000 };
+    const card = guest.locator('#ambience');
+    await expect(card).toContainText('Night · Storm', slow);
+    // night takes away daylight: tokens see only by their own light
+    expect(await stats(guest)).toMatchObject({
+      time: 'night',
+      weather: 'storm',
+      daylight: 0,
+      falling: true,
+      fog: false,
+      clouds: true,
+    });
+
+    await panel.getByRole('radio', { name: 'Dusk' }).click();
+    await panel.getByRole('radio', { name: 'Fog' }).click();
+    await expect.poll(async () => (await stats(guest)).fog, slow).toBe(true);
+    expect(await stats(guest)).toMatchObject({ time: 'dusk', daylight: 100, falling: false });
+
+    // a player arriving later (or reloading) gets both from the room
+    await guest.reload();
+    await waitConnected(guest);
+    await expect.poll(async () => (await stats(guest)).weather, { timeout: 30_000 }).toBe('fog');
+    await expect(guest.locator('#ambience')).toContainText('Dusk · Fog', slow);
+
+    // an ordinary clear day again (the panel is still open): the card goes
+    await panel.getByRole('radio', { name: 'Day' }).click();
+    await panel.getByRole('radio', { name: 'Clear' }).click();
+    await expect(guest.locator('#ambience')).toBeHidden(slow);
+    expect(await stats(guest)).toMatchObject({
+      time: 'day',
+      weather: 'clear',
+      fog: false,
+      clouds: false,
+    });
     expect(errors).toEqual([]);
   } finally {
     await server.stop();
