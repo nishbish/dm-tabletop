@@ -209,6 +209,8 @@ test('two players share a room, see token moves, and survive a server restart', 
 test('time and weather: the host sets them, the player sees them, a rejoin keeps them', async ({
   browser,
 }) => {
+  // two 3D pages and a reload on software WebGL
+  test.slow();
   const dataDir = mkdtempSync(join(tmpdir(), 'tabletop-e2e-'));
   const server = new ServerProcess(dataDir);
   await server.start();
