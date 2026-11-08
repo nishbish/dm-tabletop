@@ -6,8 +6,8 @@ export function createEmptyState(name = 'Untitled room'): RoomState {
   return {
     version: CURRENT_STATE_VERSION,
     name,
-    // new rooms start on hexes; rooms saved without a shape stay squares
-    grid: { width: 20, height: 20, shape: 'hex' },
+    // new rooms start on squares; the host can switch to hexes in Settings
+    grid: { width: 20, height: 20, shape: 'square' },
     daylight: 100,
     moonlight: 0,
     nextId: 1,
