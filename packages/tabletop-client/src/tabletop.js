@@ -5498,14 +5498,14 @@ function buildSideButton(name, title, icon, dmOnly = false, helpText = false, in
 
 	var tipText = helpText === false ? '' : helpText;
 	sideButton.element.addEventListener('pointerenter', function(e) {
-		if (e.pointerType == 'mouse') { showSideTip(sideButton.element, title, tipText); }
+		if (e.pointerType == 'mouse') { showSideTip(sideButton.element, sideButton.title, tipText); }
 	});
 	sideButton.element.addEventListener('pointerleave', hideSideTip);
 	sideButton.element.addEventListener('pointerup', function(e) {
-		if (e.pointerType != 'mouse') { showSideTip(sideButton.element, title, tipText, 1800); }
+		if (e.pointerType != 'mouse') { showSideTip(sideButton.element, sideButton.title, tipText, 1800); }
 	});
 	sideButton.element.addEventListener('focus', function() {
-		if (sideButton.element.matches(':focus-visible')) { showSideTip(sideButton.element, title, tipText); }
+		if (sideButton.element.matches(':focus-visible')) { showSideTip(sideButton.element, sideButton.title, tipText); }
 	});
 	sideButton.element.addEventListener('blur', hideSideTip);
 
@@ -5518,7 +5518,19 @@ function buildSideButton(name, title, icon, dmOnly = false, helpText = false, in
 
 // The panel's name, on its side button and its title. Kept here only, so it can change in one place.
 var AMBIENCE_TITLE = 'Ambience';
+// The host's own view of the fog of war, cycled by its side button (players always see solid fog).
 var DM_LIGHT_NAMES = ['Solid', 'See-through', 'Off'];
+var DM_LIGHT_ICONS = ['visibility_off', 'blur_on', 'visibility'];
+
+function syncFogViewButton() {
+	var button = map.sideButtons && map.sideButtons.fogView;
+	if (!button) { return; }
+	var level = map.local.dmLight || 0;
+	var label = 'Fog of war for you: ' + DM_LIGHT_NAMES[level];
+	button.title = label;
+	button.element.setAttribute('aria-label', label);
+	button.element.querySelector('.material-icons').textContent = DM_LIGHT_ICONS[level];
+}
 
 // Light, sky, clouds and fog from the room's time and weather. An ordinary clear day is the
 // room's normal light and day sky, night the old moonlight look.
@@ -5660,7 +5672,7 @@ function syncAmbienceBadge() {
 	ambienceBadge.lastChild.textContent = text;
 }
 
-// The host's panel: two rows of presets that combine (time, weather), then the host's own fog view.
+// The host's panel: rows of presets that combine (time, weather, and the scene and music when there is sound).
 function presetButtons(kind, presets) {
 	return presets.map(function(preset) {
 		return '<button type="button" role="radio" data-tw-' + kind + '="' + preset.id + '"><span class="material-icons" aria-hidden="true">' + preset.icon + '</span>' + preset.label + '</button>';
@@ -5679,13 +5691,7 @@ function buildAmbiencePanel() {
 			'<div class="popover-segment tw-presets tw-scene" role="radiogroup" aria-label="Scene">' + presetButtons('scene', sound.SCENES) + '</div>' +
 			'<div class="popover-sub"><span class="material-icons" aria-hidden="true">music_note</span><span class="popover-label"><b>Music</b></span></div>' +
 			'<div class="popover-segment tw-presets tw-music" role="radiogroup" aria-label="Music">' + presetButtons('music', sound.MUSIC) + '</div>'
-		: '') +
-		'<div class="popover-sub" title="Only you see this. Players always see solid fog."><span class="material-icons" aria-hidden="true">highlight</span><span class="popover-label"><b>Fog of war for you</b></span></div>' +
-		'<div class="popover-segment" role="radiogroup" aria-label="Fog of war for you">' +
-			DM_LIGHT_NAMES.map(function(label, i) {
-				return '<button type="button" role="radio" data-button="dmView" data-dm-light="' + i + '">' + label + '</button>';
-			}).join('') +
-		'</div>';
+		: '');
 
 	// the host app's word (for example the plan) on the presets it keeps for some hosts
 	if (Array.isArray(options.ambiencePremium)) {
@@ -5728,14 +5734,6 @@ function buildAmbiencePanel() {
 		}, false);
 	}
 
-	for (const button of panel.querySelectorAll('[data-dm-light]')) {
-		button.addEventListener('click', function() {
-			if (!isDM) { return; }
-			setDmLight(Number(button.dataset.dmLight));
-			syncAmbiencePanel();
-		}, false);
-	}
-
 	return panel;
 }
 
@@ -5754,9 +5752,6 @@ function syncAmbiencePanel() {
 	}
 	for (const button of panel.querySelectorAll('[data-tw-music]')) {
 		button.setAttribute('aria-checked', button.dataset.twMusic === map.local.music ? 'true' : 'false');
-	}
-	for (const button of panel.querySelectorAll('[data-dm-light]')) {
-		button.setAttribute('aria-checked', Number(button.dataset.dmLight) === map.local.dmLight ? 'true' : 'false');
 	}
 }
 
@@ -5915,6 +5910,7 @@ DM Light (what the fog looks like to the host)
 function setDmLight(level) {
 	// only a host ever sees through the fog; a player's is always solid
 	map.local.dmLight = isDM ? level : 0;
+	syncFogViewButton();
 
 	switch (map.local.dmLight) {
 		case 0:
@@ -6816,11 +6812,19 @@ function buildGui() {
 	buildToolbar();
 
 	//ambience: the time of day and weather everyone sees, and how much fog the host sees, in one small panel
-	var ambienceButton = buildSideButton('ambience', AMBIENCE_TITLE, 'wb_twilight', true, 'The time of day and the weather everyone sees, and how much of the fog of war you see.');
+	var ambienceButton = buildSideButton('ambience', AMBIENCE_TITLE, 'wb_twilight', true, 'The time of day and the weather everyone sees.');
 	var ambiencePanel = buildAmbiencePanel();
 	ambienceButton.element.addEventListener('click', function() {
 		togglePopover(ambiencePanel, ambienceButton.element);
 	}, false);
+
+	//fog of war for the host: each click goes Solid, See-through, Off (players always see solid fog)
+	var fogViewButton = buildSideButton('fogView', 'Fog of war for you', DM_LIGHT_ICONS[map.local.dmLight || 0], true, 'Click to switch how you see the fog: Solid, See-through or Off. Players always see solid fog.');
+	fogViewButton.element.addEventListener('click', function() {
+		if (!isDM) { return; }
+		setDmLight(((map.local.dmLight || 0) + 1) % DM_LIGHT_NAMES.length);
+	}, false);
+	syncFogViewButton();
 
 	//sound: everyone's own volumes (only when the host app has sound files)
 	if (audio) {
@@ -7065,6 +7069,7 @@ function resetRoom() {
 	isDM = demo ? true : false;
 	map.mask.fog.material.opacity = isDM ? DM_FOG_OPACITY : 1;
 	map.local.dmLight = isDM ? 1 : 0;
+	syncFogViewButton();
 }
 
 var roomBuilds = 0;
@@ -7721,6 +7726,7 @@ var updateClient = {
 					isDM = true;
 					map.mask.fog.material.opacity = DM_FOG_OPACITY;
 					map.local.dmLight = 1;
+					syncFogViewButton();
 
 					for (const [tokenId, token] of Object.entries(map.objects.tokens)) {
 						token.visible = true;
