@@ -165,12 +165,14 @@ describe('fog of war', () => {
     expect(canvases[2].context.globalCompositeOperation).toBeDefined();
   });
 
-  it('simple fog takes fewer, longer steps and half-size layers, keeping what was seen', () => {
+  it('simple fog takes fewer, longer steps, half-size layers and no swirls, keeping what was seen', () => {
     const fog = createFog(10, 10);
     expect(canvases[0].width).toBe(160);
     const steps = fog.material.defines.FOG_STEPS;
     fog.setSimple(true);
     expect(fog.material.defines.FOG_STEPS).toBeLessThan(steps);
+    // and plain black, with no swirls
+    expect('FOG_SIMPLE' in fog.material.defines).toBe(true);
     expect(canvases).toHaveLength(6);
     expect(canvases[3].width).toBe(80);
     expect(canvases[5].context.calls.some((c: Call) => c.name === 'drawImage')).toBe(true);
@@ -183,6 +185,7 @@ describe('fog of war', () => {
     expect(moves[0].args).toEqual([4, 4]);
     fog.setSimple(false);
     expect(fog.material.defines.FOG_STEPS).toBe(steps);
+    expect('FOG_SIMPLE' in fog.material.defines).toBe(false);
     expect(canvases[6].width).toBe(160);
   });
 

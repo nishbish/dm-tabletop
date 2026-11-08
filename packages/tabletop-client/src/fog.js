@@ -20,9 +20,11 @@
 //   - looking from a low angle, a ray that slips under the edge into unseen ground meets fog and
 //     stops there, so nothing can be seen under or through it, with no sides or curtains to build;
 //   - a camera close to (or in) the fog is covered too, since the walk starts at the camera;
-//   - there is one edge and one shade, so no planes overlap and no seams show.
-// The fog is plain black, with no texture. The edge sits just outside what the token sees, so a
-// wall at the edge of the view stays fully lit.
+//   - there is one edge, so no planes overlap and no seams show.
+// The floor fades out just inside the edge of what the token sees and is black from the edge on,
+// so nothing past the edge shows; walls and tokens on the edge stay lit. The black has faint, slow
+// swirls in two layers (one at the top of the fog, one deeper) that slide past each other as the
+// camera moves; they are worked out once per pixel, only where there is fog.
 //
 // `material.opacity` still sets how strong the fog is (1 for players, 0.6 for the host's
 // translucent view, 0 for the clear view); the rest of the viewer keeps changing it as before. In
@@ -32,8 +34,8 @@
 // (`attachDepth`). Pings are drawn after the fog, on their own layer (OVERLAY_LAYER), so a ping in
 // the fog still shows.
 //
-// setSimple(true) is for slow devices (the Low graphics setting): the same look from half-size
-// layers and fewer, longer steps along each ray.
+// setSimple(true) is for slow devices (the Low graphics setting): half-size layers, fewer and longer
+// steps along each ray, and plain black with no swirls.
 
 import * as THREE from 'three';
 import { Pass, FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
@@ -50,9 +52,18 @@ var MAX_TEXTURE = 2048;
 var PIXELS_PER_CELL = 16;
 var SIMPLE_PIXELS_PER_CELL = 8;
 var FADE_SECONDS = 0.4;
-// how soft the edge of the view is: the blur's spread, in grid cells; the fog fades in over about
-// two of these, starting at the edge of the polygon
-var EDGE_BLUR = 0.5;
+// how soft the edge of the view is: the blur's spread, in grid cells. The floor fades out over about
+// two of these inside the edge (fully clear where the blurred polygon reaches FLOOR_CLEAR) and is
+// black from the edge on; the air, walls and tokens are clear up to the edge and black about one
+// spread beyond it (where it is down to AIR_FOG). The vision polygon reaches a wall's far face, so
+// walls on the edge stay lit.
+var EDGE_BLUR = 0.25;
+var FLOOR_CLEAR = 0.97;
+var AIR_FOG = 0.12;
+// the floor is at y = -0.5; anything this close above it counts as floor
+var FLOOR_Y = -0.5;
+// the deeper layer of swirls sits this high (the top layer at FOG_HEIGHT)
+var SWIRL_DEEP = 0.0;
 // how far apart (across the floor, in cells) the shader looks along a ray, and how many looks at most
 var STEP = 0.2;
 var MAX_STEPS = 64;
@@ -81,6 +92,7 @@ var fragmentShader = [
   'uniform float uStrength;',
   'uniform float uVeil;',
   'uniform float uStep;',
+  'uniform float uTime;',
   'uniform mat4 uProjectionInverse;',
   'uniform mat4 uCameraWorld;',
   '',
@@ -89,16 +101,18 @@ var fragmentShader = [
   '	return (uCameraWorld * vec4(view.xyz / view.w, 1.0)).xyz;',
   '}',
   '',
-  '// how much fog stands over this spot: 1 where the ground is unseen, 0 where it is seen, soft between',
-  'float cover(vec3 p) {',
+  '// How much fog stands over this spot: 1 where the ground is unseen, 0 where it is seen, soft',
+  '// between. The blurred polygon is 0.5 on its edge. `lo`/`hi` say where the fade sits: the floor',
+  '// fades out inside the edge and is black from the edge on; the air (and walls and tokens) stays',
+  '// clear up to the edge, so a wall the token sees is never darkened.',
+  'float cover(vec3 p, float lo, float hi) {',
   '	// grid cell centres are whole numbers, the map starts half a cell before cell 0',
   '	vec2 uv = vec2((p.x + 0.5) / uGrid.x, 1.0 - (p.z + 0.5) / uGrid.y);',
   '	float seen = texture2D(uVisible, uv).r;',
   '	if (uMix < 1.0) { seen = mix(texture2D(uPrevious, uv).r, seen, smoothstep(0.0, 1.0, uMix)); }',
-  '	// the blurred polygon is 0.5 on its edge: clear from there in, fog fading in outside it',
-  '	float fog = 1.0 - smoothstep(0.02, 0.5, seen);',
+  '	float fog = 1.0 - smoothstep(lo, hi, seen);',
   '	if (uVeil > 0.0) {',
-  '		float explored = smoothstep(0.02, 0.5, max(texture2D(uExplored, uv).r, seen));',
+  '		float explored = smoothstep(lo, hi, max(texture2D(uExplored, uv).r, seen));',
   '		fog *= 1.0 - ' + VEIL.toFixed(3) + ' * explored * uVeil;',
   '	}',
   '	return fog * (1.0 - smoothstep(' +
@@ -108,14 +122,47 @@ var fragmentShader = [
     ', p.y));',
   '}',
   '',
+  '#ifndef FOG_SIMPLE',
+  'float hash(vec2 p) {',
+  '	p = fract(p * vec2(123.34, 456.21));',
+  '	p += dot(p, p + 45.32);',
+  '	return fract(p.x * p.y);',
+  '}',
+  'float vnoise(vec2 p) {',
+  '	vec2 i = floor(p);',
+  '	vec2 f = fract(p);',
+  '	f = f * f * (3.0 - 2.0 * f);',
+  '	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);',
+  '}',
+  '// slow swirls: noise looked up at a spot that two more noises push round',
+  'float swirl(vec2 p, float t) {',
+  '	vec2 push = vec2(vnoise(p + vec2(t, -0.7 * t)), vnoise(p + vec2(5.2 - 0.6 * t, 1.3 + t)));',
+  '	// turned off the grid of the noise, so its rows and columns never line up into straight lines',
+  '	return vnoise(mat2(0.8, -0.6, 0.6, 0.8) * (p + 2.2 * (push - 0.5)));',
+  '}',
+  '// the colour of the fog where this ray meets it: two layers of swirls, one at the top of the fog',
+  '// and one deeper down, which slide past each other as the camera moves, so the black has depth',
+  'vec3 fogColour(vec3 a, vec3 ray, float enter, float leave) {',
+  '	float tTop = clamp((' + FOG_HEIGHT.toFixed(3) + ' - a.y) / ray.y, enter, leave);',
+  '	float tDeep = clamp((' + SWIRL_DEEP.toFixed(3) + ' - a.y) / ray.y, enter, leave);',
+  '	vec2 top = (a + ray * tTop).xz;',
+  '	vec2 deep = (a + ray * tDeep).xz;',
+  '	float near = swirl(top * 0.42, uTime * 0.05);',
+  '	float far = swirl(deep * 0.75 + 11.0, -uTime * 0.07);',
+  '	float glow = 0.65 * near * near + 0.45 * far * far * far;',
+  '	return vec3(0.055, 0.065, 0.085) * glow;',
+  '}',
+  '#endif',
+  '',
   'void main() {',
   '	vec4 scene = texture2D(tColor, vUv);',
   '	gl_FragColor = scene;',
   '	if (uStrength < 0.001) { return; }',
   '',
   '	// the ray from the camera (its near plane) to the first thing it hits',
+  '	float depth = texture2D(tDepth, vUv).x;',
   '	vec3 a = unproject(0.0);',
-  '	vec3 ray = unproject(texture2D(tDepth, vUv).x) - a;',
+  '	vec3 ray = unproject(depth) - a;',
   '	ray = mix(ray, vec3(1e-6), vec3(lessThan(abs(ray), vec3(1e-6))));',
   '	// the part of it inside the fog volume',
   '	vec3 lo = vec3(-0.5, ' + FOG_BOTTOM.toFixed(3) + ', -0.5);',
@@ -132,17 +179,28 @@ var fragmentShader = [
   '	// steps are spaced across the floor and a ray straight down needs only its two ends',
   '	vec3 p0 = a + ray * enter;',
   '	vec3 p1 = a + ray * leave;',
+  '	bool floorHit = depth < 1.0 && leave > 0.999 && p1.y < ' + (FLOOR_Y + 0.08).toFixed(3) + ';',
+  '	float fog = floorHit ? cover(p1, 0.5, ' +
+    FLOOR_CLEAR.toFixed(3) +
+    ') : cover(p1, ' +
+    AIR_FOG.toFixed(3) +
+    ', 0.5);',
   '	float steps = clamp(ceil(length(p1.xz - p0.xz) / uStep), 1.0, float(FOG_STEPS));',
-  '	float fog = cover(p1);',
   '	for (int i = 0; i < FOG_STEPS; i++) {',
   '		if (float(i) >= steps || fog > 0.999) { break; }',
-  '		fog = max(fog, cover(mix(p0, p1, float(i) / steps)));',
+  '		fog = max(fog, cover(mix(p0, p1, float(i) / steps), ' + AIR_FOG.toFixed(3) + ', 0.5));',
   '	}',
-  '',
   '	float alpha = fog * uStrength;',
+  '	if (alpha < 0.002) { return; }',
+  '',
+  '#ifdef FOG_SIMPLE',
+  '	vec3 colour = vec3(0.0);',
+  '#else',
+  '	vec3 colour = fogColour(a, ray, enter, leave);',
+  '#endif',
   '	// a touch of dither, so the dark gradient of the edge shows no bands',
   '	float dither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) - 0.5;',
-  '	gl_FragColor = vec4(max(scene.rgb * (1.0 - alpha) + dither * alpha / 255.0, 0.0), scene.a);',
+  '	gl_FragColor = vec4(max(mix(scene.rgb, colour, alpha) + dither * alpha / 255.0, 0.0), scene.a);',
   '}',
 ].join('\n');
 
@@ -231,6 +289,7 @@ export function createFog(gridWidth, gridHeight) {
     simple: false,
     layers: null,
     mix: 1,
+    start: performance.now(),
   };
 
   var material = new THREE.ShaderMaterial({
@@ -250,6 +309,7 @@ export function createFog(gridWidth, gridHeight) {
       uStrength: { value: 1 },
       uVeil: { value: 0 },
       uStep: { value: STEP },
+      uTime: { value: 0 },
       uGrid: { value: new THREE.Vector2(1, 1) },
       uProjectionInverse: { value: new THREE.Matrix4() },
       uCameraWorld: { value: new THREE.Matrix4() },
@@ -317,6 +377,11 @@ export function createFog(gridWidth, gridHeight) {
 
     fog.simple = simple;
     material.defines.FOG_STEPS = simple ? SIMPLE_MAX_STEPS : MAX_STEPS;
+    if (simple) {
+      material.defines.FOG_SIMPLE = '';
+    } else {
+      delete material.defines.FOG_SIMPLE;
+    }
     material.uniforms.uStep.value = simple ? SIMPLE_STEP : STEP;
     material.needsUpdate = true;
 
@@ -439,6 +504,7 @@ export function createFog(gridWidth, gridHeight) {
 
     var strength = material.opacity;
     material.uniforms.uMix.value = fog.mix;
+    material.uniforms.uTime.value = (now - fog.start) / 1000;
     material.uniforms.uStrength.value = strength;
     // the memory of explored ground only shows when the fog is translucent (the host's view):
     // at full strength a player sees nothing outside what the token sees now

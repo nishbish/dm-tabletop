@@ -257,11 +257,12 @@ What a token cannot see is hidden by solid black fog with a soft edge (`src/fog.
 works out the polygon a token sees, and the fog draws that polygon (blurred) onto small canvases. The fog is a screen pass
 straight after the scene, not a set of planes: it reads the scene's depth and walks each view ray through a volume over
 the map, so unseen ground is covered from every angle (it cannot be seen under, and a close camera is covered too) and
-the edge of the view fades out smoothly just outside what the token sees. In the host's translucent view, what was seen
+the floor fades out just inside the edge of what the token sees, so nothing past it shows (walls and tokens on the edge
+stay lit). Faint, slow swirls in two layers drift through the black. In the host's translucent view, what was seen
 earlier in this visit shows through a thinner veil (kept in the browser only: the server's fog data is not touched or
 extended). Players see nothing outside what their token sees now. Changes of view fade over 0.4 s. The strength is the
 fog's `material.opacity` (1 for players, 0.6 for the host's translucent view, 0 for the clear view). Pings are drawn
-after the fog. The Low graphics setting uses half-size layers and fewer steps per ray; it runs on software WebGL.
+after the fog. The Low graphics setting uses half-size layers, fewer steps per ray and plain black; it runs on software WebGL.
 
 ## Assets
 
