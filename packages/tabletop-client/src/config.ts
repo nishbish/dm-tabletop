@@ -140,6 +140,10 @@ export interface TabletopOptions {
     kind: 'model' | 'plane',
     args: Record<string, unknown>,
   ) => Promise<Record<string, unknown>>;
+  // Sound (sound.ts): the folder, relative to assetBaseUrl unless absolute, that holds
+  // `sounds.json` and the files it names (default 'sounds/'). Without it the viewer has no sound
+  // and no Sound button. Nothing is downloaded before a person's first click and only what plays.
+  sounds?: { path?: string };
   focus?: object;
   debug?: boolean;
   // Test hooks.

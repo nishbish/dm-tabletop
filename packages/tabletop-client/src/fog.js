@@ -64,6 +64,9 @@ var AIR_FOG = 0.12;
 var FLOOR_Y = -0.5;
 // the deeper layer of swirls sits this high (the top layer at FOG_HEIGHT)
 var SWIRL_DEEP = 0.0;
+// how fast the swirls drift (the shader's time runs this many times faster than real time); with
+// reduced motion they keep the old, barely moving pace
+var SWIRL_SPEED = 4;
 // how far apart (across the floor, in cells) the shader looks along a ray, and how many looks at most
 var STEP = 0.2;
 var MAX_STEPS = 64;
@@ -290,6 +293,8 @@ export function createFog(gridWidth, gridHeight) {
     layers: null,
     mix: 1,
     start: performance.now(),
+    // the swirls' own clock, so a change of pace (reduced motion) never makes them jump
+    swirlTime: 0,
   };
 
   var material = new THREE.ShaderMaterial({
@@ -418,8 +423,96 @@ export function createFog(gridWidth, gridHeight) {
     fog.layers.forEach(clearLayer);
   }
 
+  // Where the token sees right up to the edge of the map, the polygon stops at the edge, and the
+  // blur would fade it out there, leaving a thin band of fog along the edge of the world (and a
+  // wisp in its corners). So a point on the edge is carried on past it, along the line of sight
+  // from `from` (where the token stands), until it is well clear of the canvas; and where the
+  // polygon runs from one edge of the map to the next, the corner between them is added. Shadow
+  // lines that end on the edge keep their direction, so nothing more of the map is revealed.
+  // Returns the points in pixels.
+  function reachEdges(points, from) {
+    var x0 = -0.5;
+    var z0 = -0.5;
+    var x1 = fog.width - 0.5;
+    var z1 = fog.height - 0.5;
+    var near = 0.05;
+    var pad = EDGE_BLUR * 4;
+    var cx = 0;
+    var cz = 0;
+
+    if (!from) {
+      points.forEach(function (p) {
+        cx += p.x / points.length;
+        cz += p.z / points.length;
+      });
+      from = { x: cx, z: cz };
+    }
+
+    // which edges a point lies on: l(eft), r(ight), t(op, z0), b(ottom, z1)
+    function edges(p) {
+      return {
+        l: p.x <= x0 + near,
+        r: p.x >= x1 - near,
+        t: p.z <= z0 + near,
+        b: p.z >= z1 - near,
+      };
+    }
+
+    function carry(p, on) {
+      var dx = p.x - from.x;
+      var dz = p.z - from.z;
+      var length = Math.sqrt(dx * dx + dz * dz);
+      if (length < 1e-6) {
+        return { x: p.x, z: p.z };
+      }
+      dx /= length;
+      dz /= length;
+      // how far along the line of sight it takes to get `pad` past the edge it is on (a glancing
+      // line is not carried further than a few pads)
+      var out = Math.max(on.l ? -dx : 0, on.r ? dx : 0, on.t ? -dz : 0, on.b ? dz : 0);
+      var t = pad / Math.max(out, 0.25);
+
+      return { x: p.x + dx * t, z: p.z + dz * t };
+    }
+
+    function corner(a, b) {
+      var x = a.l || b.l ? x0 - pad : a.r || b.r ? x1 + pad : null;
+      var z = a.t || b.t ? z0 - pad : a.b || b.b ? z1 + pad : null;
+      // only between neighbouring edges: one side and one end of the map
+      if (x === null || z === null) {
+        return null;
+      }
+      var sideA = a.l || a.r;
+      var sideB = b.l || b.r;
+      var endA = a.t || a.b;
+      var endB = b.t || b.b;
+
+      return (sideA && endB && !endA) || (endA && sideB && !sideA) ? { x: x, z: z } : null;
+    }
+
+    var out = [];
+    points.forEach(function (p, i) {
+      var on = edges(p);
+      var onEdge = on.l || on.r || on.t || on.b;
+      out.push(onEdge ? carry(p, on) : { x: p.x, z: p.z });
+
+      var q = points[(i + 1) % points.length];
+      var next = edges(q);
+      if (onEdge && (next.l || next.r || next.t || next.b)) {
+        var c = corner(on, next);
+        if (c) {
+          out.push(c);
+        }
+      }
+    });
+
+    return out.map(function (p) {
+      return { x: (p.x + 0.5) * fog.scale, y: (p.z + 0.5) * fog.scale };
+    });
+  }
+
   // Draws the polygon in white, softly, onto a layer (on top of what is there when `keep`).
-  function drawPolygon(l, points, keep) {
+  function drawPolygon(l, points, keep, from) {
     var ctx = l.context;
     var blur = Math.max(1.5, fog.scale * EDGE_BLUR);
 
@@ -436,14 +529,11 @@ export function createFog(gridWidth, gridHeight) {
     ctx.globalCompositeOperation = keep ? 'lighten' : 'source-over';
     ctx.fillStyle = '#fff';
     ctx.beginPath();
-    points.forEach(function (p, i) {
-      var x = (p.x + 0.5) * fog.scale;
-      var y = (p.z + 0.5) * fog.scale;
-
+    reachEdges(points, from).forEach(function (p, i) {
       if (i === 0) {
-        ctx.moveTo(x, y);
+        ctx.moveTo(p.x, p.y);
       } else {
-        ctx.lineTo(x, y);
+        ctx.lineTo(p.x, p.y);
       }
     });
     ctx.closePath();
@@ -452,8 +542,9 @@ export function createFog(gridWidth, gridHeight) {
     l.texture.needsUpdate = true;
   }
 
-  // The polygon of what the active token sees now: [{x, z}, ...] in grid coordinates.
-  function setVision(points) {
+  // The polygon of what the active token sees now: [{x, z}, ...] in grid coordinates, and where
+  // the token stands ({x, z}; optional, used to carry rays that reach the map's edge past it).
+  function setVision(points, from) {
     if (!fog.layers) {
       return;
     }
@@ -468,8 +559,8 @@ export function createFog(gridWidth, gridHeight) {
     fog.mix = 0;
 
     if (points && points.length > 2) {
-      drawPolygon(visible, points, false);
-      drawPolygon(layer('explored'), points, true);
+      drawPolygon(visible, points, false, from);
+      drawPolygon(layer('explored'), points, true, from);
     } else {
       clearLayer(visible);
     }
@@ -493,6 +584,15 @@ export function createFog(gridWidth, gridHeight) {
 
   var last = performance.now();
 
+  // looked up once; .matches follows the setting live
+  var reducedMotion =
+    typeof window !== 'undefined' && window.matchMedia
+      ? window.matchMedia('(prefers-reduced-motion: reduce)')
+      : null;
+  function prefersReducedMotion() {
+    return !!(reducedMotion && reducedMotion.matches);
+  }
+
   // Called every frame with the camera the scene is drawn with.
   function update(now, camera) {
     var dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
@@ -504,7 +604,8 @@ export function createFog(gridWidth, gridHeight) {
 
     var strength = material.opacity;
     material.uniforms.uMix.value = fog.mix;
-    material.uniforms.uTime.value = (now - fog.start) / 1000;
+    fog.swirlTime += dt * (prefersReducedMotion() ? 1 : SWIRL_SPEED);
+    material.uniforms.uTime.value = fog.swirlTime;
     material.uniforms.uStrength.value = strength;
     // the memory of explored ground only shows when the fog is translucent (the host's view):
     // at full strength a player sees nothing outside what the token sees now

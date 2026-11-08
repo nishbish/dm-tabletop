@@ -22,7 +22,7 @@ import { TranslateControls } from './TranslateControls.js';
 import { RotationControls } from './RotationControls.js';
 import { ScaleControls } from './ScaleControls.js';
 import { MouseHover } from './MouseHover.js';
-import { resolveOptions } from './config';
+import { joinAssetUrl, resolveOptions } from './config';
 import { createConnection } from './connection';
 import { DEFAULT_MODEL_PREFIX, builtInModelList, swatchUrl } from './models';
 import { createDemoRoom } from './demo';
@@ -30,6 +30,8 @@ import { createSkyboxMaterials } from './skybox';
 import { createWeather } from './weather.js';
 import { createClouds } from './clouds.js';
 import * as timeWeather from './time-weather';
+import * as sound from './sound';
+import { createAudio } from './audio.js';
 import { createFog, attachDepth } from './fog';
 import { createPing } from './ping.js';
 import { addWallUvs, createWallMaterial, wallTileSize } from './wall-texture';
@@ -103,7 +105,7 @@ if (!hasWebGL()) {
 	unsupportedMessage.textContent = 'This viewer needs WebGL, which your browser or device does not provide.';
 	container.appendChild(unsupportedMessage);
 
-	return { destroy: function() { unsupportedMessage.remove(); }, getSceneStats: function() { return null; }, getTokenPosition: function() { return null; }, sendAppEvent: function() { return false; }, showNotice: function() {}, getView: function() { return null; }, attachOverlay: function() { return function() {}; } };
+	return { destroy: function() { unsupportedMessage.remove(); }, getSceneStats: function() { return null; }, getTokenPosition: function() { return null; }, sendAppEvent: function() { return false; }, showNotice: function() {}, getView: function() { return null; }, attachOverlay: function() { return function() {}; }, playSound: function() {} };
 }
 
 const demo = options.demo;
@@ -119,6 +121,35 @@ const root = document.createElement('div');
 root.className = 'dmt-root';
 container.appendChild(root);
 const cleanups = [];
+
+// Sound (sound.ts, audio.js), only when the host app has sound files (options.sounds). Nothing is
+// created, downloaded or played before this person's first click or key press in the viewer, and
+// then only what is switched on and needed. Each person's volumes are kept in this browser.
+var SOUND_SETTINGS_KEY = 'tabletop-sound';
+var soundSettings = loadSoundSettings();
+var audio = options.sounds ? createAudio(joinAssetUrl(options.assetBaseUrl, options.sounds.path || 'sounds/'), soundSettings) : null;
+
+function loadSoundSettings() {
+	try {
+		return sound.parseSettings(localStorage.getItem(SOUND_SETTINGS_KEY));
+	}
+	catch (e) {
+		return sound.defaultSettings();
+	}
+}
+
+function unlockAudio() {
+	if (audio) { audio.unlock(); }
+}
+
+function playSound(name) {
+	if (audio) { audio.play(name); }
+}
+
+if (audio) {
+	root.addEventListener('pointerdown', unlockAudio, true);
+	root.addEventListener('keydown', unlockAudio, true);
+}
 
 function viewWidth() { return root.clientWidth || window.innerWidth; }
 function viewHeight() { return root.clientHeight || window.innerHeight; }
@@ -220,6 +251,9 @@ const map = {
 		// the room's ambience: time of day and weather (see time-weather.ts)
 		time: 'day',
 		weather: 'clear',
+		// the sound on top (sound.ts): a scene such as a tavern and a music track
+		scene: 'none',
+		music: 'none',
 		// light strength and the lightning added to it (applyTimeWeather, animate)
 		lightBase: null,
 		flash: 0,
@@ -1302,6 +1336,7 @@ function init() {
 			//dragging stopped
 			if (token.tokenId in map.objects.tokens) {
 				sendTokenMovement(token);
+				playSound('token');
 			}
 		}
 	}
@@ -2252,6 +2287,7 @@ function initPing() {
 		// never smaller than a few squares, and still easy to find when zoomed far out
 		var size = Math.max(2.4, floorViewHeight() * 0.05);
 		pings.play(position.x, map.objects.plane.position.y + 0.03, position.z, Number(color), size, !map.settings.view2d);
+		playSound('ping');
 
 		//send to clients
 		if (local) {
@@ -3110,7 +3146,8 @@ function updateTokenVision() {
 		}
 	}
 
-	map.mask.fog.setVision(holePoints);
+	//the origin lets the fog carry rays that reach the map's edge on past it (fog.js)
+	map.mask.fog.setVision(holePoints, { x: origin.x, z: origin.z });
 }
 
 function findParentToken(obj, depth = 3) {
@@ -3192,6 +3229,7 @@ function doorClick(door, local = true) {
 			}
 
 			door.open = !door.open;
+			playSound(door.open ? 'door-open' : 'door-close');
 
 			//send door open change to server
 			if (local) {
@@ -5494,6 +5532,12 @@ function applyTimeWeather() {
 	tintSky(look.skyTint);
 	map.clouds.set(look);
 	map.weather.setFogColor(look.fogColor);
+	syncSound();
+}
+
+function syncSound() {
+	if (!audio) { return; }
+	audio.setRoom({ time: map.local.time, weather: map.local.weather, scene: map.local.scene, music: map.local.music });
 }
 
 function tintSky(hex) {
@@ -5508,6 +5552,8 @@ function updateWeatherFrame() {
 	var now = performance.now();
 	var flash = map.weather.update(now, map.objects.camera, map.orbitControls.target, viewHeight(), !!map.settings.view2d);
 	map.clouds.update(now, flash);
+	// each flash brings its thunder
+	if (flash === 1 && map.local.flash !== 1 && audio) { audio.lightning(); }
 	if (flash === map.local.flash || map.local.lightBase === null) { return; }
 	map.local.flash = flash;
 	map.objects.light.intensity = map.local.lightBase * (1 + 1.5 * flash);
@@ -5553,11 +5599,40 @@ function sendWeather(weather) {
 	sendMessage('update', 'updateWeather', { weather: map.local.weather });
 }
 
+// The scene and the music (sound.ts): what everyone hears on top of the time and weather.
+function setScene(scene) {
+	map.local.scene = sound.sceneKind(scene).id;
+	syncAmbienceBadge();
+	syncSound();
+	syncAmbiencePanel();
+}
+
+function setMusic(music) {
+	map.local.music = sound.musicKind(music).id;
+	syncSound();
+	syncAmbiencePanel();
+}
+
+// premium scenes and music are named 'scene:<id>' and 'music:<id>' in options.ambiencePremium
+function sendScene(scene) {
+	if (ambienceLocked('scene:' + scene)) { showNotice(options.ambienceLocked); return; }
+	setScene(scene);
+	sendMessage('update', 'updateScene', { scene: map.local.scene });
+}
+
+function sendMusic(music) {
+	if (ambienceLocked('music:' + music)) { showNotice(options.ambienceLocked); return; }
+	setMusic(music);
+	sendMessage('update', 'updateMusic', { music: map.local.music });
+}
+
 // The small card beside the compass that everyone sees ("Dusk · Rain"); none on a clear day.
 var ambienceBadge = null;
 
 function syncAmbienceBadge() {
 	var text = timeWeather.ambienceText(map.local.time, map.local.weather);
+	var scene = sound.sceneKind(map.local.scene);
+	if (audio && scene.id !== 'none') { text = text ? text + ' · ' + scene.label : scene.label; }
 
 	if (!text) {
 		if (ambienceBadge) { ambienceBadge.hidden = true; }
@@ -5575,7 +5650,7 @@ function syncAmbienceBadge() {
 
 	var weather = timeWeather.weatherKind(map.local.weather);
 	ambienceBadge.hidden = false;
-	ambienceBadge.firstChild.textContent = weather.id !== 'clear' ? weather.icon : timeWeather.timeKind(map.local.time).icon;
+	ambienceBadge.firstChild.textContent = weather.id !== 'clear' ? weather.icon : map.local.time !== 'day' || !audio || scene.id === 'none' ? timeWeather.timeKind(map.local.time).icon : scene.icon;
 	ambienceBadge.lastChild.textContent = text;
 }
 
@@ -5593,6 +5668,12 @@ function buildAmbiencePanel() {
 		'<div class="popover-segment tw-presets tw-time" role="radiogroup" aria-label="Time of day">' + presetButtons('time', timeWeather.TIMES) + '</div>' +
 		'<div class="popover-sub"><span class="material-icons" aria-hidden="true">cloud</span><span class="popover-label"><b>Weather</b></span></div>' +
 		'<div class="popover-segment tw-presets tw-weather" role="radiogroup" aria-label="Weather">' + presetButtons('weather', timeWeather.WEATHERS) + '</div>' +
+		(audio ?
+			'<div class="popover-sub"><span class="material-icons" aria-hidden="true">graphic_eq</span><span class="popover-label"><b>Scene</b><small>Sounds everyone hears. Indoors muffles the weather.</small></span></div>' +
+			'<div class="popover-segment tw-presets tw-scene" role="radiogroup" aria-label="Scene">' + presetButtons('scene', sound.SCENES) + '</div>' +
+			'<div class="popover-sub"><span class="material-icons" aria-hidden="true">music_note</span><span class="popover-label"><b>Music</b></span></div>' +
+			'<div class="popover-segment tw-presets tw-music" role="radiogroup" aria-label="Music">' + presetButtons('music', sound.MUSIC) + '</div>'
+		: '') +
 		'<div class="popover-sub" title="Only you see this. Players always see solid fog."><span class="material-icons" aria-hidden="true">highlight</span><span class="popover-label"><b>Fog of war for you</b></span></div>' +
 		'<div class="popover-segment" role="radiogroup" aria-label="Fog of war for you">' +
 			DM_LIGHT_NAMES.map(function(label, i) {
@@ -5602,8 +5683,10 @@ function buildAmbiencePanel() {
 
 	// the host app's word (for example the plan) on the presets it keeps for some hosts
 	if (Array.isArray(options.ambiencePremium)) {
-		for (const button of panel.querySelectorAll('[data-tw-time], [data-tw-weather]')) {
-			if (options.ambiencePremium.indexOf(button.dataset.twTime || button.dataset.twWeather) !== -1) {
+		for (const button of panel.querySelectorAll('[data-tw-time], [data-tw-weather], [data-tw-scene], [data-tw-music]')) {
+			var premiumId = button.dataset.twTime || button.dataset.twWeather ||
+				(button.dataset.twScene ? 'scene:' + button.dataset.twScene : 'music:' + button.dataset.twMusic);
+			if (options.ambiencePremium.indexOf(premiumId) !== -1) {
 				addPaneBadge(button, options.ambienceBadge);
 				var badge = button.querySelector('.pane-item-badge');
 				if (badge) { button.title = badge.textContent; }
@@ -5622,6 +5705,20 @@ function buildAmbiencePanel() {
 		button.addEventListener('click', function() {
 			if (!isDM) { return; }
 			sendWeather(button.dataset.twWeather);
+		}, false);
+	}
+
+	for (const button of panel.querySelectorAll('[data-tw-scene]')) {
+		button.addEventListener('click', function() {
+			if (!isDM) { return; }
+			sendScene(button.dataset.twScene);
+		}, false);
+	}
+
+	for (const button of panel.querySelectorAll('[data-tw-music]')) {
+		button.addEventListener('click', function() {
+			if (!isDM) { return; }
+			sendMusic(button.dataset.twMusic);
 		}, false);
 	}
 
@@ -5646,9 +5743,79 @@ function syncAmbiencePanel() {
 	for (const button of panel.querySelectorAll('[data-tw-weather]')) {
 		button.setAttribute('aria-checked', button.dataset.twWeather === map.local.weather ? 'true' : 'false');
 	}
+	for (const button of panel.querySelectorAll('[data-tw-scene]')) {
+		button.setAttribute('aria-checked', button.dataset.twScene === map.local.scene ? 'true' : 'false');
+	}
+	for (const button of panel.querySelectorAll('[data-tw-music]')) {
+		button.setAttribute('aria-checked', button.dataset.twMusic === map.local.music ? 'true' : 'false');
+	}
 	for (const button of panel.querySelectorAll('[data-dm-light]')) {
 		button.setAttribute('aria-checked', Number(button.dataset.dmLight) === map.local.dmLight ? 'true' : 'false');
 	}
+}
+
+// ---- each person's own sound: on/off and volume for Ambience, Music and Effects (sound.ts) ----
+
+function buildSoundPanel() {
+	var panel = buildPopover('sound-panel', 'sound', 'Sound');
+	panel.innerHTML += sound.CHANNELS.map(function(channel) {
+		return '<button type="button" class="popover-switch" role="switch" data-sound-on="' + channel.id + '">' +
+				'<span class="material-icons" aria-hidden="true">' + channel.icon + '</span>' +
+				'<span class="popover-label"><b>' + channel.label + '</b><small>' + channel.help + '</small></span>' +
+				'<span class="popover-track" aria-hidden="true"></span>' +
+			'</button>' +
+			'<input type="range" class="popover-volume" min="0" max="100" step="5" data-sound-volume="' + channel.id + '" aria-label="' + channel.label + ' volume">';
+	}).join('') +
+	'<p class="popover-note">Only for you. Sound starts after your first click on the table.</p>';
+
+	for (const button of panel.querySelectorAll('[data-sound-on]')) {
+		button.addEventListener('click', function() {
+			var channel = soundSettings[button.dataset.soundOn];
+			channel.on = !channel.on;
+			changeSoundSettings();
+		}, false);
+	}
+
+	for (const slider of panel.querySelectorAll('[data-sound-volume]')) {
+		slider.addEventListener('input', function() {
+			var channel = soundSettings[slider.dataset.soundVolume];
+			channel.volume = Number(slider.value) / 100;
+			// moving a slider up switches its sound on
+			if (channel.volume > 0) { channel.on = true; }
+			changeSoundSettings();
+		}, false);
+	}
+
+	return panel;
+}
+
+function changeSoundSettings() {
+	try {
+		localStorage.setItem(SOUND_SETTINGS_KEY, JSON.stringify(soundSettings));
+	}
+	catch (e) {
+		// private windows may refuse; the settings still hold until the page closes
+	}
+	audio.setSettings(sound.parseSettings(soundSettings));
+	// a click: the browser lets the sound start now if it had not yet
+	audio.unlock();
+	syncSoundPanel();
+}
+
+function syncSoundPanel() {
+	var panel = byId('sound-panel');
+	if (!panel) { return; }
+
+	for (const button of panel.querySelectorAll('[data-sound-on]')) {
+		button.setAttribute('aria-checked', soundSettings[button.dataset.soundOn].on ? 'true' : 'false');
+	}
+	for (const slider of panel.querySelectorAll('[data-sound-volume]')) {
+		slider.value = String(Math.round(soundSettings[slider.dataset.soundVolume].volume * 100));
+	}
+
+	var anyOn = sound.CHANNELS.some(function(channel) { return soundSettings[channel.id].on && soundSettings[channel.id].volume > 0; });
+	var icon = root.querySelector('[data-button="sound"] .material-icons');
+	if (icon) { icon.textContent = anyOn ? 'volume_up' : 'volume_off'; }
 }
 
 // A small panel beside a side button (Menu, Ambience). One is open at a time; a click anywhere
@@ -5674,6 +5841,7 @@ function togglePopover(panel, anchor) {
 
 	closePopover();
 	if (panel.id == 'ambience-panel') { syncAmbiencePanel(); }
+	if (panel.id == 'sound-panel') { syncSoundPanel(); }
 	hideSideTip();
 	panel.hidden = false;
 	openPopoverPanel = panel;
@@ -6627,6 +6795,16 @@ function buildGui() {
 		togglePopover(ambiencePanel, ambienceButton.element);
 	}, false);
 
+	//sound: everyone's own volumes (only when the host app has sound files)
+	if (audio) {
+		var soundButton = buildSideButton('sound', 'Sound', 'volume_up', false, 'Your own volume for the ambience, the music and effects such as dice and doors.');
+		var soundPanel = buildSoundPanel();
+		soundButton.element.addEventListener('click', function() {
+			togglePopover(soundPanel, soundButton.element);
+		}, false);
+		syncSoundPanel();
+	}
+
 	//initiative tracker: a drawer on the right (the host app draws the tracker into it)
 	var trackerButton = buildSideButton('tracker', 'Initiative Tracker', 'format_list_numbered', true, 'Opens the initiative tracker beside the table.');
 	if (!options.mountTracker && !options.trackerUrl) {
@@ -6884,6 +7062,8 @@ function buildRoom(room) {
 	//ambience: rooms saved before there were times show day or night from their Moonlight switch,
 	//and keep their own Daylight (how far tokens see) until the host picks a time
 	map.local.daylight = 'daylight' in room ? room.daylight : 0;
+	map.local.scene = sound.sceneKind(room.scene).id;
+	map.local.music = sound.musicKind(room.music).id;
 	setTime(timeWeather.roomTime(room.time, room.moonlight));
 	setWeather(typeof room.weather === 'string' ? room.weather : 'clear');
 
@@ -7366,6 +7546,7 @@ var updateClient = {
 
 				token.position.set(args.x, args.y, args.z);
 				token.prevPos.set(args.x, args.y, args.z);
+				playSound('token');
 
 				updateTokenPlaceHolder(token);
 				updateVisionMeshes();
@@ -7558,6 +7739,16 @@ var updateClient = {
 	updateWeather: function(args) {
 		if (!args || typeof args.weather !== 'string') { return; }
 		setWeather(args.weather);
+	},
+
+	updateScene: function(args) {
+		if (!args || typeof args.scene !== 'string') { return; }
+		setScene(args.scene);
+	},
+
+	updateMusic: function(args) {
+		if (!args || typeof args.music !== 'string') { return; }
+		setMusic(args.music);
 	},
 	
 	addPlane: function(args) {
@@ -8787,6 +8978,11 @@ return {
 		map.ping.dispose();
 		map.weather.dispose();
 		map.clouds.dispose();
+		if (audio) {
+			audio.dispose();
+			root.removeEventListener('pointerdown', unlockAudio, true);
+			root.removeEventListener('keydown', unlockAudio, true);
+		}
 		cancelAnimationFrame(wallModelFrame);
 		if (map.wallModel) { map.wallModel.dispose(); }
 		if (wallMaterial) {
@@ -8821,12 +9017,22 @@ return {
 			// rain or snow drawn, fog on and clouds in the sky (the weather's own objects)
 			falling: !!map.scene.getObjectByName('weather')?.visible,
 			fog: !!map.scene.fog,
-			clouds: map.clouds.visible()
+			clouds: map.clouds.visible(),
+			scene: map.local.scene,
+			music: map.local.music,
+			// what plays (audio.js state()), null without sound files
+			sound: audio ? audio.state() : null
 		};
 	},
 	getTokenPosition: function(tokenId) {
 		var token = map.objects.tokens[tokenId];
 		return token ? { x: token.position.x, y: token.position.y, z: token.position.z } : null;
+	},
+	// Plays one of the viewer's effects for this person, for example 'dice' when the host app rolls
+	// dice ('dice', 'door-open', 'door-close', 'token', 'ping'). Silent without sound files, before
+	// their first click, or with their Effects off.
+	playSound: function(name) {
+		playSound(name);
 	},
 	// Where a token's base is on screen, in page coordinates (used by tests to drag it).
 	getTokenScreenPosition: function(tokenId) {

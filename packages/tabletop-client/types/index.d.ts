@@ -96,6 +96,11 @@ export interface TabletopOptions {
     day?: { path: string; extension?: string };
     night?: { path: string; extension?: string };
   };
+  /**
+   * Sound: the folder (relative to assetBaseUrl) holding `sounds.json` and the files it names.
+   * Without it there is no sound. See the README, "Sound".
+   */
+  sounds?: { path?: string };
   debug?: boolean;
 }
 
@@ -162,6 +167,8 @@ export interface Tabletop {
   getView(): TabletopView | null;
   /** Puts an element (a transparent canvas) just above the 3D scene, below the viewer's panels. */
   attachOverlay(element: HTMLElement): () => void;
+  /** Plays an effect for this person: 'dice', 'door-open', 'door-close', 'token' or 'ping'. */
+  playSound(name: string): void;
   debug?: unknown;
 }
 
