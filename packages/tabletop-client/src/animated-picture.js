@@ -37,6 +37,11 @@ async function readsAsAnimated(url) {
   if (/^data:/i.test(url) && !/^data:image\/(gif|webp)/i.test(url)) {
     return false;
   }
+  // A picture picked from the visitor's own disk (the offline demo) is a blob: address, which a
+  // site's Content Security Policy usually keeps fetch() away from: it stays a still.
+  if (/^blob:/i.test(url)) {
+    return false;
+  }
 
   var response = await fetch(url, { credentials: 'same-origin' });
   if (!response.ok || !response.body) {
