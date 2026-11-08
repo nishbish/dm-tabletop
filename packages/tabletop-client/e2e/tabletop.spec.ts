@@ -781,3 +781,55 @@ test('map images: the floor and image menus, and Change Image keeps the place', 
     .click();
   await expect.poll(async () => (await planes()).length).toBe(1);
 });
+
+test('hex grid: the host switches it, tokens snap to hexes, and nothing else moves', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text());
+  });
+  await page.goto('/?demo=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+  const grid = () =>
+    page.evaluate(() => {
+      const map = (window as any).tabletop.debug.map;
+      return { shape: map.settings.gridShape, drawn: map.gridHelper.name || 'squares' };
+    });
+  const positions = () =>
+    page.evaluate(() =>
+      Object.values<any>((window as any).tabletop.debug.map.objects.tokens).map((t) => [
+        t.position.x,
+        t.position.z,
+      ]),
+    );
+  // the demo room has no shape: squares, as in every room saved before hexes
+  expect(await grid()).toEqual({ shape: 'square', drawn: 'squares' });
+  const before = await positions();
+
+  const toggle = () =>
+    page.evaluate(() => (window as any).tabletop.debug.map.local.gridShapeInput.click());
+  await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
+  await toggle();
+  expect(await grid()).toEqual({ shape: 'hex', drawn: 'hex grid' });
+  expect(await positions()).toEqual(before);
+  await page.waitForTimeout(300); // a few frames with the hex shader
+  await page.screenshot({ path: 'e2e/.results/hex-grid.png' });
+
+  // a dropped token lands in the middle of the hex under it (row 12 is at z = 12 * sqrt(3) / 2)
+  const spot = await dragAndLook(page, '1', [
+    [8, 10],
+    [8.3, 10.6],
+  ]);
+  expect(spot.x).toBe(8);
+  expect(spot.z).toBeCloseTo((12 * Math.sqrt(3)) / 2, 5);
+  expect(spot.area).toBeGreaterThan(0);
+
+  await toggle();
+  expect(await grid()).toEqual({ shape: 'square', drawn: 'squares' });
+  const square = await dragAndLook(page, '1', [[8.3, 10.6]]);
+  expect([square.x, square.z]).toEqual([8, 11]);
+  expect(errors).toEqual([]);
+});

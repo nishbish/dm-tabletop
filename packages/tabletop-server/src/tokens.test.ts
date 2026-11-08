@@ -167,6 +167,8 @@ describe('rooms saved before these fields existed', () => {
     toStop.push(server);
     const { client, joined } = await TestClient.join(port, 'host-user', 'r1');
     expect(joined.state.tokens['1']).toEqual(saved.tokens['1']);
+    // no grid shape: the viewer keeps squares for rooms made before hexes
+    expect(joined.state.grid).toEqual({ width: 20, height: 20 });
     client.send({
       type: 'update',
       name: 'updateTokenStats',
