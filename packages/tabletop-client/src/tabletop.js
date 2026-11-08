@@ -353,7 +353,7 @@ map.menus.prop = new ContextMenu( {
     'parent': root,
     'theme': 'default',
       'items': [
-        {'icon': 'delete', 'name': 'Remove',  action: (e) => removePlaneImage(e)  },
+        {'icon': 'delete', 'name': 'Remove Prop',  action: (e) => removePlaneImage(e)  },
       ]
   }
 );
@@ -384,7 +384,7 @@ function getDefaultItems(kind = 'floor') {
 	items.push({'icon': 'add_photo_alternate', 'name': 'Add Image',  action: (e) => addPlaneImage(e)  });
 
 	if (kind != 'plane' && modelLibrary.hasProps) {
-		items.push({'icon': 'chair', 'name': 'Add Furniture',  action: (e) => openPropPane()  });
+		items.push({'icon': 'chair', 'name': 'Add Prop',  action: (e) => openPropPane()  });
 	}
 
 	if (kind == 'plane') {
@@ -2004,7 +2004,7 @@ function assignToken(e) {
 	}
 }
 
-// A prop (furniture, a decoration) belongs to the map, like a map image: only the host edits it, in
+// A prop (a table, a barrel, a gravestone) belongs to the map, like a map image: only the host edits it, in
 // the same place and with the same handles, and it has no base, vision, owner or portrait. So it
 // IS a map image to the server and to the code around it, one whose picture is a 3D model.
 function createProp(file, position, local, scale, rotation, planeId) {
@@ -4003,7 +4003,7 @@ var BUILD_HINTS = {
 	room: 'Drag on the floor to draw a room. Right-drag turns the camera, arrow keys move it.',
 	corridor: 'Drag on the floor to draw a corridor ' + CORRIDOR_WIDTH + ' squares wide. Right-drag turns the camera.',
 	door: 'Click a wall to put a door in it, or drag a door along a wall. Click a door to turn it.',
-	plane: 'Click a map image to move, turn or resize it (hold Ctrl to do it freely). Drag furniture to move it and press R to turn it. Right-click the floor to add either, or an image to change or remove it.',
+	plane: 'Click a map image to move, turn or resize it (hold Ctrl to do it freely). Drag a prop to move it and press R to turn it. Right-click the floor to add either, or an image to change or remove it.',
 	wallPoint: 'Draw walls point by point, or drag out whole rooms and corridors.'
 };
 
@@ -4011,7 +4011,7 @@ var BUILD_HINTS = {
 var EDIT_TABS = [
 	{ mode: 'wallPoint', button: 'wallMode', icon: 'view_carousel', label: 'Walls', hint: 'wallPoint' },
 	{ mode: 'door', button: 'doorMode', icon: 'door_front', label: 'Doors', hint: 'door' },
-	{ mode: 'plane', button: 'planeMode', icon: 'image', label: modelLibrary.hasProps ? 'Images & Furniture' : 'Images', hint: 'plane' }
+	{ mode: 'plane', button: 'planeMode', icon: 'image', label: modelLibrary.hasProps ? 'Images & Props' : 'Images', hint: 'plane' }
 ];
 
 function buildToolbar() {
@@ -4364,7 +4364,7 @@ function openCharacterFolder() {
 	pane.body.scrollTop = 0;
 }
 
-// Furniture and decorations: the library's folders, then what is in one.
+// Props: the library's folders, then what is in one.
 function openPropPane(folder) {
 	var pane = map.panes.props;
 	hideContextMenu();
@@ -5457,7 +5457,7 @@ function buildGui() {
 
 	//image pane
 	var imagesPane = buildPane('Images', 'plane_images');
-	buildPane('Furniture', 'props');
+	buildPane('Props', 'props');
 	
 	var newPlanePane = buildPane('Images', 'new_plane_image');
 
