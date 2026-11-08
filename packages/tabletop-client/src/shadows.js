@@ -9,11 +9,11 @@
 //    pictures, that only darkens where a shadow falls, so the map is not relit;
 //  - a small shadow map that covers only the floor around the point the camera looks at, fitted
 //    as the view moves, and drawn again only when a caster or the view has moved (autoUpdate off);
-//  - casters a host app adds are seen only by the shadow camera (their own layer), never drawn.
+//  - casters a host app adds write no colour and no depth, so they show nothing themselves.
+//    (A layer the main camera skips does not work: three.js tests the main camera's layers when
+//    it draws the shadow map too.)
 import * as THREE from 'three';
 
-// casters that only the shadow camera sees (fog.js uses layer 3)
-export var SHADOW_LAYER = 5;
 export var MAP_SIZE = 1024;
 // the catcher sits above the floor (-0.53), the map pictures (-0.52) and the grid (-0.51)
 var CATCHER_LIFT = 0.025;
@@ -38,7 +38,6 @@ export function createShadows(scene, renderer, options) {
   light.shadow.mapSize.set(MAP_SIZE, MAP_SIZE);
   light.shadow.bias = -0.0005;
   light.shadow.normalBias = 0.02;
-  light.shadow.camera.layers.enable(SHADOW_LAYER);
 
   var catcherMaterial = new THREE.ShadowMaterial({ opacity: opacity, depthWrite: false });
   var catcherGeometry = new THREE.PlaneGeometry(1, 1);
@@ -191,8 +190,8 @@ export function createShadows(scene, renderer, options) {
   }
 
   // A shadow for something the host app draws itself (its dice, on their own canvas over the
-  // table): `positions` are the triangles of its shape (x, y, z for each corner). Never drawn, only
-  // seen by the shadow camera. The host moves it with set() and drops it with remove().
+  // table): `positions` are the triangles of its shape (x, y, z for each corner). Shows nothing
+  // itself, only its shadow. The host moves it with set() and drops it with remove().
   function createCaster(positions) {
     var geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(Array.from(positions), 3));
@@ -201,7 +200,6 @@ export function createShadows(scene, renderer, options) {
       geometry,
       new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }),
     );
-    mesh.layers.set(SHADOW_LAYER);
     mesh.userData.shadowCaster = true;
     mesh.frustumCulled = false;
     mesh.raycast = function () {};

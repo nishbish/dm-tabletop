@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { createShadows, MAP_SIZE, SHADOW_LAYER } from './shadows.js';
+import { createShadows, MAP_SIZE } from './shadows.js';
 
 // Shadows for the High graphics setting (shadows.js): off costs nothing, on casts from tokens and
 // from host-app casters, and redraws only when something moved.
@@ -125,10 +125,12 @@ describe('shadows', () => {
     const mesh = scene.children[scene.children.length - 1] as THREE.Mesh;
     expect(scene.children.length).toBe(before + 1);
     expect(mesh.castShadow).toBe(true);
-    // the main camera (layer 0) never draws it; the shadow camera sees it
-    expect(mesh.layers.test(new THREE.Camera().layers)).toBe(false);
-    expect(mesh.layers.test(shadows.light.shadow.camera.layers)).toBe(true);
-    expect(mesh.layers.isEnabled(SHADOW_LAYER)).toBe(true);
+    // it writes nothing to the picture, but three.js draws it into the shadow map: that pass tests
+    // the main camera's layers, so it must stay on the main camera's layer
+    const material = mesh.material as THREE.MeshBasicMaterial;
+    expect(material.colorWrite).toBe(false);
+    expect(material.depthWrite).toBe(false);
+    expect(mesh.layers.test(new THREE.Camera().layers)).toBe(true);
     caster.set([1, 2, 3], [0, 0, 0, 1], 0.5);
     expect(mesh.position.toArray()).toEqual([1, 2, 3]);
     expect(mesh.scale.x).toBe(0.5);

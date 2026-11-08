@@ -965,11 +965,11 @@ test('shadows: on with the High preset, none at all on Medium, and the setting s
     const c = tabletop.createShadowCaster([0, 0, 0, 1, 0, 0, 0, 1, 0]);
     c.set([2, 0, 2], [0, 0, 0, 1], 1);
     const mesh = tabletop.debug.map.scene.children.at(-1);
-    const seen = mesh.layers.test(tabletop.debug.map.objects.camera.layers);
+    const invisible = !mesh.material.colorWrite && !mesh.material.depthWrite;
     c.remove();
-    return { seen, cast: mesh.castShadow };
+    return { invisible, cast: mesh.castShadow };
   });
-  expect(caster).toEqual({ seen: false, cast: true });
+  expect(caster).toEqual({ invisible: true, cast: true });
 
   // switching the setting off takes everything away again
   await page.evaluate(() => {
