@@ -1065,6 +1065,90 @@ test('map images: the floor and image menus, and Change Image keeps the place', 
   await expect.poll(async () => (await planes()).length).toBe(1);
 });
 
+test('copy and paste: Ctrl+C copies the highlighted tokens, Ctrl+V pastes them at the pointer', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+  await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
+  const first = (await stats(page)).tokenIds[0];
+  const at = await steadyScreenPosition(page, first);
+  const tokens = () =>
+    page.evaluate(() =>
+      Object.values<any>((window as any).tabletop.debug.map.objects.tokens).map((t) => ({
+        modelId: t.modelId,
+        x: t.position.x,
+        z: t.position.z,
+        scale: t.scale.y,
+      })),
+    );
+  const original = (await tokens())[0];
+
+  // nothing copied yet: Ctrl+V does nothing
+  await page.mouse.move(at.x + 150, at.y);
+  await page.keyboard.press('Control+v');
+  expect((await stats(page)).tokens).toBe(4);
+
+  // the selected token is copied, and pasted where the pointer is, a whole number of squares
+  // away so it stays on the grid (selected directly: hover is slow to settle on CI's software GL)
+  await page.evaluate((id) => {
+    const map = (window as any).tabletop.debug.map;
+    map.translateControls.token.translateGroupObjects = [map.objects.tokens[id]];
+  }, first);
+  await page.keyboard.press('Control+c');
+  await page.mouse.move(at.x + 150, at.y, { steps: 3 });
+  await page.keyboard.press('Control+v');
+  await expect.poll(async () => (await stats(page)).tokens).toBe(5);
+  const pasted = (await tokens())[4];
+  expect(pasted.modelId).toBe(original.modelId);
+  expect(pasted.scale).toBe(original.scale);
+  expect(pasted.x).toBeGreaterThan(original.x);
+  expect(Number.isInteger(pasted.x - original.x)).toBe(true);
+  expect(Number.isInteger(pasted.z - original.z)).toBe(true);
+  // the paste is selected, ready to drag
+  expect(
+    await page.evaluate(
+      () => (window as any).tabletop.debug.map.translateControls.token.translateGroupObjects.length,
+    ),
+  ).toBe(1);
+
+  // pasting again without moving never lands on the first paste
+  await page.keyboard.press('Control+v');
+  await expect.poll(async () => (await stats(page)).tokens).toBe(6);
+  const all = await tokens();
+  expect(all[5].x !== all[4].x || all[5].z !== all[4].z).toBe(true);
+
+  // typing in a text box: Ctrl+V pastes text, not tokens
+  await page.evaluate(() => {
+    const input = document.createElement('input');
+    input.id = 'paste-test';
+    document.body.appendChild(input);
+  });
+  await page.locator('#paste-test').focus();
+  await page.keyboard.press('Control+v');
+  await page.waitForTimeout(300);
+  expect((await stats(page)).tokens).toBe(6);
+  await page.locator('#paste-test').evaluate((input) => input.remove());
+
+  // doors: both demo doors box-selected, copied and pasted; one Ctrl+Z takes the paste back
+  const doors = () =>
+    page.evaluate(() => Object.keys((window as any).tabletop.debug.map.objects.doors).length);
+  const doorsBefore = await doors();
+  await page.locator('[data-button="editMap"]').click();
+  await page.locator('[data-button="doorMode"]').click();
+  await page.evaluate(() => {
+    const map = (window as any).tabletop.debug.map;
+    map.translateControls.door.translateGroupObjects = Object.values(map.objects.doors);
+  });
+  await page.mouse.move(at.x + 150, at.y + 100, { steps: 3 });
+  await page.keyboard.press('Control+c');
+  await page.keyboard.press('Control+v');
+  await expect.poll(doors).toBe(doorsBefore * 2);
+  await page.keyboard.press('Control+z');
+  await expect.poll(doors).toBe(doorsBefore);
+});
+
 test('hex grid: the host switches it, tokens snap to hexes, and nothing else moves', async ({
   page,
 }) => {
