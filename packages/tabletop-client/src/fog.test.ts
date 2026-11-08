@@ -78,6 +78,11 @@ describe('fog of war', () => {
     expect(fog.material.uniforms.uStrength.value).toBe(0.6);
     // the host's translucent view shows explored ground through a thinner veil
     expect(fog.material.uniforms.uVeil.value).toBe(1);
+    // the clear view costs nothing: the pass is skipped
+    expect(fog.pass.enabled).toBe(true);
+    fog.material.opacity = 0;
+    fog.update(1100);
+    expect(fog.pass.enabled).toBe(false);
   });
 
   it('gives the composer a depth texture to read on both of its targets', () => {

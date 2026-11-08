@@ -67,8 +67,8 @@ var SWIRL_DEEP = 0.0;
 // how far apart (across the floor, in cells) the shader looks along a ray, and how many looks at most
 var STEP = 0.2;
 var MAX_STEPS = 64;
-var SIMPLE_STEP = 0.35;
-var SIMPLE_MAX_STEPS = 24;
+var SIMPLE_STEP = 0.5;
+var SIMPLE_MAX_STEPS = 12;
 // how much of the host's view the fog over explored ground hides
 var VEIL = 0.5;
 
@@ -512,6 +512,8 @@ export function createFog(gridWidth, gridHeight) {
     if (camera) {
       pass.camera = camera;
     }
+    // in the clear view, with no ping showing, the pass would only copy the frame: skip it
+    pass.enabled = strength > 0.001 || !!(pass.overlay && pass.overlay());
   }
 
   function dispose() {
