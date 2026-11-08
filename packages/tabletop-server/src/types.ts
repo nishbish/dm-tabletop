@@ -76,6 +76,11 @@ export interface RoomState {
   grid: { width: number; height: number; shape?: 'square' | 'hex' };
   daylight: number;
   moonlight: number;
+  // The ambience: a time of day (dawn, day, dusk, night) and a weather. Both are optional, so
+  // rooms saved before they existed need no migration: without `time` the room shows day, or night
+  // when `moonlight` is on, and without `weather` it is clear. See TIMES and WEATHERS in handlers.ts.
+  time?: string;
+  weather?: string;
   // Next id the server will hand out (one counter for all entity kinds, so ids never collide).
   nextId: number;
   tokens: { [id: string]: TokenState };

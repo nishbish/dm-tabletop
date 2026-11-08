@@ -22,6 +22,10 @@ const MAX_TOKEN_NAME = 100;
 // Above the number validators' own limit nobody is keeping score any more.
 const MAX_HP = 1000000;
 const MAX_AC = 1000;
+// The ambience a host can pick: a time of day and a weather. A room without a `time` shows day,
+// or night when its older `moonlight` switch is on; 'clear' is what a room without weather shows.
+export const TIMES = ['dawn', 'day', 'dusk', 'night'];
+export const WEATHERS = ['clear', 'cloudy', 'rain', 'storm', 'snow', 'fog'];
 
 function newId(room: Room, collection: object): string {
   if (Object.keys(collection).length >= MAX_ENTITIES) {
@@ -204,7 +208,34 @@ const handlers: { [name: string]: Handler } = {
   updateMoonlight(ctx) {
     requireHost(ctx);
     ctx.room.state.moonlight = num(requireObject(ctx.args), 'moonlight');
+    // the older switch speaks for the time of day again (night when on, day when off)
+    delete ctx.room.state.time;
     changed(ctx, { moonlight: ctx.room.state.moonlight });
+  },
+  // The time of day. It also sets the two older switches to match, so they stay a true summary:
+  // night is moonlight with tokens seeing only as far as their view distance, every other time is
+  // daylight (they see much further).
+  updateTime(ctx) {
+    requireHost(ctx);
+    const time = str(requireObject(ctx.args), 'time');
+    if (TIMES.indexOf(time) === -1) {
+      throw new HandlerError(`time must be one of ${TIMES.join(', ')}`);
+    }
+    const state = ctx.room.state;
+    state.time = time;
+    state.daylight = time === 'night' ? 0 : 100;
+    state.moonlight = time === 'night' ? 1 : 0;
+    changed(ctx, { time, daylight: state.daylight, moonlight: state.moonlight });
+  },
+  updateWeather(ctx) {
+    requireHost(ctx);
+    const weather = str(requireObject(ctx.args), 'weather');
+    if (WEATHERS.indexOf(weather) === -1) {
+      throw new HandlerError(`weather must be one of ${WEATHERS.join(', ')}`);
+    }
+    if (weather === 'clear') delete ctx.room.state.weather;
+    else ctx.room.state.weather = weather;
+    changed(ctx, { weather });
   },
   updateGridSize(ctx) {
     requireHost(ctx);

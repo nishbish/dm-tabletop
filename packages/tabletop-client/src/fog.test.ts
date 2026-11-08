@@ -142,6 +142,55 @@ describe('fog of war', () => {
     expect(explored).toHaveLength(1);
   });
 
+  it('carries a view that reaches the edge of the map on past it, so no fog lines the edge', () => {
+    const fog = createFog(10, 10);
+    // standing at (2, 5), seeing up to the left edge (x = -0.5) and round into the top-left corner
+    fog.setVision(
+      [
+        { x: -0.5, z: 7 },
+        { x: -0.5, z: 2 },
+        { x: 1, z: -0.5 },
+        { x: 4, z: -0.5 },
+        { x: 4, z: 7 },
+      ],
+      { x: 2, z: 5 },
+    );
+    const points = canvases[0].context.calls
+      .filter((c: Call) => c.name === 'moveTo' || c.name === 'lineTo')
+      .map((c: Call) => c.args as number[]);
+    // the two points on the left edge and the two on the top edge end up well outside the canvas
+    expect(points[0][0]).toBeLessThan(-8);
+    expect(points[1][0]).toBeLessThan(-8);
+    // along the line of sight: the point down at z = 7 stays below the token, the one at z = 2 above
+    expect(points[0][1]).toBeGreaterThan(5.5 * 16);
+    expect(points[1][1]).toBeLessThan(5.5 * 16);
+    // the top-left corner is added between the left edge and the top edge
+    expect(points[2][0]).toBeLessThan(-8);
+    expect(points[2][1]).toBeLessThan(-8);
+    expect(points[3][1]).toBeLessThan(-8);
+    expect(points[4][1]).toBeLessThan(-8);
+    // a point inside the map is untouched
+    expect(points[5]).toEqual([4.5 * 16, 7.5 * 16]);
+    expect(points).toHaveLength(6);
+  });
+
+  it('adds no corner between opposite edges, or along one edge', () => {
+    const fog = createFog(10, 10);
+    fog.setVision(
+      [
+        { x: -0.5, z: 2 },
+        { x: -0.5, z: 6 },
+        { x: 9.5, z: 6 },
+        { x: 9.5, z: 2 },
+      ],
+      { x: 5, z: 4 },
+    );
+    const count = canvases[0].context.calls.filter(
+      (c: Call) => c.name === 'moveTo' || c.name === 'lineTo',
+    ).length;
+    expect(count).toBe(4);
+  });
+
   it('fades the old view out over about half a second and remembers what was seen', () => {
     const fog = createFog(10, 10);
     const t0 = performance.now() + 10;
