@@ -72,7 +72,8 @@ export interface WallPointState {
 export interface RoomState {
   version: number;
   name: string;
-  grid: { width: number; height: number };
+  // `shape` is missing in rooms saved before hex grids, which are squares (see the viewer's grid.ts).
+  grid: { width: number; height: number; shape?: 'square' | 'hex' };
   daylight: number;
   moonlight: number;
   // The ambience: a time of day (dawn, day, dusk, night) and a weather. Both are optional, so

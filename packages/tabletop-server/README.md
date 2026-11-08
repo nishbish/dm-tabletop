@@ -114,6 +114,7 @@ String arguments are limited to 256 characters, numbers must be finite. Ids (`to
 | `updateTime`           | host          | `time`: `dawn`, `day`, `dusk` or `night`; also sets `daylight` (0 at night, else 100) and `moonlight` (1 at night, else 0) to match                                                    | `time, daylight, moonlight`                                        |
 | `updateWeather`        | host          | `weather`: `clear`, `cloudy`, `rain`, `storm`, `snow` or `fog` (`clear` removes it from the state)                                                                                     | same                                                               |
 | `updateGridSize`       | host          | `width, height` (integers 1-1000)                                                                                                                                                      | same                                                               |
+| `updateGridShape`      | host          | `shape`: `square` or `hex` (a room with no shape is square; new rooms start as hex)                                                                                                    | same                                                               |
 | `addPlane` (+self)     | host          | `planeUploadId, x, z, image?, tempId?`                                                                                                                                                 | `planeId, tempId, position, scale, rotation, image, planeUploadId` |
 | `removePlane`          | host          | `planeId`                                                                                                                                                                              | `planeId`                                                          |
 | `updatePlaneImage`     | host          | `planeId, planeUploadId, image?` (another picture; place, size, turn and layer stay)                                                                                                   | same                                                               |
@@ -138,14 +139,14 @@ The differences: `assignDM` became `assignHost`; messages are now `{type, name, 
 ids are strings; `updateTokenSettings` is now broadcast; the join handshake is `join` / `joined`; and the
 server, not the client, is the source of truth for who sent a message (`from`).
 
-| Original event                                                                   | v2                     |
-| -------------------------------------------------------------------------------- | ---------------------- |
-| `join` / `userJoined`                                                            | `join` / `joined`      |
-| `clientConnected` / `clientDisconnected`                                         | `presence`             |
-| `addToken` ... `updateGridSize`, planes, doors, wall points, `ping`              | same names (see table) |
-| `assignDM` / `updateDM`                                                          | `assignHost`           |
-| `editModel`, `getModel(s)`, `getPlaneImages`, `deleteModel`, `deletePlaneUpload` | extension points       |
-| `getRooms`, `addRoom`, `deleteRoom`, `refreshInviteCode`, `focusCamera`          | extension points       |
+| Original event                                                                         | v2                     |
+| -------------------------------------------------------------------------------------- | ---------------------- |
+| `join` / `userJoined`                                                                  | `join` / `joined`      |
+| `clientConnected` / `clientDisconnected`                                               | `presence`             |
+| `addToken` ... `updateGridSize`, `updateGridShape`, planes, doors, wall points, `ping` | same names (see table) |
+| `assignDM` / `updateDM`                                                                | `assignHost`           |
+| `editModel`, `getModel(s)`, `getPlaneImages`, `deleteModel`, `deletePlaneUpload`       | extension points       |
+| `getRooms`, `addRoom`, `deleteRoom`, `refreshInviteCode`, `focusCamera`                | extension points       |
 
 ## The state
 
