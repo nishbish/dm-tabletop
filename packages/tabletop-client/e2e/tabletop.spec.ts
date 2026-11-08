@@ -243,9 +243,11 @@ test('time and weather: the host sets them, the player sees them, a rejoin keeps
     await expect(panel.locator('[data-tw-readout]')).toHaveText('Day 2, 00:00, Night');
     await panel.getByRole('radio', { name: 'Storm' }).click();
 
+    // two 3D pages on software WebGL: the player's page can take a while to get to the messages
+    const slow = { timeout: 20_000 };
     const card = guest.locator('#time-weather');
-    await expect(card).toContainText('Day 2 \u00b7 00:00');
-    await expect(card).toContainText('Storm');
+    await expect(card).toContainText('Day 2 \u00b7 00:00', slow);
+    await expect(card).toContainText('Storm', slow);
     expect(await stats(guest)).toMatchObject({
       clock: 1440,
       weather: 'storm',
@@ -254,7 +256,7 @@ test('time and weather: the host sets them, the player sees them, a rejoin keeps
     });
 
     await panel.getByRole('radio', { name: 'Fog' }).click();
-    await expect.poll(async () => (await stats(guest)).fog).toBe(true);
+    await expect.poll(async () => (await stats(guest)).fog, slow).toBe(true);
     expect((await stats(guest)).falling).toBe(false);
 
     // with a clock the night comes by itself, so the Moonlight switch goes
@@ -265,13 +267,13 @@ test('time and weather: the host sets them, the player sees them, a rejoin keeps
     await guest.reload();
     await waitConnected(guest);
     await expect.poll(async () => (await stats(guest)).weather, { timeout: 30_000 }).toBe('fog');
-    await expect(guest.locator('#time-weather')).toContainText('Fog');
+    await expect(guest.locator('#time-weather')).toContainText('Fog', slow);
 
     // the clock off and clear skies: the card goes
     await host.locator('.side-button[data-button="timeWeather"]').click();
     await panel.locator('[data-button="clock"]').click();
     await panel.getByRole('radio', { name: 'Clear' }).click();
-    await expect(guest.locator('#time-weather')).toBeHidden();
+    await expect(guest.locator('#time-weather')).toBeHidden(slow);
     expect(await stats(guest)).toMatchObject({ clock: null, weather: 'clear', fog: false });
     expect(errors).toEqual([]);
   } finally {

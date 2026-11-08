@@ -5084,6 +5084,7 @@ var CLOCK_START = 8 * 60;
 
 function buildTimeWeatherPanel() {
 	var panel = buildPopover('time-weather-panel', 'timeWeather', 'Time and Weather');
+	addPaneBadge(panel.querySelector('.popover-title'), options.timeWeatherBadge);
 	panel.innerHTML +=
 		'<button type="button" class="popover-switch" role="switch" data-button="clock">' +
 			'<span class="material-icons" aria-hidden="true">schedule</span>' +
