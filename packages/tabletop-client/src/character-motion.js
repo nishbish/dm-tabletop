@@ -83,7 +83,9 @@ export function stepCharacterMotion(motion, x, z, seconds) {
 
 // `onScreen(token)` says whether a token can be seen from the camera; one that cannot is not
 // animated (it still turns and starts or stops walking, so it looks right when it comes into view).
+// Returns how many were animated this frame (their shadows need drawing again).
 export function updateCharacters(tokens, seconds, setWalking, onScreen) {
+  var animated = 0;
   for (const token of Object.values(tokens)) {
     var character = token.meshes && token.meshes.character;
     if (!character) {
@@ -100,8 +102,10 @@ export function updateCharacters(tokens, seconds, setWalking, onScreen) {
     character.body.rotation.y = motion.facing;
     if (token.visible && !motion.resting && (!onScreen || onScreen(token))) {
       character.mixer.update(Math.min(seconds, MAX_STEP));
+      animated++;
     }
   }
+  return animated;
 }
 
 // Back to standing still at its token, for when the graphics setting turns the motion off.
