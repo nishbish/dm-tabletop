@@ -24,14 +24,15 @@ The same notice is in `packages/initiative-tracker/NOTICE.md` and README, and in
 
 The tracker's Pathfinder creatures come from Paizo's Monster Core and Monster Core 2 under the ORC License. The ORC Notice, the attribution of both books, the Reserved Material statement and the Expressly Designated Licensed Material statement are in `packages/initiative-tracker/NOTICE.md`. A host app that shows the built-in creature list should show the ORC Notice and the attribution too.
 
-No images, textures, skyboxes, 3D models or fonts other than the icon font are included. The tabletop-client sky is a
+No images, textures, skyboxes, 3D models, sounds or fonts other than the icon font are included. The tabletop-client sky is a
 gradient drawn in code, walls are generated geometry, tokens without a picture are drawn cylinders, and the
 text font is the system font stack.
 
 ## Not included (pending licence clearance)
 
 These were part of the original viewer and are deliberately **not** in this repository. A hosting app may supply its own
-(see `assetBaseUrl` and `skybox` in the tabletop-client README).
+(see `assetBaseUrl`, `skybox` and `sounds` in the tabletop-client README). The viewer's sound player ships with no sound
+files: a host supplies them with `sounds.json` (tabletop-client README, "Sound") and records their licences itself.
 
 - Skyboxes: the `miramar` (day, `.tga`) and `night` (`.png`) six-face skybox images.
 - Wall models: the `wall*` model files.

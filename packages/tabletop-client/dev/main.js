@@ -7,6 +7,8 @@
 //   &title=Dungeons               the loading screen's title
 //   &library=1                    (with demo=1) a small token and map library with badges, and a
 //                                 locked upload button that has one too
+//   &sounds=1                     sound, from sounds/sounds.json beside the page (none ship with
+//                                 the package; the browser test serves its own)
 import { createTabletop } from '../src/index.js';
 
 const params = new URLSearchParams(location.search);
@@ -21,6 +23,7 @@ window.tabletop = createTabletop(document.getElementById('app'), {
   trackerUrl: params.get('tracker') || undefined,
   wallModel: params.get('wallModel') ? { src: params.get('wallModel') } : undefined,
   loadingTitle: params.get('title') || undefined,
+  sounds: params.get('sounds') === '1' ? { path: 'sounds/' } : undefined,
   ...(params.get('library') === '1' ? badgedLibrary() : {}),
 });
 

@@ -9,6 +9,6 @@ export { isValidRoomId } from './storage/roomId';
 export { createLogger } from './logger';
 export { HandlerError } from './validate';
 // builtInHandlers lets a host app wrap a built-in event (for example to check something first).
-export { builtInHandlers, TIMES, WEATHERS } from './handlers';
+export { builtInHandlers, MUSIC, SCENES, TIMES, WEATHERS } from './handlers';
 export type { Connection, Handler, HandlerContext, Room } from './room';
 export * from './types';

@@ -80,6 +80,10 @@ export interface RoomState {
   // when `moonlight` is on, and without `weather` it is clear. See TIMES and WEATHERS in handlers.ts.
   time?: string;
   weather?: string;
+  // The sound on top of the ambience: a scene (a soundscape such as a tavern, which may muffle
+  // the weather) and a music track. Both optional, absent = none. See SCENES and MUSIC.
+  scene?: string;
+  music?: string;
   // Next id the server will hand out (one counter for all entity kinds, so ids never collide).
   nextId: number;
   tokens: { [id: string]: TokenState };

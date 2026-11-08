@@ -285,6 +285,123 @@ test('ambience: the host picks a time and weather, the player sees them, a rejoi
   }
 });
 
+// A second of quiet tone as a WAV file: the browser test's stand-in for every sound.
+function toneWav(): Buffer {
+  const rate = 8000;
+  const b = Buffer.alloc(44 + rate * 2);
+  b.write('RIFF', 0);
+  b.writeUInt32LE(36 + rate * 2, 4);
+  b.write('WAVEfmt ', 8);
+  b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20);
+  b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(rate, 24);
+  b.writeUInt32LE(rate * 2, 28);
+  b.writeUInt16LE(2, 32);
+  b.writeUInt16LE(16, 34);
+  b.write('data', 36);
+  b.writeUInt32LE(rate * 2, 40);
+  for (let i = 0; i < rate; i++) b.writeInt16LE(Math.round(Math.sin(i / 3) * 300), 44 + i * 2);
+  return b;
+}
+
+async function serveSounds(page: Page, requests: string[]) {
+  const loop = { src: 'tone.wav', rate: 8000, length: 1, loop: true };
+  const manifest = {
+    version: 1,
+    files: {
+      rain: loop,
+      tavern: loop,
+      'music-battle': loop,
+      effects: {
+        src: 'tone.wav',
+        rate: 8000,
+        length: 1,
+        clips: { 'dice-1': [0, 0.5], ping: [0.5, 0.5] },
+      },
+    },
+  };
+  const wav = toneWav();
+  await page.route('**/sounds/**', (route) => {
+    requests.push(route.request().url());
+    return route.request().url().endsWith('sounds.json')
+      ? route.fulfill({ json: manifest })
+      : route.fulfill({ body: wav, contentType: 'audio/wav' });
+  });
+}
+
+test('sound: the host scene and music play for the player after a click, with their own settings', async ({
+  browser,
+}) => {
+  test.slow();
+  const dataDir = mkdtempSync(join(tmpdir(), 'tabletop-e2e-'));
+  const server = new ServerProcess(dataDir);
+  await server.start();
+
+  try {
+    const url = (token: string) =>
+      `/?server=${encodeURIComponent(SERVER)}&room=sound&token=${token}&sounds=1`;
+    const host = await (
+      await browser.newContext({ viewport: { width: 1280, height: 800 } })
+    ).newPage();
+    const guest = await (
+      await browser.newContext({ viewport: { width: 1280, height: 800 } })
+    ).newPage();
+    const errors: string[] = [];
+    const guestRequests: string[] = [];
+    for (const page of [host, guest]) page.on('pageerror', (e) => errors.push(e.message));
+    await serveSounds(host, []);
+    await serveSounds(guest, guestRequests);
+    await host.goto(url('host'));
+    await waitConnected(host);
+    await guest.goto(url('guest'));
+    await waitConnected(guest);
+    await host.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+    await guest.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+
+    await host.locator('.side-button[data-button="ambience"]').click();
+    const panel = host.locator('#ambience-panel');
+    await panel.getByRole('radio', { name: 'Rain' }).click();
+    await panel.getByRole('radio', { name: 'Tavern' }).first().click();
+
+    // everyone sees the scene; nothing is downloaded or played before the player clicks
+    const slow = { timeout: 20_000 };
+    await expect(guest.locator('#ambience')).toContainText('Rain · Tavern', slow);
+    expect((await stats(guest)).sound).toMatchObject({ running: false, loops: [] });
+    expect(guestRequests).toEqual([]);
+
+    await guest.mouse.click(700, 300);
+    await expect
+      .poll(async () => (await stats(guest)).sound, slow)
+      .toMatchObject({ running: true, loops: ['fire', 'rain', 'tavern'] });
+    // indoors: the rain goes through the low-pass filter
+    expect((await stats(guest)).sound.cutoff).toBeLessThan(1000);
+    // only what the room needs: no music file yet
+    expect(guestRequests.some((u) => u.includes('music'))).toBe(false);
+
+    // the player's own switch: Ambience off stops it, and is kept in the browser
+    await guest.locator('.side-button[data-button="sound"]').click();
+    const sound = guest.locator('#sound-panel');
+    await sound.getByRole('switch', { name: /Ambience/ }).click();
+    await expect.poll(async () => (await stats(guest)).sound.loops, slow).toEqual([]);
+
+    await panel.getByRole('radio', { name: 'Battle' }).last().click();
+    await expect.poll(async () => (await stats(guest)).sound.loops, slow).toEqual(['music-battle']);
+
+    await guest.reload();
+    await waitConnected(guest);
+    await expect.poll(async () => (await stats(guest)).music, { timeout: 30_000 }).toBe('battle');
+    await guest.locator('.side-button[data-button="sound"]').click();
+    await expect(
+      guest.locator('#sound-panel').getByRole('switch', { name: /Ambience/ }),
+    ).toHaveAttribute('aria-checked', 'false');
+    expect(errors).toEqual([]);
+  } finally {
+    await server.stop();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
 test('offline demo works with no server', async ({ page }) => {
   await page.goto('/?demo=1');
   // the first build of the scene can take more than the default 5 s on a busy machine
