@@ -598,6 +598,8 @@ function init() {
 	  	}
 	  }
 
+	  if (copyPasteKey(e)) { return; }
+
 	  if (isDM && map.toggleMode == 'plane' && !isTyping(e) && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat && e.code === 'KeyR') {
 	  	turnActiveProps();
 	  }
@@ -1354,13 +1356,6 @@ function init() {
 	//shadows on the map for the High setting (shadows.js); nothing at all is added without them
 	map.shadows = createShadows(map.scene, map.renderer);
 	map.shadows.setEnabled(!!map.settings.shadows);
-
-	if (demo) {
-		var demoText = document.createElement('div');
-		demoText.id = 'demo-text';
-		demoText.textContent = 'DEMO';
-		root.appendChild(demoText);
-	}
 
 	if (map.settings.view2d) { setView2d(true); }
 }
@@ -3823,6 +3818,13 @@ function undo() {
 				removeDoor(entry.door.doorId);
 			}
 		}
+		else if (entry.kind == 'paste') {
+			for (const door of entry.doors) {
+				if (map.objects.doors[door.doorId] === door) {
+					removeDoor(door.doorId);
+				}
+			}
+		}
 		else if (entry.kind == 'removeDoor') {
 			addDoor(false, false, new THREE.Vector3(entry.x, 0, entry.z), entry.rotation);
 		}
@@ -3865,6 +3867,240 @@ function undo() {
 	}
 
 	scheduleGhosts();
+}
+
+// ---- copy and paste (Ctrl+C / Ctrl+V, Cmd on a Mac) ----
+// Only the DM can add objects, so only the DM copies. What is copied is plain data, not the
+// objects themselves, so a paste still works after the originals have moved or gone.
+
+var COPY_KINDS = { token: 'token', plane: 'image', door: 'door' };
+var copied = null;		// { items: [...] }
+var pasteOffsets = [];	// where pastes of this copy went, so a second paste never lands on the first
+
+// Handles the keys; true if it used them.
+function copyPasteKey(e) {
+	if (!isDM || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.repeat || isTyping(e)) { return false; }
+
+	var key = (e.key || '').toLowerCase();
+	if (key != 'c' && key != 'v') { key = e.code == 'KeyC' ? 'c' : (e.code == 'KeyV' ? 'v' : ''); }
+
+	// text picked out on the page (a pane, a stat block) copies as text, as usual
+	if (key == 'c' && !hasPageSelection() && copySelection()) {
+		e.preventDefault();
+		return true;
+	}
+
+	if (key == 'v' && pasteCopied()) {
+		e.preventDefault();
+		return true;
+	}
+
+	return false;
+}
+
+function hasPageSelection() {
+	var selection = window.getSelection ? window.getSelection() : null;
+	return !!selection && !selection.isCollapsed && String(selection).trim() !== '';
+}
+
+// The objects highlighted in the current mode: a box-selected group, or the one under the pointer.
+function selectedForCopy() {
+	var mode = map.toggleMode;
+	if (!(mode in COPY_KINDS) || !(mode in map.translateControls)) { return []; }
+
+	var candidates = map.translateControls[mode].translateGroupObjects.concat(map.outlinePass.selectedObjects);
+	var found = [];
+
+	for (var object of candidates) {
+		if (!object) { continue; }
+		if (mode == 'token' && object.name == 'base') { object = object.token; }
+		if (mode == 'door' && object.hoverTarget) { object = object.hoverTarget; }
+		if (!object || found.includes(object)) { continue; }
+
+		var live = (mode == 'token' && map.objects.tokens[object.tokenId] === object)
+			|| (mode == 'plane' && map.objects.planes[object.planeId] === object)
+			|| (mode == 'door' && map.objects.doors[object.doorId] === object);
+
+		if (live) { found.push(object); }
+	}
+
+	return found;
+}
+
+function copyData(object, mode) {
+	if (mode == 'token') {
+		return {
+			kind: 'token',
+			x: object.position.x, y: object.position.y, z: object.position.z,
+			modelId: object.modelId,
+			scale: { x: object.scale.x, y: object.scale.y, z: object.scale.z },
+			settings: Object.assign({}, object.settings),
+			overrides: object.overrides ? JSON.parse(JSON.stringify(object.overrides)) : null,
+			stats: object.stats ? Object.assign({}, object.stats) : null
+		};
+	}
+
+	// map images, and props, which are map images with a 3D model for a picture
+	if (mode == 'plane') {
+		return {
+			kind: 'plane',
+			x: object.position.x, z: object.position.z,
+			src: object.src,
+			planeUploadId: object.planeUploadId,
+			scaleX: object.scale.x, scaleY: object.scale.y,
+			rotation: object.rotation.z
+		};
+	}
+
+	return { kind: 'door', x: object.position.x, z: object.position.z, rotation: object.rotation.y, open: !!object.open };
+}
+
+function copySelection() {
+	var objects = selectedForCopy();
+	if (objects.length == 0) { return false; }
+
+	var mode = map.toggleMode;
+	copied = { mode: mode, items: objects.map(function(object) { return copyData(object, mode); }) };
+	pasteOffsets = [];
+
+	var noun = COPY_KINDS[mode];
+	notify('Copied ' + (objects.length == 1 ? (noun == 'image' ? 'an ' : 'a ') + noun : objects.length + ' ' + noun + 's') + '. Ctrl+V pastes at the pointer.');
+	return true;
+}
+
+// Whole squares from the copied objects to the pointer, so everything stays lined up on the grid.
+function pasteOffset(items) {
+	var centre = { x: 0, z: 0 };
+
+	for (const item of items) {
+		centre.x += item.x / items.length;
+		centre.z += item.z / items.length;
+	}
+
+	// Tokens on a hex grid move by pairs of hex rows (odd rows sit half a unit over), so every
+	// pasted token lands on a hex centre just as its original did. Doors and images line up
+	// with walls and squares, not hexes.
+	var stepZ = map.settings.gridShape == 'hex' && items[0].kind == 'token' ? 2 * grid.HEX_ROW : 1;
+	var offset = { x: 0, z: 0 };
+	var raycaster = new THREE.Raycaster();
+	raycaster.setFromCamera(map.pointer, map.objects.camera);
+	var hit = raycaster.intersectObject(map.objects.plane, false)[0];
+
+	if (hit) {
+		offset.x = Math.round(hit.point.x - centre.x);
+		offset.z = Math.round((hit.point.z - centre.z) / stepZ) * stepZ;
+	}
+
+	// pasted where the copy (or an earlier paste) already is: step aside so it shows
+	var used = function(o) {
+		return (o.x == 0 && o.z == 0) || pasteOffsets.some(function(p) { return p.x == o.x && p.z == o.z; });
+	};
+
+	while (used(offset)) {
+		offset.x += 1;
+		offset.z += stepZ;
+	}
+
+	pasteOffsets.push(offset);
+	return offset;
+}
+
+function pasteCopied() {
+	if (!copied || copied.items.length == 0) { return false; }
+
+	var offset = pasteOffset(copied.items);
+	var pasted = [];
+	var pastedDoors = [];
+
+	undoing = true;		//the doors below are one undo step, not one each
+
+	try {
+		for (const item of copied.items) {
+			var x = item.x + offset.x;
+			var z = item.z + offset.z;
+
+			if (item.kind == 'token') {
+				var token = pasteToken(item, x, z);
+				if (token) { pasted.push(token); }
+			}
+			else if (item.kind == 'plane') {
+				var planeId = newLocalId();
+				createPlaneImage(item.src, item.planeUploadId, new THREE.Vector2(x, z), true, new THREE.Vector2(item.scaleX, item.scaleY), item.rotation, planeId);
+
+				// the server adds images at size 1, unturned
+				if (item.scaleX != 1 || item.scaleY != 1 || item.rotation != 0) {
+					sendMessage('update', 'updatePlaneTransform', { planeId: planeId, posX: x, posZ: z, scaleX: item.scaleX, scaleY: item.scaleY, rotZ: item.rotation });
+				}
+
+				pasted.push(map.objects.planes[planeId]);
+			}
+			else {
+				var doorId = newLocalId();
+				addDoor(false, doorId, new THREE.Vector3(x, 0, z), item.rotation, item.open ? 1 : 0, true);
+
+				if (item.open) {
+					sendMessage('update', 'updateDoorState', { doorId: doorId, open: true });
+				}
+
+				pasted.push(map.objects.doors[doorId]);
+				pastedDoors.push(map.objects.doors[doorId]);
+			}
+		}
+	}
+	finally {
+		undoing = false;
+	}
+
+	if (pastedDoors.length > 0) { pushUndo({ kind: 'paste', doors: pastedDoors }); }
+
+	if (pasted.length == 0) {
+		notify('Those tokens can no longer be pasted.', 'error');
+		return true;
+	}
+
+	updateTokenVision();
+	selectPasted(pasted, copied.mode);
+	return true;
+}
+
+// A new token like the copied one. Owners are not copied: a copy is a new token for the DM to give out.
+function pasteToken(item, x, z) {
+	if (!(item.modelId in map.models)) { return null; }
+
+	var tokenId = newLocalId();
+	createToken({ x: x, y: item.y, z: z }, item.scale, item.modelId, true, [], tokenId, item.settings, item.overrides, item.stats);
+
+	var token = map.objects.tokens[tokenId];
+	if (!token) { return null; }
+
+	// the server adds tokens at size 1 with default settings; these follow once it has numbered it
+	if (item.scale.x != 1 || item.scale.y != 1 || item.scale.z != 1) {
+		sendMessage('update', 'updateTokenScale', { tokenId: tokenId, x: item.scale.x, y: item.scale.y, z: item.scale.z });
+	}
+
+	if (token.settings.hideAvatar || token.settings.disableCamLook || token.settings.iconColor !== null) {
+		updateTokenSettings(token);
+	}
+
+	if (item.overrides) {
+		sendMessage('update', 'updateTokenOverrides', { tokenId: tokenId, overrides: item.overrides });
+	}
+
+	if (item.stats) {
+		updateTokenBar(token);
+		sendMessage('update', 'updateTokenStats', Object.assign({ tokenId: tokenId }, item.stats));
+	}
+
+	return token;
+}
+
+// The pasted objects become the selection, ready to be dragged into place.
+function selectPasted(objects, mode) {
+	if (mode != map.toggleMode || !(mode in map.translateControls)) { return; }
+
+	clearGroupSelection();
+	map.translateControls[mode].translateGroupObjects = objects.slice();
+	map.outlinePass.selectedObjects = objects.map(function(object) { return mode == 'token' ? object.base : object; });
 }
 
 // Points of other walls sitting on the dragged point move with it, so joined walls stay joined.
@@ -6694,6 +6930,7 @@ function buildGui() {
 	buildPaneItem(helpPane, 'Right-click / Long Press', 'text', 'Menu: add tokens and images, resize, raise or lower a token');
 	buildPaneItem(helpPane, 'Shift Key', 'text', 'Hold and drag to select several tokens');
 	buildPaneItem(helpPane, 'Ctrl Key', 'text', 'Free scale/rotate images');
+	buildPaneItem(helpPane, 'Ctrl+C / Ctrl+V', 'text', 'DM: copy the highlighted tokens, images or doors, and paste them at the pointer');
 
 	//sidebar buttons help
 	buildPaneItem(helpPane, 'Buttons', 'header');
