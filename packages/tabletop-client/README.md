@@ -253,12 +253,16 @@ Chromium's bundled software WebGL.
 
 ## Fog of war
 
-What a token cannot see is hidden by soft, animated fog (`src/fog.js`), not by a flat black box. The vision code is
-unchanged: it works out the polygon a token sees; the fog draws that polygon (blurred) and the shader shows deep,
-drifting fog over what was never seen (fully opaque for players), a thin dim veil over what was seen earlier in this visit (only in the host's translucent view: players see nothing outside what their token sees now) (kept in the browser
-only: the server's fog data is not touched or extended), nothing over what is visible, wisps that curl into the edge,
-and a 0.4 s fade whenever the view changes. The strength is the fog mesh's `material.opacity` (1 for players, 0.6 for the
-host's translucent view, 0 for the clear view). One transparent plane and a three-octave noise: it runs on software WebGL.
+What a token cannot see is hidden by solid black fog with a soft edge (`src/fog.js`). The vision code is unchanged: it
+works out the polygon a token sees, and the fog draws that polygon (blurred) onto small canvases. The fog is a screen pass
+straight after the scene, not a set of planes: it reads the scene's depth and walks each view ray through a volume over
+the map, so unseen ground is covered from every angle (it cannot be seen under, and a close camera is covered too) and
+the floor fades out just inside the edge of what the token sees, so nothing past it shows (walls and tokens on the edge
+stay lit). Faint, slow swirls in two layers drift through the black. In the host's translucent view, what was seen
+earlier in this visit shows through a thinner veil (kept in the browser only: the server's fog data is not touched or
+extended). Players see nothing outside what their token sees now. Changes of view fade over 0.4 s. The strength is the
+fog's `material.opacity` (1 for players, 0.6 for the host's translucent view, 0 for the clear view). Pings are drawn
+after the fog. The Low graphics setting uses half-size layers, fewer steps per ray and plain black; it runs on software WebGL.
 
 ## Assets
 
