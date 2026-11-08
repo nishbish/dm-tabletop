@@ -28,6 +28,7 @@ import { DEFAULT_MODEL_PREFIX, builtInModelList, swatchUrl } from './models';
 import { createDemoRoom } from './demo';
 import { createSkyboxMaterials } from './skybox';
 import { createWeather } from './weather.js';
+import { createClouds } from './clouds.js';
 import * as timeWeather from './time-weather';
 import { createFog } from './fog';
 import { createPing } from './ping.js';
@@ -596,6 +597,7 @@ function init() {
     map.scene.add(map.skybox);
 
 	map.weather = createWeather(THREE, map.scene);
+	map.clouds = createClouds(THREE, map.skybox);
 
 	//plane
 	var material = new THREE.MeshStandardMaterial( { color: 0xcbcbcb, dithering: true } );
@@ -4993,6 +4995,7 @@ function applyTimeWeather() {
 			map.objects.light.color.setHex(map.local.moonlight ? 0x8cb9ff : 0xffffff);
 			map.skybox.material = map.local.moonlight ? map.skybox.nightMats : map.skybox.dayMats;
 			tintSky(0xffffff);
+			map.clouds.set(null);
 		}
 		return;
 	}
@@ -5003,6 +5006,7 @@ function applyTimeWeather() {
 	map.objects.light.color.setHex(look.lightColor);
 	map.skybox.material = look.night ? map.skybox.nightMats : map.skybox.dayMats;
 	tintSky(look.skyTint);
+	map.clouds.set(look);
 	map.weather.setFogColor(look.fogColor);
 }
 
@@ -5012,9 +5016,12 @@ function tintSky(hex) {
 	});
 }
 
-// Once a frame: moves the rain with the view and adds the storm's lightning to the light.
+// Once a frame: moves the rain with the view, drifts the clouds and adds the storm's lightning
+// to the light and the sky.
 function updateWeatherFrame() {
-	var flash = map.weather.update(performance.now(), map.objects.camera, map.orbitControls.target, viewHeight(), !!map.settings.view2d);
+	var now = performance.now();
+	var flash = map.weather.update(now, map.objects.camera, map.orbitControls.target, viewHeight(), !!map.settings.view2d);
+	map.clouds.update(now, flash);
 	if (flash === map.local.flash || map.local.lightBase === null) { return; }
 	map.local.flash = flash;
 	map.objects.light.intensity = map.local.lightBase * (1 + 1.5 * flash);
@@ -5100,7 +5107,7 @@ function buildTimeWeatherPanel() {
 				}).join('') +
 			'</div>' +
 		'</div>' +
-		'<div class="popover-sub"><span class="material-icons" aria-hidden="true">cloud</span><span class="popover-label"><b>Weather</b><small>Rain and snow fall for everyone, storms flash now and then.</small></span></div>' +
+		'<div class="popover-sub"><span class="material-icons" aria-hidden="true">cloud</span><span class="popover-label"><b>Weather</b><small>Changes the sky and light for everyone. Rain and snow fall, storms flash now and then.</small></span></div>' +
 		'<div class="popover-segment tw-weather" role="radiogroup" aria-label="Weather">' +
 			timeWeather.WEATHERS.map(function(w) {
 				return '<button type="button" role="radio" data-tw-weather="' + w.id + '"><span class="material-icons" aria-hidden="true">' + w.icon + '</span>' + w.label + '</button>';
@@ -8262,6 +8269,7 @@ return {
 		map.mask.fog.dispose();
 		map.ping.dispose();
 		map.weather.dispose();
+		map.clouds.dispose();
 		cancelAnimationFrame(wallModelFrame);
 		if (map.wallModel) { map.wallModel.dispose(); }
 		if (wallMaterial) {
@@ -8292,9 +8300,10 @@ return {
 			status: connection.status,
 			clock: map.local.clock,
 			weather: map.local.weather,
-			// rain or snow drawn, and fog on (the weather's own objects)
+			// rain or snow drawn, fog on and clouds in the sky (the weather's own objects)
 			falling: !!map.scene.getObjectByName('weather')?.visible,
-			fog: !!map.scene.fog
+			fog: !!map.scene.fog,
+			clouds: map.clouds.visible()
 		};
 	},
 	getTokenPosition: function(tokenId) {

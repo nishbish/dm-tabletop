@@ -255,6 +255,7 @@ test('time and weather: the host sets them, the player sees them, a rejoin keeps
       weather: 'storm',
       falling: true,
       fog: false,
+      clouds: true,
     });
 
     await panel.getByRole('radio', { name: 'Fog' }).click();
@@ -276,7 +277,12 @@ test('time and weather: the host sets them, the player sees them, a rejoin keeps
     await panel.locator('[data-button="clock"]').click();
     await panel.getByRole('radio', { name: 'Clear' }).click();
     await expect(guest.locator('#time-weather')).toBeHidden(slow);
-    expect(await stats(guest)).toMatchObject({ clock: null, weather: 'clear', fog: false });
+    expect(await stats(guest)).toMatchObject({
+      clock: null,
+      weather: 'clear',
+      fog: false,
+      clouds: false,
+    });
     expect(errors).toEqual([]);
   } finally {
     await server.stop();

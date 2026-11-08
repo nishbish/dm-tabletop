@@ -88,21 +88,109 @@ const KEYS: Key[] = [
 ];
 
 // How weather changes the light: strength, a colour the light and sky are mixed towards, and how
-// far. Kept gentle: the map must stay readable in every weather.
-const WEATHER_LOOK: { [id: string]: { light: number; tint: number; mix: number; sky: number } } = {
-  clear: { light: 1, tint: 0xffffff, mix: 0, sky: 0 },
-  cloudy: { light: 0.88, tint: 0xc8ccd4, mix: 0.3, sky: 0.5 },
-  rain: { light: 0.78, tint: 0xaab4c4, mix: 0.4, sky: 0.6 },
-  storm: { light: 0.66, tint: 0x8a94a8, mix: 0.5, sky: 0.7 },
-  snow: { light: 0.92, tint: 0xe8eef8, mix: 0.35, sky: 0.5 },
-  fog: { light: 0.88, tint: 0xd0d4d8, mix: 0.4, sky: 0.6 },
+// far. Kept gentle: the map must stay readable in every weather. The rest is the sky's clouds
+// (clouds.js): `cover` how much of the sky has clouds, `overcast` a sheet over all of it, `lit` and
+// `shade` their bright tops and grey undersides by day, and `wind` how fast they drift.
+interface WeatherLook {
+  light: number;
+  tint: number;
+  mix: number;
+  sky: number;
+  cover: number;
+  overcast: number;
+  lit: number;
+  shade: number;
+  wind: number;
+}
+
+const WEATHER_LOOK: { [id: string]: WeatherLook } = {
+  clear: {
+    light: 1,
+    tint: 0xffffff,
+    mix: 0,
+    sky: 0,
+    cover: 0,
+    overcast: 0,
+    lit: 0xffffff,
+    shade: 0xffffff,
+    wind: 0,
+  },
+  cloudy: {
+    light: 0.82,
+    tint: 0xb8bec8,
+    mix: 0.3,
+    sky: 0.75,
+    cover: 0.72,
+    overcast: 0.3,
+    lit: 0xeef0f4,
+    shade: 0x868e9a,
+    wind: 0.004,
+  },
+  rain: {
+    light: 0.76,
+    tint: 0xa6b0c0,
+    mix: 0.4,
+    sky: 0.8,
+    cover: 1,
+    overcast: 0.92,
+    lit: 0x9aa1ab,
+    shade: 0x5a616c,
+    wind: 0.006,
+  },
+  storm: {
+    light: 0.64,
+    tint: 0x8a94a8,
+    mix: 0.5,
+    sky: 0.9,
+    cover: 1,
+    overcast: 1,
+    lit: 0x5e6474,
+    shade: 0x262a34,
+    wind: 0.012,
+  },
+  snow: {
+    light: 0.92,
+    tint: 0xe8eef8,
+    mix: 0.35,
+    sky: 0.7,
+    cover: 1,
+    overcast: 0.9,
+    lit: 0xe8ebf0,
+    shade: 0xb2b8c2,
+    wind: 0.003,
+  },
+  // fog's sky is one even haze in the fog's own colour (set in look())
+  fog: {
+    light: 0.88,
+    tint: 0xd0d4d8,
+    mix: 0.4,
+    sky: 0.6,
+    cover: 1,
+    overcast: 1,
+    lit: 0,
+    shade: 0,
+    wind: 0.002,
+  },
 };
+
+// Clouds at night: dim and a little blue, whatever the weather.
+const NIGHT_CLOUD_LIT = 0x343a4a;
+const NIGHT_CLOUD_SHADE = 0x161a22;
 
 export function mixColor(a: number, b: number, t: number): number {
   const ch = (c: number, shift: number) => (c >> shift) & 255;
   let out = 0;
   for (const shift of [16, 8, 0]) {
     out |= Math.round(ch(a, shift) + (ch(b, shift) - ch(a, shift)) * t) << shift;
+  }
+  return out;
+}
+
+// Each channel of `a` times that of `b` (white leaves `a` as it is): clouds take the sun's colour.
+export function multiplyColor(a: number, b: number): number {
+  let out = 0;
+  for (const shift of [16, 8, 0]) {
+    out |= Math.round((((a >> shift) & 255) * ((b >> shift) & 255)) / 255) << shift;
   }
   return out;
 }
@@ -120,6 +208,12 @@ export interface Look {
   skyTint: number;
   // for weather 'fog': the colour the distance fades to
   fogColor: number;
+  // the clouds (clouds.js): both 0 = none drawn
+  cloudCover: number;
+  cloudOvercast: number;
+  cloudLit: number;
+  cloudShade: number;
+  wind: number;
 }
 
 // `clock` null = the room has no clock: day, or night when `moonlight` is on, as before.
@@ -145,11 +239,21 @@ export function look(clock: number | null, weather: string, moonlight: boolean):
   const w = WEATHER_LOOK[weather] || WEATHER_LOOK.clear;
   // between night (0) and full day (1): fog is dark at night, pale by day
   const dayness = Math.min(1, Math.max(0, (light - 0.8) / 0.25));
+  const fogColor = night ? 0x2a2f3a : mixColor(0x5a606a, 0xb8bec4, dayness);
+  // by day the clouds catch the sun's colour (warm at dawn and dusk); at night they go dim
+  const cloudDay = night ? 0 : Math.min(1, dayness * 2);
+  const cloud = (day: number, dark: number) =>
+    mixColor(dark, multiplyColor(day, lightColor), cloudDay);
   return {
     light: light * w.light,
     lightColor: mixColor(lightColor, w.tint, w.mix),
     night,
     skyTint: mixColor(skyTint, w.tint, w.sky),
-    fogColor: night ? 0x2a2f3a : mixColor(0x5a606a, 0xb8bec4, dayness),
+    fogColor,
+    cloudCover: w.cover,
+    cloudOvercast: w.overcast,
+    cloudLit: weather === 'fog' ? fogColor : cloud(w.lit, NIGHT_CLOUD_LIT),
+    cloudShade: weather === 'fog' ? fogColor : cloud(w.shade, NIGHT_CLOUD_SHADE),
+    wind: w.wind,
   };
 }

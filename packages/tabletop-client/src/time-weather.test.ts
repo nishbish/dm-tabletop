@@ -7,6 +7,7 @@ import {
   isNight,
   look,
   mixColor,
+  multiplyColor,
   periodName,
   timeText,
   weatherKind,
@@ -98,5 +99,37 @@ describe('the look', () => {
   it('mixes colours channel by channel', () => {
     expect(mixColor(0x000000, 0xffffff, 0.5)).toBe(0x808080);
     expect(mixColor(0xff0000, 0x0000ff, 1)).toBe(0x0000ff);
+    expect(multiplyColor(0x80ff40, 0xffffff)).toBe(0x80ff40);
+    expect(multiplyColor(0xffffff, 0x808080)).toBe(0x808080);
+  });
+
+  it('clear skies have no clouds; every other weather clouds the sky', () => {
+    const clear = look(at(1, 12), 'clear', false);
+    expect(clear.cloudCover).toBe(0);
+    expect(clear.cloudOvercast).toBe(0);
+    expect(look(null, 'clear', true).cloudCover).toBe(0);
+
+    // cloudy: broken clouds with blue between, clearly not clear
+    const cloudy = look(at(1, 12), 'cloudy', false);
+    expect(cloudy.cloudCover).toBeGreaterThan(0.4);
+    expect(cloudy.cloudOvercast).toBeLessThan(0.5);
+    for (const w of ['rain', 'storm', 'snow', 'fog']) {
+      expect(look(at(1, 12), w, false).cloudOvercast).toBeGreaterThan(0.8);
+    }
+  });
+
+  it('cloud colours: storm darkest, snow palest, fog the colour of the fog', () => {
+    const brightness = (c: number) => ((c >> 16) & 255) + ((c >> 8) & 255) + (c & 255);
+    const lit = (w: string) => brightness(look(at(1, 12), w, false).cloudLit);
+    expect(lit('storm')).toBeLessThan(lit('rain'));
+    expect(lit('rain')).toBeLessThan(lit('snow'));
+    expect(lit('snow')).toBeLessThan(lit('cloudy') + 1);
+    const fog = look(at(1, 12), 'fog', false);
+    expect(fog.cloudLit).toBe(fog.fogColor);
+    expect(fog.cloudShade).toBe(fog.fogColor);
+    // at night the clouds go dim, at dusk they take the sun's warmth
+    expect(brightness(look(at(1, 2), 'cloudy', false).cloudLit)).toBeLessThan(lit('cloudy') / 3);
+    const dusk = look(at(1, 18, 30), 'cloudy', false).cloudLit;
+    expect((dusk >> 16) & 255).toBeGreaterThan(dusk & 255);
   });
 });

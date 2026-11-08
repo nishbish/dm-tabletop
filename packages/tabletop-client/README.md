@@ -176,18 +176,18 @@ Any folder, model or plane may also carry `badge`, a short word shown as a small
 
 ## How the code is organised
 
-| File                                                           | What                                                                                                                                       |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/index.js`                                                 | Public entry: `createTabletop`                                                                                                             |
-| `src/tabletop.js`                                              | The ported viewer (scene, controls, panes, menus). One big function, as in the original                                                    |
-| `src/connection.ts`, `src/protocol.ts`                         | The transport adapter: v2 wire messages to and from the viewer's vocabulary; reconnect, throttle, ordering                                 |
-| `src/config.ts`, `src/models.ts`, `src/demo.ts`                | Options and URL builders, token models and fallbacks, the offline demo room                                                                |
-| `src/ui.js`, `src/skybox.js`                                   | Toasts and banner, the sky                                                                                                                 |
-| `src/ping.js`                                                  | The ping: two small shaders on pooled quads                                                                                                |
-| `src/time-weather.ts`, `src/weather.js`                        | Time of day and weather: the clock in words and the light and sky for each hour (tested on its own), and the rain, snow, lightning and fog |
-| `src/walls.ts`, `src/doors.js`                                 | Wall geometry, door openings and snapping, room/corridor outlines; the shared door and wall look                                           |
-| `src/TranslateControls.js` and the other controls              | The original drag, rotate, scale and hover helpers                                                                                         |
-| `src/context-menu.js`, `src/style.css`, `src/context-menu.css` | The original menu and styles                                                                                                               |
+| File                                                           | What                                                                                                                                                                  |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/index.js`                                                 | Public entry: `createTabletop`                                                                                                                                        |
+| `src/tabletop.js`                                              | The ported viewer (scene, controls, panes, menus). One big function, as in the original                                                                               |
+| `src/connection.ts`, `src/protocol.ts`                         | The transport adapter: v2 wire messages to and from the viewer's vocabulary; reconnect, throttle, ordering                                                            |
+| `src/config.ts`, `src/models.ts`, `src/demo.ts`                | Options and URL builders, token models and fallbacks, the offline demo room                                                                                           |
+| `src/ui.js`, `src/skybox.js`                                   | Toasts and banner, the sky                                                                                                                                            |
+| `src/ping.js`                                                  | The ping: two small shaders on pooled quads                                                                                                                           |
+| `src/time-weather.ts`, `src/weather.js`, `src/clouds.js`       | Time of day and weather: the clock in words and the light, sky and cloud colours for each hour (tested on its own), the rain, snow, lightning and fog, and the clouds |
+| `src/walls.ts`, `src/doors.js`                                 | Wall geometry, door openings and snapping, room/corridor outlines; the shared door and wall look                                                                      |
+| `src/TranslateControls.js` and the other controls              | The original drag, rotate, scale and hover helpers                                                                                                                    |
+| `src/context-menu.js`, `src/style.css`, `src/context-menu.css` | The original menu and styles                                                                                                                                          |
 
 ### Legacy code
 
@@ -271,8 +271,12 @@ Everyone sees a small card beside the compass, and the light and sky follow the 
 warm dawn and dusk, white daylight, dimmer and greyer in bad weather. While a clock runs the Moonlight switch is hidden,
 because the night comes by itself; the Daylight switch (how far tokens see) stays the host's choice. Rain and snow are
 one set of points moved on the graphics card (about the cost of a still frame), storms flicker now and then (well under
-three flashes a second), and fog fades the distance. Visitors whose system asks for less motion get the light, sky and
-fog but no falling points or lightning. A room without a clock or weather looks exactly as before.
+three flashes a second), and fog fades the distance. Every weather but clear also clouds the sky (`src/clouds.js`): broken
+white clouds when cloudy, a grey sheet for rain, dark storm clouds that the lightning lights up, a pale sky for snow and
+an even haze for fog. They are one low dome inside the sky box reading one small noise picture, so they cost next to
+nothing, and they work over the plain sky and over a host app's own skybox images alike. Visitors whose system asks for
+less motion get the light, sky, clouds and fog but no falling points, drifting clouds or lightning. A room without a
+clock or weather looks exactly as before.
 
 ## Assets
 
