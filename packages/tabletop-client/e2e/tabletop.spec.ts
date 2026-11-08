@@ -409,7 +409,8 @@ test('offline demo works with no server', async ({ page }) => {
   const s = await stats(page);
   expect(s.isHost).toBe(true);
   expect(s.doors).toBe(2);
-  await expect(page.locator('#demo-text')).toHaveText('DEMO');
+  // no DEMO watermark over the table
+  await expect(page.locator('#demo-text')).toHaveCount(0);
 });
 
 test('badges on chooser tiles and on the upload button', async ({ page }) => {

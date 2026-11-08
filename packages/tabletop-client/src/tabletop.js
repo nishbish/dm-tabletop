@@ -1348,13 +1348,6 @@ function init() {
 	map.mask.fog.setOverlay(map.scene, map.ping.showing);
 	map.composer.insertPass(map.mask.fog.pass, map.composer.passes.indexOf(map.renderPass) + 1);
 
-	if (demo) {
-		var demoText = document.createElement('div');
-		demoText.id = 'demo-text';
-		demoText.textContent = 'DEMO';
-		root.appendChild(demoText);
-	}
-
 	if (map.settings.view2d) { setView2d(true); }
 }
 
