@@ -5025,11 +5025,11 @@ function presetButtons(kind, presets) {
 function buildAmbiencePanel() {
 	var panel = buildPopover('ambience-panel', 'ambience', AMBIENCE_TITLE);
 	panel.innerHTML +=
-		'<div class="popover-sub"><span class="material-icons" aria-hidden="true">schedule</span><span class="popover-label"><b>Time of day</b><small>Sets the sky and light for everyone. At night tokens see only as far as their view distance.</small></span></div>' +
+		'<div class="popover-sub"><span class="material-icons" aria-hidden="true">schedule</span><span class="popover-label"><b>Time of day</b><small>Night limits how far tokens can see.</small></span></div>' +
 		'<div class="popover-segment tw-presets tw-time" role="radiogroup" aria-label="Time of day">' + presetButtons('time', timeWeather.TIMES) + '</div>' +
-		'<div class="popover-sub"><span class="material-icons" aria-hidden="true">cloud</span><span class="popover-label"><b>Weather</b><small>Clouds the sky and dims the light. Rain and snow fall, storms flash now and then.</small></span></div>' +
+		'<div class="popover-sub"><span class="material-icons" aria-hidden="true">cloud</span><span class="popover-label"><b>Weather</b></span></div>' +
 		'<div class="popover-segment tw-presets tw-weather" role="radiogroup" aria-label="Weather">' + presetButtons('weather', timeWeather.WEATHERS) + '</div>' +
-		'<div class="popover-sub"><span class="material-icons" aria-hidden="true">highlight</span><span class="popover-label"><b>Fog of war for you</b><small>Players always see it solid. Tokens bump into walls while it is solid.</small></span></div>' +
+		'<div class="popover-sub" title="Only you see this. Players always see solid fog."><span class="material-icons" aria-hidden="true">highlight</span><span class="popover-label"><b>Fog of war for you</b></span></div>' +
 		'<div class="popover-segment" role="radiogroup" aria-label="Fog of war for you">' +
 			DM_LIGHT_NAMES.map(function(label, i) {
 				return '<button type="button" role="radio" data-button="dmView" data-dm-light="' + i + '">' + label + '</button>';
@@ -5063,6 +5063,7 @@ function buildAmbiencePanel() {
 
 	for (const button of panel.querySelectorAll('[data-dm-light]')) {
 		button.addEventListener('click', function() {
+			if (!isDM) { return; }
 			setDmLight(Number(button.dataset.dmLight));
 			syncAmbiencePanel();
 		}, false);
@@ -5174,7 +5175,8 @@ DM Light (what the fog looks like to the host)
 2: transparent
 */
 function setDmLight(level) {
-	map.local.dmLight = level;
+	// only a host ever sees through the fog; a player's is always solid
+	map.local.dmLight = isDM ? level : 0;
 
 	switch (map.local.dmLight) {
 		case 0:
