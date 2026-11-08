@@ -57,6 +57,7 @@ var RotationControls = function (camera, domElement, scene, renderer, settings =
   var geometry = new ShapeGeometry( circleShape );
 
   this.circle = new Mesh( geometry, new MeshBasicMaterial({ color: 0x0871FF }));
+  var ringGeometry = geometry;
   this.circle.name = 'circle';
   this.circle.visible = false;
   scene.add(this.circle);
@@ -73,6 +74,72 @@ var RotationControls = function (camera, domElement, scene, renderer, settings =
   this.circle.add( dotMesh );
   dotMesh.position.z = dotMesh.position.z + 0.01;
   dotMesh.position.y = dotMesh.position.y + settings.radius - dotRadius;
+  var dotGeometry = geometry;
+  var dotY = dotMesh.position.y;
+
+  // A 3D prop stands up off the floor and would hide a ring drawn under it. Its ring goes round it
+  // instead, on top of the model and drawn over everything, thin, and grabbed anywhere along it.
+  function propFrame(object) {
+    if (!object.isProp) { return null; }
+    var geometry = object.geometry;
+    if (!geometry.boundingBox) { geometry.computeBoundingBox(); }
+    var box = geometry.boundingBox;
+    // outside the resize handles too, which stand about 0.8 out from its edges (ScaleControls)
+    var halfWidth = (box.max.x - box.min.x) * Math.abs(object.scale.x) / 2;
+    var halfDepth = (box.max.y - box.min.y) * Math.abs(object.scale.y) / 2;
+    return { lift: box.max.z * Math.abs(object.scale.z) + 0.05, radius: Math.hypot(halfWidth + 0.81, halfDepth + 0.81) + 0.4 };
+  }
+
+  function ringShape(radius, thickness) {
+    var shape = new Shape().moveTo(radius, 0).absarc(0, 0, radius, 0, Math.PI * 2, false);
+    shape.holes.push(new Path().moveTo(radius - thickness, 0).absarc(0, 0, radius - thickness, 0, Math.PI * 2, true));
+    return new ShapeGeometry(shape, 48);
+  }
+
+  function dotGeometryOf(radius) {
+    return new ShapeGeometry(new Shape().moveTo(radius, 0).absarc(0, 0, radius, 0, Math.PI * 2, false));
+  }
+
+  var propRing = null; // the ring radius its geometry was last built for
+
+  function fitRing(frame) {
+    var onTop = frame !== null;
+    scope.circle.material.depthTest = !onTop;
+    dotMesh.material.depthTest = !onTop;
+    // drawn with the see-through things, last, so the shade over unlit parts of the map does not
+    // dim it either
+    [scope.circle.material, dotMesh.material].forEach(function (material) {
+      if (material.transparent !== onTop) {
+        material.transparent = onTop;
+        material.needsUpdate = true;
+      }
+    });
+    scope.circle.renderOrder = onTop ? 1000 : 0;
+    dotMesh.renderOrder = onTop ? 1001 : 0;
+
+    if (!onTop) {
+      if (propRing !== null) {
+        scope.circle.geometry.dispose();
+        dotMesh.geometry.dispose();
+        scope.circle.geometry = ringGeometry;
+        dotMesh.geometry = dotGeometry;
+        dotMesh.position.y = dotY;
+        propRing = null;
+      }
+      return;
+    }
+
+    if (propRing === null || Math.abs(propRing - frame.radius) > 0.01) {
+      if (propRing !== null) {
+        scope.circle.geometry.dispose();
+        dotMesh.geometry.dispose();
+      }
+      scope.circle.geometry = ringShape(frame.radius, 0.3);
+      dotMesh.geometry = dotGeometryOf(0.3);
+      dotMesh.position.y = frame.radius - 0.15;
+      propRing = frame.radius;
+    }
+  }
 
   //virtual plane
   var planeGeometry = new PlaneGeometry(10000, 10000);
@@ -116,7 +183,8 @@ var RotationControls = function (camera, domElement, scene, renderer, settings =
 
       //raycaster
       raycast.setFromCamera(pointerPos, scope.camera);
-      var intersects = raycast.intersectObjects([dotMesh], false);      
+      var grips = propRing !== null ? [dotMesh, scope.circle] : [dotMesh];
+      var intersects = raycast.intersectObjects(grips, false);      
 
       if (intersects.length > 0)
       {
@@ -215,6 +283,11 @@ var RotationControls = function (camera, domElement, scene, renderer, settings =
       if (scope.object != null)
       {
         var position = scope.object.position.clone();
+        var frame = propFrame(scope.object);
+        fitRing(frame);
+        if (frame) {
+          position.y += frame.lift;
+        }
         plane.position.copy(position);
         scope.circle.position.copy(position);
         scope.circle.position.y = position.y + 0.1;

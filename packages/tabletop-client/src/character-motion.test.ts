@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { newCharacterMotion, stepCharacterMotion, turnTowards } from './character-motion.js';
+import {
+  newCharacterMotion,
+  stepCharacterMotion,
+  stepRest,
+  turnTowards,
+  updateCharacters,
+} from './character-motion.js';
 
 const FRAME = 1 / 60;
 
@@ -77,5 +83,56 @@ describe('character motion', () => {
     stepCharacterMotion(motion, 1, 0, 30);
     expect(Number.isFinite(motion.facing)).toBe(true);
     expect(Number.isFinite(motion.travel)).toBe(true);
+  });
+
+  it('rests and idles in turns while standing, each spell a few seconds', () => {
+    const motion = newCharacterMotion(() => 0.5);
+    const spells: boolean[] = [motion.resting];
+    for (let i = 0; i < 60 * 60; i++) {
+      stepRest(motion, FRAME, () => 0.5);
+      if (motion.resting !== spells[spells.length - 1]) spells.push(motion.resting);
+    }
+    // a minute: rests of 8 s and idles of 4.5 s take turns
+    expect(spells.length).toBeGreaterThan(6);
+    expect(spells.length).toBeLessThan(12);
+    for (let i = 1; i < spells.length; i++) expect(spells[i]).toBe(!spells[i - 1]);
+  });
+
+  it('never rests while walking, and idles for a while after', () => {
+    const motion = newCharacterMotion(() => 0);
+    motion.resting = true;
+    motion.walking = true;
+    stepRest(motion, FRAME, () => 0);
+    expect(motion.resting).toBe(false);
+    motion.walking = false;
+    stepRest(motion, 1, () => 0);
+    expect(motion.resting).toBe(false);
+  });
+
+  it('does not animate a character that is resting or off screen', () => {
+    const updates: string[] = [];
+    const token = (id: string, resting: boolean) => ({
+      position: { x: 0, z: 0 },
+      visible: true,
+      meshes: {
+        character: {
+          body: { rotation: { y: 0 } },
+          mixer: { update: () => updates.push(id) },
+          motion: { ...newCharacterMotion(() => 0), resting, phase: 100 },
+        },
+      },
+    });
+    const tokens = {
+      a: token('idling', false),
+      b: token('resting', true),
+      c: token('off screen', false),
+    };
+    updateCharacters(
+      tokens,
+      FRAME,
+      () => {},
+      (t: unknown) => t !== tokens.c,
+    );
+    expect(updates).toEqual(['idling']);
   });
 });

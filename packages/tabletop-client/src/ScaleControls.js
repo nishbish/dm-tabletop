@@ -65,13 +65,40 @@ var ScaleControls = function (camera, domElement, scene, renderer) {
   var prevPos = new Vector3();
   var raycast = new Raycaster();
 
+  // A 3D prop stands up off the floor and would hide handles drawn under it: its handles go on top
+  // of the model, larger, and are drawn over everything.
+  function propLift(object) {
+    if (!object.isProp) { return 0; }
+    if (!object.geometry.boundingBox) { object.geometry.computeBoundingBox(); }
+    return object.geometry.boundingBox.max.z * Math.abs(object.scale.z) + 0.05;
+  }
+
+  var PROP_HANDLE_SCALE = 1.4;
+  var PROP_HANDLE_GAP = 0.25; // a prop's handles sit just outside its edges, not on top of it
+  var PROP_HANDLE_COLOR = 0xffc83d;
+
   //attach event
   this.attach = function ( object ) {      
     scope.visible = true;
     scope.object = object;
 
+    var onTop = !!object.isProp;
+    material.depthTest = !onTop;
+    // drawn with the see-through things, last, so the shade over unlit parts of the map does not
+    // dim them either
+    if (material.transparent !== onTop) {
+      material.transparent = onTop;
+      material.needsUpdate = true;
+    }
+    material.color.set(onTop ? PROP_HANDLE_COLOR : scope.color);
+    for (var i=0;i<scalePoints.length;i++) {
+      scalePoints[i].renderOrder = onTop ? 1000 : 0;
+      scalePoints[i].scale.setScalar(onTop ? PROP_HANDLE_SCALE : 1);
+    }
+
     //3d
     plane.position.copy(object.position);
+    plane.position.y += propLift(object);
     plane.rotation.z = object.rotation.z;
 
     scope.container.visible = true;
@@ -251,7 +278,9 @@ var ScaleControls = function (camera, domElement, scene, renderer) {
     setTimeout(function() {
       if (scope.object != null) {
         scope.container.position.copy(scope.object.position);
+        scope.container.position.y += propLift(scope.object);
         scope.container.rotation.y = scope.object.rotation.z;
+        var size = scope.size * (scope.object.isProp ? PROP_HANDLE_SCALE : 1);
 
         var planeSize = new Vector3(scope.object.geometry.parameters.width * scope.object.scale.x, 0, scope.object.geometry.parameters.height * scope.object.scale.y);
 
@@ -264,8 +293,10 @@ var ScaleControls = function (camera, domElement, scene, renderer) {
             cubePos.sub(planeSize);
             cube.position.addScaledVector(cubePos, 0.5);
 
-            cube.translateX((1 - i%3) * (scope.size / 2));
-            cube.translateZ((1 - parseInt(i/3)) * (scope.size / 2));
+            // a map image's handles sit just inside its corners; a prop's just outside its edges
+            var inset = scope.object.isProp ? -(size / 2 + PROP_HANDLE_GAP) : size / 2;
+            cube.translateX((1 - i%3) * inset);
+            cube.translateZ((1 - parseInt(i/3)) * inset);
           }
         }
       }

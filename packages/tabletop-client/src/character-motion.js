@@ -1,5 +1,9 @@
 // How a 3D character follows its token: it turns to face the way it goes and plays its walk while it
 // travels. It always stands on its base: trailing behind it looked like the two had come apart.
+//
+// Standing about, it does not idle all the time: it rests (holds still) for a while, then idles for
+// a while, each on its own clock so a crowd does not sway in step. Resting and off-screen characters
+// are not animated at all, which is most of their cost.
 
 const FORGET_TRAVEL = 6; // how fast recent travel is forgotten, per second
 const STOPPED = 0.06; // recent travel below this counts as standing still
@@ -7,8 +11,15 @@ const MOVING = 0.15; // recent travel above this counts as moving
 const JUMP = 6; // a move this long in one frame is a teleport, not a walk
 const TURN_SPEED = 10; // how fast it turns, per second
 const MAX_STEP = 0.1; // seconds, so a stalled frame does not fling anything
+const REST_SECONDS = [4, 12]; // how long it holds still, at least and at most
+const IDLE_SECONDS = [3, 6]; // how long it idles before resting again
 
-export function newCharacterMotion() {
+function between(range, random) {
+  return range[0] + (range[1] - range[0]) * random();
+}
+
+export function newCharacterMotion(random = Math.random) {
+  var resting = random() < 0.5;
   return {
     facing: 0,
     target: 0,
@@ -16,7 +27,26 @@ export function newCharacterMotion() {
     walking: false,
     lastX: null,
     lastZ: null,
+    resting: resting,
+    // a part of the first spell only, so characters placed together soon fall out of step
+    phase: between(resting ? REST_SECONDS : IDLE_SECONDS, random) * random(),
   };
+}
+
+// Counts down the current rest or idle spell and starts the next. Walking always counts as idling:
+// it ends a rest at once, and it is followed by a full idle spell.
+export function stepRest(motion, seconds, random = Math.random) {
+  if (motion.walking) {
+    motion.resting = false;
+    motion.phase = between(IDLE_SECONDS, random);
+    return;
+  }
+
+  motion.phase -= seconds;
+  if (motion.phase <= 0) {
+    motion.resting = !motion.resting;
+    motion.phase = between(motion.resting ? REST_SECONDS : IDLE_SECONDS, random);
+  }
 }
 
 // Turning the short way round, from any angle to any other.
@@ -51,7 +81,9 @@ export function stepCharacterMotion(motion, x, z, seconds) {
   return changed;
 }
 
-export function updateCharacters(tokens, seconds, setWalking) {
+// `onScreen(token)` says whether a token can be seen from the camera; one that cannot is not
+// animated (it still turns and starts or stops walking, so it looks right when it comes into view).
+export function updateCharacters(tokens, seconds, setWalking, onScreen) {
   for (const token of Object.values(tokens)) {
     var character = token.meshes && token.meshes.character;
     if (!character) {
@@ -63,8 +95,10 @@ export function updateCharacters(tokens, seconds, setWalking) {
       setWalking(character, motion.walking);
     }
 
+    stepRest(motion, Math.min(seconds, MAX_STEP));
+
     character.body.rotation.y = motion.facing;
-    if (token.visible) {
+    if (token.visible && !motion.resting && (!onScreen || onScreen(token))) {
       character.mixer.update(Math.min(seconds, MAX_STEP));
     }
   }

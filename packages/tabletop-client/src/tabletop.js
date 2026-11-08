@@ -353,6 +353,7 @@ map.menus.prop = new ContextMenu( {
     'parent': root,
     'theme': 'default',
       'items': [
+        {'icon': 'open_with', 'name': 'Turn and Resize',  action: (e) => showPropHandles()  },
         {'icon': 'delete', 'name': 'Remove Prop',  action: (e) => removePlaneImage(e)  },
       ]
   }
@@ -1086,7 +1087,7 @@ function init() {
 				}
 				else {
 					map.rotationControls.plane.snap = Math.PI / 8;
-					plane.scale.x = plane.scale.y;
+					if (!plane.isProp) { plane.scale.x = plane.scale.y; }
 				}
 			}
 		}
@@ -2794,8 +2795,11 @@ function checkSceneClick(e, clickType) {
 					}
 				}
 			}
-			else if (clickType == 'left' && map.local.activeProp) {
-				// a click on bare floor puts the prop down: R no longer turns it
+			else if (clickType == 'left' && map.local.activeProp && !clickedPlaneHandle(e)) {
+				// a click on bare floor puts the prop down: R no longer turns it, its handles go
+				if (map.scaleControls.plane.object === map.local.activeProp) {
+					hidePlaneHandles();
+				}
 				map.local.activeProp = null;
 				map.outlinePass.selectedObjects = [];
 			}
@@ -3125,15 +3129,44 @@ function planeClick(plane) {
 	if (!isDM) { return false; }
 	
 	if (plane != null && plane.isProp) {
-		// A prop comes at its proper size and turns in 45 degree steps with R, so it has no
-		// handles: they got in the way of dragging it. It is outlined to show which one R turns.
-		map.rotationControls.plane.detach();
-		map.scaleControls.plane.detach();
+		// A prop comes at its proper size and turns in 45 degree steps with R, so it has no handles
+		// unless its menu's Turn and Resize asks for them: always there, they got in the way of
+		// dragging it. It is outlined to show which one R turns.
+		if (map.scaleControls.plane.object !== plane) {
+			hidePlaneHandles();
+		}
 		map.local.activeProp = plane;
 		map.outlinePass.selectedObjects = [plane];
 	}
 	else if (plane != null) {
 		map.local.activeProp = null;
+		map.rotationControls.plane.attach(plane);
+		map.scaleControls.plane.attach(plane);
+	}
+}
+
+// A quick click on a turn or resize handle is not a click on the floor. Hidden handles stay in
+// the scene, so only shown ones count.
+function clickedPlaneHandle(e) {
+	if (!map.scaleControls.plane.object) { return false; }
+	var handles = [map.rotationControls.plane.circle, map.scaleControls.plane.container];
+	return typeof(getClicked3DPoint(e, handles, true)) != 'undefined';
+}
+
+function hidePlaneHandles() {
+	map.rotationControls.plane.detach();
+	map.scaleControls.plane.detach();
+}
+
+// From a prop's menu: the full move, turn and resize handles of a map image, until another prop
+// is picked or the floor is clicked.
+function showPropHandles() {
+	hideContextMenu();
+	var plane = map.menuTarget;
+
+	if (plane && map.objects.planes[plane.planeId] === plane) {
+		map.local.activeProp = plane;
+		map.outlinePass.selectedObjects = [plane];
 		map.rotationControls.plane.attach(plane);
 		map.scaleControls.plane.attach(plane);
 	}
@@ -4003,7 +4036,7 @@ var BUILD_HINTS = {
 	room: 'Drag on the floor to draw a room. Right-drag turns the camera, arrow keys move it.',
 	corridor: 'Drag on the floor to draw a corridor ' + CORRIDOR_WIDTH + ' squares wide. Right-drag turns the camera.',
 	door: 'Click a wall to put a door in it, or drag a door along a wall. Click a door to turn it.',
-	plane: 'Click a map image to move, turn or resize it (hold Ctrl to do it freely). Drag a prop to move it and press R to turn it. Right-click the floor to add either, or an image to change or remove it.',
+	plane: 'Click a map image to move, turn or resize it (hold Ctrl to do it freely). Drag a prop to move it and press R to turn it; its right-click menu has the turn and resize handles. Right-click the floor to add either, or an image to change or remove it.',
 	wallPoint: 'Draw walls point by point, or drag out whole rooms and corridors.'
 };
 
@@ -8074,6 +8107,24 @@ var tokenMotionRunning = false;
 var tokenMotionTime = performance.now();
 
 // Token pictures that move, and GIFs that play, are for the Medium and High presets only.
+// What the camera can see this frame, for leaving the characters outside it unanimated.
+const characterView = new THREE.Frustum();
+const characterViewMatrix = new THREE.Matrix4();
+const characterBounds = new THREE.Sphere();
+
+function characterOnScreen() {
+	var camera = map.objects.camera;
+	camera.updateMatrixWorld();
+	characterViewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+	characterView.setFromProjectionMatrix(characterViewMatrix);
+
+	return function(token) {
+		characterBounds.center.copy(token.position);
+		characterBounds.radius = 2 * Math.max(1, token.scale.y || 1);
+		return characterView.intersectsSphere(characterBounds);
+	};
+}
+
 function updateTokenPictures() {
 	var now = performance.now();
 	var seconds = (now - tokenMotionTime) / 1000;
@@ -8082,7 +8133,7 @@ function updateTokenPictures() {
 
 	if (on) {
 		updateTokenMotion(map.objects.tokens, seconds, now / 1000);
-		updateCharacters(map.objects.tokens, seconds, modelLibrary.setWalking);
+		updateCharacters(map.objects.tokens, seconds, modelLibrary.setWalking, characterOnScreen());
 		animatedPictures.update(now, map.scene);
 	}
 	else if (tokenMotionRunning) {
