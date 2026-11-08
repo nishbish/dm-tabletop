@@ -450,7 +450,8 @@ test('ping, and a pane opened from the token menu closes the menu', async ({ pag
     map.ping(null, 0x3232a8, { x: 6, z: 3 }, false);
   });
   expect(await pings()).toBe(4); // ripple and beam each
-  await expect.poll(pings).toBe(0);
+  // a ping lasts 1.5 s, but software WebGL on a slow runner can take a while to draw the frames
+  await expect.poll(pings, { timeout: 15_000 }).toBe(0);
 
   await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
   const tokenId = (await stats(page)).tokenIds[0];
