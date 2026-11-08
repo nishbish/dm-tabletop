@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- a recording stand-in for a canvas */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
-import { createFog } from './fog.js';
+import { attachDepth, createFog, OVERLAY_LAYER } from './fog.js';
 
 interface Call {
   name: string;
@@ -52,31 +52,6 @@ beforeEach(() => {
   });
 });
 
-function triangles(fog: any): number {
-  return fog.mesh.geometry.getAttribute('position').count / 3;
-}
-
-function bounds(fog: any) {
-  const p = fog.mesh.geometry.getAttribute('position');
-  const box = {
-    minX: Infinity,
-    maxX: -Infinity,
-    minY: Infinity,
-    maxY: -Infinity,
-    minZ: Infinity,
-    maxZ: -Infinity,
-  };
-  for (let i = 0; i < p.count; i++) {
-    box.minX = Math.min(box.minX, p.getX(i));
-    box.maxX = Math.max(box.maxX, p.getX(i));
-    box.minY = Math.min(box.minY, p.getY(i));
-    box.maxY = Math.max(box.maxY, p.getY(i));
-    box.minZ = Math.min(box.minZ, p.getZ(i));
-    box.maxZ = Math.max(box.maxZ, p.getZ(i));
-  }
-  return box;
-}
-
 describe('fog of war', () => {
   it('keeps three small layers for the grid, never more than 2048 pixels a side', () => {
     createFog(30, 20);
@@ -88,24 +63,61 @@ describe('fog of war', () => {
     expect(canvases[0].width).toBeLessThanOrEqual(2048);
   });
 
-  it('is a slab over the grid, as strong as material.opacity says', () => {
+  it('is a screen pass after the scene, as strong as material.opacity says', () => {
     const fog = createFog(10, 8);
-    const box = bounds(fog);
-    expect(box.minX).toBeCloseTo(-0.5);
-    expect(box.maxX).toBeCloseTo(9.5);
-    expect(box.minZ).toBeCloseTo(-0.5);
-    expect(box.maxZ).toBeCloseTo(7.5);
-    // sides from below the floor (walls stand on -0.5) up to the top, so it cannot be seen under
-    expect(box.minY).toBeLessThan(-0.5);
-    expect(box.maxY).toBeGreaterThan(1.5);
-    // top (2 triangles) and the skirt round the map (4 sides x 2 triangles), no curtains yet
-    expect(triangles(fog)).toBe(2 + 8);
-    fog.material.opacity = 0.6;
+    expect(fog.pass.material).toBe(fog.material);
+    expect(fog.material.uniforms.uGrid.value.toArray()).toEqual([10, 8]);
+    // no planes in the scene: the shader walks each view ray through the volume
+    expect(fog.material.fragmentShader).toContain('tDepth');
     fog.update(1000);
+    expect(fog.material.uniforms.uStrength.value).toBe(1);
+    // a player sees nothing of what was explored before
+    expect(fog.material.uniforms.uVeil.value).toBe(0);
+    fog.material.opacity = 0.6;
+    fog.update(1050);
     expect(fog.material.uniforms.uStrength.value).toBe(0.6);
-    fog.material.opacity = 0;
-    fog.update(1100);
-    expect(fog.mesh.visible).toBe(false);
+    // the host's translucent view shows explored ground through a thinner veil
+    expect(fog.material.uniforms.uVeil.value).toBe(1);
+  });
+
+  it('gives the composer a depth texture to read on both of its targets', () => {
+    const composer: any = {
+      renderTarget1: new THREE.WebGLRenderTarget(64, 32),
+      renderTarget2: new THREE.WebGLRenderTarget(64, 32),
+    };
+    attachDepth(composer);
+    expect(composer.renderTarget1.depthTexture).toBeInstanceOf(THREE.DepthTexture);
+    expect(composer.renderTarget2.depthTexture).toBeInstanceOf(THREE.DepthTexture);
+    expect(composer.renderTarget1.depthTexture).not.toBe(composer.renderTarget2.depthTexture);
+    const first = composer.renderTarget1.depthTexture;
+    attachDepth(composer);
+    expect(composer.renderTarget1.depthTexture).toBe(first);
+  });
+
+  it('draws the overlay layer after the fog only while something on it is showing', () => {
+    const fog = createFog(4, 4);
+    const camera = new THREE.PerspectiveCamera(36, 1.5, 1, 1000);
+    const scene = new THREE.Scene();
+    let showing = false;
+    fog.setOverlay(scene, () => showing);
+    fog.update(performance.now() + 1, camera);
+    const renders: number[] = [];
+    const renderer: any = {
+      autoClear: true,
+      setRenderTarget: () => {},
+      render: () => renders.push(camera.layers.mask),
+    };
+    const target: any = { texture: {}, depthTexture: {} };
+    fog.pass.render(renderer, target, target);
+    // just the fog itself (drawn with its own camera)
+    expect(renders).toHaveLength(1);
+    showing = true;
+    fog.pass.render(renderer, target, target);
+    expect(renders).toHaveLength(3);
+    expect(renders[2]).toBe(1 << OVERLAY_LAYER);
+    // the camera and the renderer are left as they were
+    expect(camera.layers.mask).toBe(1);
+    expect(renderer.autoClear).toBe(true);
   });
 
   it('draws what a token sees onto the visible and explored layers, in pixels', () => {
@@ -153,12 +165,12 @@ describe('fog of war', () => {
     expect(canvases[2].context.globalCompositeOperation).toBeDefined();
   });
 
-  it('simple fog uses the flat shader and half-size layers, keeping what was seen', () => {
+  it('simple fog takes fewer, longer steps and half-size layers, keeping what was seen', () => {
     const fog = createFog(10, 10);
     expect(canvases[0].width).toBe(160);
+    const steps = fog.material.defines.FOG_STEPS;
     fog.setSimple(true);
-    expect('FOG_SIMPLE' in fog.material.defines).toBe(true);
-    expect('FOG_SIMPLE' in fog.cap.material.defines).toBe(true);
+    expect(fog.material.defines.FOG_STEPS).toBeLessThan(steps);
     expect(canvases).toHaveLength(6);
     expect(canvases[3].width).toBe(80);
     expect(canvases[5].context.calls.some((c: Call) => c.name === 'drawImage')).toBe(true);
@@ -170,87 +182,8 @@ describe('fog of war', () => {
     const moves = canvases[3].context.calls.filter((c: Call) => c.name === 'moveTo');
     expect(moves[0].args).toEqual([4, 4]);
     fog.setSimple(false);
-    expect('FOG_SIMPLE' in fog.material.defines).toBe(false);
+    expect(fog.material.defines.FOG_STEPS).toBe(steps);
     expect(canvases[6].width).toBe(160);
-  });
-
-  it('stands a curtain of fog just outside each edge of the view, facing the fog behind it', () => {
-    const fog = createFog(10, 10);
-    // a square seen around (4, 4), wound either way round
-    for (const square of [
-      [
-        { x: 3, z: 3 },
-        { x: 5, z: 3 },
-        { x: 5, z: 5 },
-        { x: 3, z: 5 },
-      ],
-      [
-        { x: 3, z: 3 },
-        { x: 3, z: 5 },
-        { x: 5, z: 5 },
-        { x: 5, z: 3 },
-      ],
-    ]) {
-      fog.setVision(square);
-      expect(triangles(fog)).toBe(2 + 8 + 4 * 2);
-      const p = fog.mesh.geometry.getAttribute('position');
-      const s = fog.mesh.geometry.getAttribute('aSample');
-      // the curtains are the 24 vertices before the top's 6; each stands outside the square and reads further out
-      for (let i = p.count - 30; i < p.count - 6; i++) {
-        const outside = Math.max(Math.abs(p.getX(i) - 4), Math.abs(p.getZ(i) - 4));
-        expect(outside).toBeGreaterThan(1);
-        const ax = p.getX(i) + s.getX(i);
-        const az = p.getZ(i) + s.getY(i);
-        expect(Math.max(Math.abs(ax - 4), Math.abs(az - 4))).toBeGreaterThan(outside);
-      }
-    }
-    // looking away (no view) takes the curtains down again
-    fog.setVision([]);
-    expect(triangles(fog)).toBe(2 + 8);
-  });
-
-  it('leaves the edges of the view that run along the edge of the map to the skirt', () => {
-    const fog = createFog(10, 10);
-    fog.setVision([
-      { x: -0.49, z: -0.49 },
-      { x: 9.49, z: -0.49 },
-      { x: 4, z: 4 },
-    ]);
-    expect(triangles(fog)).toBe(2 + 8 + 2 * 2);
-  });
-
-  it('caps the near plane with fog when the camera is so close that it would slice the top off', () => {
-    const fog = createFog(10, 10);
-    const camera = new THREE.PerspectiveCamera(36, 1.5, 1, 1000);
-    const look = (y: number, pitch: number) => {
-      camera.position.set(5, y, 5);
-      camera.rotation.set(-pitch, 0, 0);
-      camera.updateMatrixWorld();
-      fog.update(performance.now() + 1, camera);
-    };
-    // zoomed right in: the lowest the controls allow (2.1), looking down a little
-    look(2.1, 0.45);
-    expect(fog.cap.visible).toBe(true);
-    // the cap lies on the near plane, one unit in front of the camera
-    const p = fog.cap.geometry.getAttribute('position');
-    const forward = new THREE.Vector3();
-    camera.getWorldDirection(forward);
-    for (let i = 0; i < 4; i++) {
-      const v = new THREE.Vector3(p.getX(i), p.getY(i), p.getZ(i)).sub(camera.position);
-      expect(v.dot(forward)).toBeCloseTo(1, 2);
-    }
-    // inside the fog
-    look(1, 0);
-    expect(fog.cap.visible).toBe(true);
-    // well above it, the cap costs nothing
-    look(12, 1);
-    expect(fog.cap.visible).toBe(false);
-    // and it goes with the fog in the clear view
-    look(2.1, 0.45);
-    fog.material.opacity = 0;
-    fog.update(performance.now() + 2, camera);
-    expect(fog.mesh.visible).toBe(false);
-    expect(fog.cap.parent).toBe(fog.mesh);
   });
 
   it('reset forgets everything seen', () => {
@@ -262,7 +195,6 @@ describe('fog of war', () => {
     ]);
     const before = canvases[2].context.calls.filter((c: Call) => c.name === 'fillRect').length;
     fog.reset();
-    expect(triangles(fog)).toBe(2 + 8);
     expect(canvases[2].context.calls.filter((c: Call) => c.name === 'fillRect').length).toBe(
       before + 1,
     );

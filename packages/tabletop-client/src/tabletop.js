@@ -27,7 +27,7 @@ import { createConnection } from './connection';
 import { DEFAULT_MODEL_PREFIX, builtInModelList, swatchUrl } from './models';
 import { createDemoRoom } from './demo';
 import { createSkyboxMaterials } from './skybox';
-import { createFog } from './fog';
+import { createFog, attachDepth } from './fog';
 import { createPing } from './ping.js';
 import { addWallUvs, createWallMaterial, wallTileSize } from './wall-texture';
 import { createWallModel } from './wall-model.js';
@@ -436,6 +436,8 @@ function init() {
 
 	//composer
 	map.composer = new EffectComposer( map.renderer );
+	//the fog of war reads the depth of the scene (fog.js)
+	attachDepth(map.composer);
 
 	map.renderPass = new RenderPass( map.scene, map.objects.camera );
 	map.composer.addPass( map.renderPass );
@@ -1262,12 +1264,12 @@ function init() {
 
 	map.translateControls.token.addEventListener('translateend', map.translateControls.token.translateend, false);
 
-	//fog of war: a soft shader plane (fog.js); material.opacity is the strength, as it was for the box
+	//fog of war: a pass straight after the scene (fog.js); material.opacity is the strength, as it was for the box
 	map.mask = { fog: createFog(map.settings.gridWidth, map.settings.gridHeight) };
-	map.mask.mesh = map.mask.fog.mesh;
-	map.mask.mesh.material.opacity = isDM ? DM_FOG_OPACITY : 1;
+	map.mask.fog.material.opacity = isDM ? DM_FOG_OPACITY : 1;
 	map.mask.fog.setSimple(map.settings.fogQuality == 0);
-	map.scene.add(map.mask.mesh);
+	map.mask.fog.setOverlay(map.scene, map.ping.showing);
+	map.composer.insertPass(map.mask.fog.pass, map.composer.passes.indexOf(map.renderPass) + 1);
 
 	if (demo) {
 		var demoText = document.createElement('div');
@@ -5057,13 +5059,13 @@ function setDmLight(level) {
 
 	switch (map.local.dmLight) {
 		case 0:
-			map.mask.mesh.material.opacity = 1;
+			map.mask.fog.material.opacity = 1;
 			break;
 		case 1:
-			map.mask.mesh.material.opacity = DM_FOG_OPACITY;
+			map.mask.fog.material.opacity = DM_FOG_OPACITY;
 			break;
 		case 2:
-			map.mask.mesh.material.opacity = 0;
+			map.mask.fog.material.opacity = 0;
 			break;
 	}
 
@@ -6160,7 +6162,7 @@ function resetRoom() {
 
 	//the role is decided again by the state we are about to receive
 	isDM = demo ? true : false;
-	map.mask.mesh.material.opacity = isDM ? DM_FOG_OPACITY : 1;
+	map.mask.fog.material.opacity = isDM ? DM_FOG_OPACITY : 1;
 	map.local.dmLight = isDM ? 1 : 0;
 }
 
@@ -6179,7 +6181,7 @@ function buildRoom(room) {
 	if ('dm' in room) {
 		if (String(room.dm) === String(user_id)) {
 			isDM = true;
-			map.mask.mesh.material.opacity = DM_FOG_OPACITY;
+			map.mask.fog.material.opacity = DM_FOG_OPACITY;
 		}
 	}
 
@@ -6813,7 +6815,7 @@ var updateClient = {
 			if (args.user_id == user_id) {
 				if (!isDM) {
 					isDM = true;
-					map.mask.mesh.material.opacity = DM_FOG_OPACITY;
+					map.mask.fog.material.opacity = DM_FOG_OPACITY;
 					map.local.dmLight = 1;
 
 					for (const [tokenId, token] of Object.entries(map.objects.tokens)) {
