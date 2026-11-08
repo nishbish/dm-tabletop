@@ -1291,6 +1291,88 @@
 	}
 }
 
+/*-- ambience (time of day and weather): a small card beside the compass that everyone sees, and
+   the host's panel (tabletop.js, buildAmbiencePanel). The card is cut, so no border on it. --*/
+#ambience {
+	position: absolute;
+	bottom: 104px;
+	left: 76px;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	max-width: calc(100% - 150px);
+	padding: 6px 12px 6px 10px;
+	background: rgba(7, 48, 39, 0.75);
+	background: color-mix(in srgb, var(--_bar) 75%, transparent);
+	color: var(--_on-bar);
+	clip-path: var(--_clip-sm);
+	font-size: 14px;
+	line-height: 1.2;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
+#ambience[hidden] {
+	display: none;
+}
+
+#ambience .material-icons {
+	font-size: 20px;
+	color: var(--_gold);
+}
+
+#ambience .tw-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.dmt-popover .tw-presets {
+	flex-wrap: wrap;
+}
+
+.dmt-popover .tw-presets button {
+	position: relative;
+	flex: 1 1 30%;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+}
+
+.dmt-popover .tw-time button {
+	flex-basis: 22%;
+}
+
+.dmt-popover .tw-presets .material-icons {
+	font-size: 18px;
+	color: inherit;
+}
+
+/* a preset the host app keeps for some hosts: just the badge's diamond in the corner (the word
+   stays for screen readers and shows on hover) */
+.dmt-popover .tw-presets .pane-item-badge {
+	position: absolute;
+	top: 3px;
+	right: 3px;
+	margin: 0;
+	padding: 0;
+	font-size: 0;
+	line-height: 0;
+	background: none;
+}
+
+/* the compass gets smaller at the same width */
+@media (max-width: 768px) {
+	#ambience {
+		bottom: 79px;
+		left: 54px;
+		max-width: calc(100% - 110px);
+		padding: 4px 10px 4px 8px;
+		font-size: 13px;
+	}
+}
+
 /*-- token portraits along the bottom: hexagons with the token's colour as the edge --*/
 #avatarContainer {
 	position: absolute;
