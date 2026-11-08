@@ -59,7 +59,6 @@ describe('shadows', () => {
     expect(renderer.shadowMap.needsUpdate).toBe(true);
     const cam = shadows.light.shadow.camera;
     expect(cam.right).toBe(15);
-    expect(shadows.catcher.position.y).toBeGreaterThan(-0.51);
     expect(shadows.light.position.y).toBeGreaterThan(shadows.light.target.position.y);
     // the same view again changes nothing
     renderer.shadowMap.needsUpdate = false;
@@ -101,6 +100,26 @@ describe('shadows', () => {
     expect(shadows.update()).toBe(false);
     shadows.touch();
     expect(shadows.update()).toBe(true);
+  });
+
+  it('catches shadows only around the casters, above the map pictures, and hides with none', () => {
+    const { scene, shadows } = setup();
+    shadows.setEnabled(true);
+    shadows.fit(new THREE.Vector3(10, 0, 10), -0.53, 30);
+    shadows.update();
+    expect(shadows.catcher.visible).toBe(false);
+    const t = token();
+    t.position.set(12, 0, 9);
+    scene.add(t);
+    shadows.addCaster(t);
+    shadows.update();
+    const c = shadows.catcher;
+    expect(c.visible).toBe(true);
+    expect(c.position.y).toBeGreaterThan(-0.51);
+    // a few cells around the token, not the whole view
+    expect(c.scale.x).toBeLessThan(5);
+    expect(c.position.x - c.scale.x / 2).toBeLessThanOrEqual(11.5);
+    expect(c.position.x + c.scale.x / 2).toBeGreaterThanOrEqual(12.5);
   });
 
   it('redraws only when a caster moved', () => {

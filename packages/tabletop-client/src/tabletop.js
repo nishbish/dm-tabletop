@@ -5261,6 +5261,10 @@ function applyTimeWeather() {
 	tintSky(look.skyTint);
 	map.clouds.set(look);
 	map.weather.setFogColor(look.fogColor);
+	//shadows (High only) are strongest in a clear day, softer under cloud and faint at night
+	if (map.shadows) {
+		map.shadows.setStrength(look.night ? 0.45 : Math.min(1, look.light) * (1 - 0.5 * (look.cloudOvercast || 0)));
+	}
 }
 
 function tintSky(hex) {

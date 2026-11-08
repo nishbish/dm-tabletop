@@ -28,7 +28,7 @@ export function createShadows(scene, renderer, options) {
   var opacity = options.opacity == null ? 0.32 : options.opacity;
   var enabled = false;
   var casters = new Set();
-  var lastSignature = '';
+  var lastSignature = null;
   var touched = false;
   var fitted = { x: NaN, z: NaN, half: NaN, floorY: NaN };
 
@@ -47,6 +47,7 @@ export function createShadows(scene, renderer, options) {
   catcher.receiveShadow = true;
   catcher.renderOrder = 1;
   catcher.raycast = function () {}; // never picked by the mouse
+  catcher.visible = false; // until there is something to catch
 
   function setEnabled(on) {
     on = !!on;
@@ -56,10 +57,10 @@ export function createShadows(scene, renderer, options) {
     enabled = on;
     renderer.shadowMap.enabled = on;
     renderer.shadowMap.autoUpdate = false;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     if (on) {
       scene.add(light, light.target, catcher);
-      lastSignature = '';
+      lastSignature = null;
       renderer.shadowMap.needsUpdate = true;
     } else {
       scene.remove(light, light.target, catcher);
@@ -117,11 +118,47 @@ export function createShadows(scene, renderer, options) {
     cam.updateProjectionMatrix();
     light.target.updateMatrixWorld();
     light.updateMatrixWorld();
-    // a little bigger than what the light covers, since the light comes in at an angle
-    catcher.position.set(x, floorY + CATCHER_LIFT, z);
-    catcher.scale.set(half * 2.4, 1, half * 2.4);
+    lastSignature = null; // the catcher is placed again by update()
     renderer.shadowMap.needsUpdate = true;
     return true;
+  }
+
+  // The catcher covers only the ground around the casters (inside what the light covers), so
+  // the shadow lookup runs on as few pixels as possible; with no casters in view it is hidden.
+  var box = new THREE.Box3();
+  var point = new THREE.Vector3();
+  function placeCatcher() {
+    var half = fitted.half;
+    var minX = Infinity;
+    var maxX = -Infinity;
+    var minZ = Infinity;
+    var maxZ = -Infinity;
+    casters.forEach(function (object) {
+      if (!object.visible || !object.parent) {
+        return;
+      }
+      box.setFromObject(object);
+      if (box.isEmpty()) {
+        return;
+      }
+      // the shadow falls away from the light by up to the caster's height
+      var reach = Math.max(0, box.max.y - fitted.floorY) / LIGHT_DIRECTION.y;
+      minX = Math.min(minX, box.min.x - reach * LIGHT_DIRECTION.x - 0.5);
+      maxX = Math.max(maxX, box.max.x + 0.5);
+      minZ = Math.min(minZ, box.min.z - reach * LIGHT_DIRECTION.z - 0.5);
+      maxZ = Math.max(maxZ, box.max.z + 0.5);
+    });
+    minX = Math.max(minX, fitted.x - half);
+    maxX = Math.min(maxX, fitted.x + half);
+    minZ = Math.max(minZ, fitted.z - half);
+    maxZ = Math.min(maxZ, fitted.z + half);
+    catcher.visible = maxX > minX && maxZ > minZ;
+    if (!catcher.visible) {
+      return;
+    }
+    point.set((minX + maxX) / 2, fitted.floorY + CATCHER_LIFT, (minZ + maxZ) / 2);
+    catcher.position.copy(point);
+    catcher.scale.set(maxX - minX, 1, maxZ - minZ);
   }
 
   // Call once a frame before drawing: redraws the shadow map only if a caster moved, appeared or
@@ -159,12 +196,15 @@ export function createShadows(scene, renderer, options) {
     if (touched) {
       touched = false;
       signature += '*';
-      lastSignature = '';
+      lastSignature = null;
     }
     if (signature === lastSignature) {
       return false;
     }
     lastSignature = signature;
+    if (!isNaN(fitted.half)) {
+      placeCatcher();
+    }
     renderer.shadowMap.needsUpdate = true;
     return true;
   }
@@ -174,12 +214,12 @@ export function createShadows(scene, renderer, options) {
   function addCaster(object) {
     casters.add(object);
     setCasting(object, enabled);
-    lastSignature = '';
+    lastSignature = null;
   }
 
   function removeCaster(object) {
     if (casters.delete(object)) {
-      lastSignature = '';
+      lastSignature = null;
       renderer.shadowMap.needsUpdate = enabled;
     }
   }
