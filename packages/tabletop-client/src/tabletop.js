@@ -28,6 +28,7 @@ import { DEFAULT_MODEL_PREFIX, builtInModelList, swatchUrl } from './models';
 import { createDemoRoom } from './demo';
 import { createSkyboxMaterials } from './skybox';
 import { createFog, attachDepth } from './fog';
+import { createShadows } from './shadows.js';
 import { createPing } from './ping.js';
 import { addWallUvs, createWallMaterial, wallTileSize } from './wall-texture';
 import { createWallModel } from './wall-model.js';
@@ -100,7 +101,7 @@ if (!hasWebGL()) {
 	unsupportedMessage.textContent = 'This viewer needs WebGL, which your browser or device does not provide.';
 	container.appendChild(unsupportedMessage);
 
-	return { destroy: function() { unsupportedMessage.remove(); }, getSceneStats: function() { return null; }, getTokenPosition: function() { return null; }, sendAppEvent: function() { return false; }, showNotice: function() {}, getView: function() { return null; }, attachOverlay: function() { return function() {}; } };
+	return { destroy: function() { unsupportedMessage.remove(); }, getSceneStats: function() { return null; }, getTokenPosition: function() { return null; }, sendAppEvent: function() { return false; }, showNotice: function() {}, getView: function() { return null; }, createShadowCaster: function() { return { set: function() {}, remove: function() {} }; }, attachOverlay: function() { return function() {}; } };
 }
 
 const demo = options.demo;
@@ -266,6 +267,8 @@ const map = {
 		preset: mobileAndTabletCheck() ? 1 : 2,
 		lightingQuality: 2,
 		fogQuality: 1,
+		// shadows of tokens, 3D characters and dice on the map (shadows.js): High graphics only
+		shadows: mobileAndTabletCheck() ? 0 : 1,
 		snapLighting: true,
 		snapTokenPos: true,
 		maskPoints: 160,
@@ -1300,6 +1303,10 @@ function init() {
 	map.mask.fog.setOverlay(map.scene, map.ping.showing);
 	map.composer.insertPass(map.mask.fog.pass, map.composer.passes.indexOf(map.renderPass) + 1);
 
+	//shadows on the map for the High setting (shadows.js); nothing at all is added without them
+	map.shadows = createShadows(map.scene, map.renderer);
+	map.shadows.setEnabled(!!map.settings.shadows);
+
 	if (demo) {
 		var demoText = document.createElement('div');
 		demoText.id = 'demo-text';
@@ -1549,6 +1556,7 @@ function createToken(pos, scale, modelId, local = true, owners = [], tokenId = f
 
 	//add token to map object
 	map.scene.add(token);
+	map.shadows.addCaster(token);
 
 	map.objects.tokens[tokenId] = token;
 	map.translateControls.token.translateObjects.push(token);
@@ -2060,6 +2068,7 @@ function createProp(file, position, local, scale, rotation, planeId) {
 	map.hover.targets.push(plane);
 	map.translateControls.plane.translateObjects.push(plane);
 	map.scene.add(plane);
+	map.shadows.addCaster(plane);
 
 	if (!planeId) {
 		planeId = newLocalId();
@@ -5945,6 +5954,22 @@ function buildGui() {
 		}, false);
 	}
 
+	//shadows of tokens, 3D characters and dice on the map (shadows.js)
+	var shadowOptions = [
+		{ value: 0, name: 'Off' },
+		{ value: 1, name: 'On' }
+	];
+	shadowOptions[map.settings.shadows ? 1 : 0].default = true;
+
+	var shadowSetting = buildPaneItem(settingsPane, 'Shadows', 'radio-segment', shadowOptions);
+	for (var i=0;i<shadowSetting.input.length;i++) {
+		shadowSetting.input[i].addEventListener('change', shadowSetting.input[i].fn = function() {
+			map.settings.shadows = parseInt(this.value);
+			saveSettings();
+			map.shadows.setEnabled(!!map.settings.shadows);
+		}, false);
+	}
+
 	//vision mask calculation points
 	var maskPointOptions = [
 		{ value: 80, name: 'Low' },
@@ -6190,6 +6215,11 @@ function buildGui() {
 			var fogIndex = this.value == 0 ? 0 : 1;
 			fogQuality.input[fogIndex].checked = true;
 			fogQuality.input[fogIndex].fn();
+
+			//shadows on High only
+			var shadowIndex = this.value == 2 ? 1 : 0;
+			shadowSetting.input[shadowIndex].checked = true;
+			shadowSetting.input[shadowIndex].fn();
 		}, false);
 	}
 
@@ -6750,6 +6780,11 @@ function loadSettings() {
 		//settings saved before the Fog of War setting existed: the Low preset means the simple fog
 		if (!('fogQuality' in settings)) {
 			map.settings.fogQuality = map.settings.preset == 0 ? 0 : 1;
+		}
+
+		//settings saved before there were shadows: on for the High preset only
+		if (!('shadows' in settings)) {
+			map.settings.shadows = map.settings.preset == 2 ? 1 : 0;
 		}
 
 		//the low and medium view distances were raised (100 and 200 cut off too much)
@@ -8218,7 +8253,9 @@ function updateTokenPictures() {
 
 	if (on) {
 		updateTokenMotion(map.objects.tokens, seconds, now / 1000);
-		updateCharacters(map.objects.tokens, seconds, modelLibrary.setWalking, characterOnScreen());
+		if (updateCharacters(map.objects.tokens, seconds, modelLibrary.setWalking, characterOnScreen())) {
+			map.shadows.touch();
+		}
 		animatedPictures.update(now, map.scene);
 	}
 	else if (tokenMotionRunning) {
@@ -8251,6 +8288,7 @@ function animate() {
 	}
 
 	updateTokenPictures();
+	updateShadows();
 
 	map.objects.camera.getWorldDirection(dir);
   sph.setFromVector3(dir);
@@ -8260,6 +8298,14 @@ function animate() {
 
 	animationFrame = requestAnimationFrame(animate);
 	render();
+}
+
+// Shadows follow the view (they cover only the floor around what the camera looks at) and are drawn
+// again only when something that casts one has moved.
+function updateShadows() {
+	if (!map.shadows.enabled) { return; }
+	map.shadows.fit(map.orbitControls.target, map.objects.plane ? map.objects.plane.position.y : -0.53, floorViewHeight());
+	map.shadows.update();
 }
 
 // Moves the view for the camera keys held down: across the floor relative to where the camera faces,
@@ -8523,8 +8569,19 @@ return {
 			far: map.perspCamera.far,
 			width: viewWidth(),
 			height: viewHeight(),
-			floorY: map.objects.plane ? map.objects.plane.position.y : -0.53
+			floorY: map.objects.plane ? map.objects.plane.position.y : -0.53,
+			// one grid cell, and the map's edges on the floor (the grid runs from -0.5 to size - 0.5)
+			cellSize: 1,
+			bounds: { minX: -0.5, maxX: map.settings.gridWidth - 0.5, minZ: -0.5, maxZ: map.settings.gridHeight - 0.5 },
+			// whether the viewer draws shadows (High graphics): a host's createShadowCaster then shows
+			shadows: map.shadows.enabled
 		};
+	},
+	// A shadow on the map for something the host app draws on its own layer (its dice): `positions`
+	// are its triangles (x, y, z per corner, in its own units). Returns { set(position, quaternion,
+	// scale), remove() }; it casts only while shadows are on (getView().shadows).
+	createShadowCaster: function(positions) {
+		return map.shadows.createCaster(positions);
 	},
 	// Puts an element right above the 3D scene and below the panels and buttons. Returns a remover.
 	attachOverlay: function(element) {

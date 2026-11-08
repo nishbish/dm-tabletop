@@ -123,6 +123,22 @@ export interface TabletopView {
   height: number;
   /** Height of the table top (the floor the maps lie on). */
   floorY: number;
+  /** One grid cell, in world units. */
+  cellSize: number;
+  /** The map's edges on the floor. */
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  /** Whether the viewer draws shadows (the High graphics setting); shadow casters show then. */
+  shadows: boolean;
+}
+
+export interface ShadowCaster {
+  /** Where it is: world position, rotation (x, y, z, w) and a uniform scale. */
+  set(
+    position: [number, number, number],
+    quaternion: [number, number, number, number],
+    scale?: number,
+  ): void;
+  remove(): void;
 }
 
 export interface TokenInfo {
@@ -162,6 +178,11 @@ export interface Tabletop {
   getView(): TabletopView | null;
   /** Puts an element (a transparent canvas) just above the 3D scene, below the viewer's panels. */
   attachOverlay(element: HTMLElement): () => void;
+  /**
+   * A shadow on the map for something the host draws on its own layer (dice): its shape as
+   * triangles (x, y, z per corner). Never drawn itself; casts only while getView().shadows is true.
+   */
+  createShadowCaster(positions: ArrayLike<number>): ShadowCaster;
   debug?: unknown;
 }
 

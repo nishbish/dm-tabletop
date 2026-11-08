@@ -919,3 +919,77 @@ test('hex grid: the host switches it, tokens snap to hexes, and nothing else mov
   expect([square.x, square.z]).toEqual([8, 11]);
   expect(errors).toEqual([]);
 });
+
+async function openWithPreset(page: Page, settings: object) {
+  await page.addInitScript((settings) => {
+    localStorage.setItem('settings', JSON.stringify(settings));
+  }, settings);
+  await page.goto('/?demo=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+}
+
+function shadowState(page: Page) {
+  return page.evaluate(() => {
+    const map = (window as any).tabletop.debug.map;
+    const scene = map.scene;
+    const casting: string[] = [];
+    scene.traverse((o: any) => {
+      if (o.isMesh && o.castShadow) casting.push(o.name || o.type);
+    });
+    return {
+      enabled: map.renderer.shadowMap.enabled,
+      catcher: !!scene.getObjectByName('shadowCatcher'),
+      light: !!scene.getObjectByName('shadowLight'),
+      casting: casting.length,
+      view: (window as any).tabletop.getView().shadows,
+    };
+  });
+}
+
+test('shadows: on with the High preset, none at all on Medium, and the setting switches them', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await openWithPreset(page, { preset: 2 });
+  await expect.poll(async () => (await shadowState(page)).casting).toBeGreaterThan(0);
+  expect(await shadowState(page)).toMatchObject({
+    enabled: true,
+    catcher: true,
+    light: true,
+    view: true,
+  });
+  // a host caster (the dice) is never drawn, only cast
+  const caster = await page.evaluate(() => {
+    const tabletop = (window as any).tabletop;
+    const c = tabletop.createShadowCaster([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    c.set([2, 0, 2], [0, 0, 0, 1], 1);
+    const mesh = tabletop.debug.map.scene.children.at(-1);
+    const seen = mesh.layers.test(tabletop.debug.map.objects.camera.layers);
+    c.remove();
+    return { seen, cast: mesh.castShadow };
+  });
+  expect(caster).toEqual({ seen: false, cast: true });
+
+  // switching the setting off takes everything away again
+  await page.evaluate(() => {
+    const map = (window as any).tabletop.debug.map;
+    map.shadows.setEnabled(false);
+  });
+  expect(await shadowState(page)).toMatchObject({
+    enabled: false,
+    catcher: false,
+    light: false,
+    casting: 0,
+    view: false,
+  });
+  expect(errors).toEqual([]);
+});
+
+test('shadows: rooms opened on Medium have none, and older saved settings follow their preset', async ({
+  page,
+}) => {
+  await openWithPreset(page, { preset: 1 });
+  await page.waitForTimeout(500);
+  expect(await shadowState(page)).toMatchObject({ enabled: false, catcher: false, casting: 0 });
+});

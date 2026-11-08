@@ -29,6 +29,7 @@ export function createShadows(scene, renderer, options) {
   var enabled = false;
   var casters = new Set();
   var lastSignature = '';
+  var touched = false;
   var fitted = { x: NaN, z: NaN, half: NaN, floorY: NaN };
 
   var light = new THREE.DirectionalLight(0xffffff, 0);
@@ -75,12 +76,20 @@ export function createShadows(scene, renderer, options) {
     });
   }
 
+  // Lit meshes cast (token pictures and bases, 3D characters, props); flat-colour helpers such as
+  // health bars and highlights do not, unless marked as casters.
   function setCasting(object, on) {
+    var meshes = 0;
     object.traverse(function (child) {
-      if (child.isMesh || child.isSkinnedMesh) {
-        child.castShadow = on;
+      if (child.isMesh) {
+        child.castShadow =
+          on &&
+          (!!child.userData.shadowCaster ||
+            !(child.material && child.material.isMeshBasicMaterial));
+        meshes++;
       }
     });
+    return meshes;
   }
 
   // Covers the floor around `target` (the point the camera looks at); `viewSize` is how much floor
@@ -116,16 +125,24 @@ export function createShadows(scene, renderer, options) {
     return true;
   }
 
-  // Call once a frame before drawing: redraws the shadow map only if a caster moved.
+  // Call once a frame before drawing: redraws the shadow map only if a caster moved, appeared or
+  // went (or touch() said an animation moved one).
   function update() {
-    if (!enabled || casters.size === 0) {
+    if (!enabled) {
       return false;
     }
     var parts = [];
     casters.forEach(function (object) {
-      if (!object.visible || !object.parent) {
+      // taken off the map: forget it
+      if (!object.parent) {
+        casters.delete(object);
         return;
       }
+      if (!object.visible) {
+        return;
+      }
+      // pieces that load later (a token's picture) cast too
+      parts.push(setCasting(object, true));
       object.updateMatrixWorld();
       var e = object.matrixWorld.elements;
       // position and turn are enough to notice a move (rounded: tiny jitter is not a move)
@@ -140,6 +157,11 @@ export function createShadows(scene, renderer, options) {
       );
     });
     var signature = parts.join(',');
+    if (touched) {
+      touched = false;
+      signature += '*';
+      lastSignature = '';
+    }
     if (signature === lastSignature) {
       return false;
     }
@@ -163,6 +185,11 @@ export function createShadows(scene, renderer, options) {
     }
   }
 
+  // Something moved that update() cannot see (an animated 3D character's limbs): redraw.
+  function touch() {
+    touched = enabled;
+  }
+
   // A shadow for something the host app draws itself (its dice, on their own canvas over the
   // table): `positions` are the triangles of its shape (x, y, z for each corner). Never drawn, only
   // seen by the shadow camera. The host moves it with set() and drops it with remove().
@@ -175,6 +202,7 @@ export function createShadows(scene, renderer, options) {
       new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }),
     );
     mesh.layers.set(SHADOW_LAYER);
+    mesh.userData.shadowCaster = true;
     mesh.frustumCulled = false;
     mesh.raycast = function () {};
     scene.add(mesh);
@@ -216,6 +244,7 @@ export function createShadows(scene, renderer, options) {
     addCaster: addCaster,
     removeCaster: removeCaster,
     createCaster: createCaster,
+    touch: touch,
     setStrength: setStrength,
     dispose: dispose,
     light: light,

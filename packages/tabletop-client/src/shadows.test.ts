@@ -14,7 +14,7 @@ function setup() {
 
 function token() {
   const group = new THREE.Group();
-  group.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()));
+  group.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial()));
   return group;
 }
 
@@ -70,6 +70,37 @@ describe('shadows', () => {
     expect(cam.right).toBe(60);
     shadows.fit(new THREE.Vector3(), -0.53, 0.1);
     expect(cam.right).toBe(4);
+  });
+
+  it('lets lit pieces cast, not flat helpers like health bars, and picks up pieces that load later', () => {
+    const { scene, shadows } = setup();
+    const t = token();
+    const bar = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.1), new THREE.MeshBasicMaterial());
+    t.add(bar);
+    scene.add(t);
+    shadows.addCaster(t);
+    shadows.setEnabled(true);
+    expect((t.children[0] as THREE.Mesh).castShadow).toBe(true);
+    expect(bar.castShadow).toBe(false);
+    const picture = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshPhongMaterial());
+    t.add(picture);
+    expect(shadows.update()).toBe(true);
+    expect(picture.castShadow).toBe(true);
+  });
+
+  it('forgets casters taken off the map, and redraws when touched', () => {
+    const { scene, renderer, shadows } = setup();
+    const t = token();
+    scene.add(t);
+    shadows.addCaster(t);
+    shadows.setEnabled(true);
+    shadows.update();
+    scene.remove(t);
+    expect(shadows.update()).toBe(true);
+    renderer.shadowMap.needsUpdate = false;
+    expect(shadows.update()).toBe(false);
+    shadows.touch();
+    expect(shadows.update()).toBe(true);
   });
 
   it('redraws only when a caster moved', () => {
