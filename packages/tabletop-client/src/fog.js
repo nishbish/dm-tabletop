@@ -64,6 +64,9 @@ var AIR_FOG = 0.12;
 var FLOOR_Y = -0.5;
 // the deeper layer of swirls sits this high (the top layer at FOG_HEIGHT)
 var SWIRL_DEEP = 0.0;
+// how fast the swirls drift (the shader's time runs this many times faster than real time); with
+// reduced motion they keep the old, barely moving pace
+var SWIRL_SPEED = 4;
 // how far apart (across the floor, in cells) the shader looks along a ray, and how many looks at most
 var STEP = 0.2;
 var MAX_STEPS = 64;
@@ -290,6 +293,8 @@ export function createFog(gridWidth, gridHeight) {
     layers: null,
     mix: 1,
     start: performance.now(),
+    // the swirls' own clock, so a change of pace (reduced motion) never makes them jump
+    swirlTime: 0,
   };
 
   var material = new THREE.ShaderMaterial({
@@ -579,6 +584,15 @@ export function createFog(gridWidth, gridHeight) {
 
   var last = performance.now();
 
+  // looked up once; .matches follows the setting live
+  var reducedMotion =
+    typeof window !== 'undefined' && window.matchMedia
+      ? window.matchMedia('(prefers-reduced-motion: reduce)')
+      : null;
+  function prefersReducedMotion() {
+    return !!(reducedMotion && reducedMotion.matches);
+  }
+
   // Called every frame with the camera the scene is drawn with.
   function update(now, camera) {
     var dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
@@ -590,7 +604,8 @@ export function createFog(gridWidth, gridHeight) {
 
     var strength = material.opacity;
     material.uniforms.uMix.value = fog.mix;
-    material.uniforms.uTime.value = (now - fog.start) / 1000;
+    fog.swirlTime += dt * (prefersReducedMotion() ? 1 : SWIRL_SPEED);
+    material.uniforms.uTime.value = fog.swirlTime;
     material.uniforms.uStrength.value = strength;
     // the memory of explored ground only shows when the fog is translucent (the host's view):
     // at full strength a player sees nothing outside what the token sees now

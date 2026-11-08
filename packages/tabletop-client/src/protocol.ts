@@ -151,8 +151,8 @@ export function toServer(name: string, a: Args): Translated | null {
     case 'saveCamera':
       return null; // the original server ignored it too
     default:
-      // updateDaylight, updateMoonlight, updateClock, updateWeather, updateGridSize and host-app
-      // events pass through.
+      // updateDaylight, updateMoonlight, updateTime, updateWeather, updateScene, updateMusic,
+      // updateGridSize and host-app events pass through.
       return { name, args: a };
   }
 }
@@ -295,6 +295,8 @@ export function stateToRoom(
     // absent in rooms that never had a time or weather (the viewer then goes by moonlight)
     time: typeof state.time === 'string' ? state.time : null,
     weather: typeof state.weather === 'string' ? state.weather : 'clear',
+    scene: typeof state.scene === 'string' ? state.scene : 'none',
+    music: typeof state.music === 'string' ? state.music : 'none',
     grid: state.grid,
     clients,
     tokens: state.tokens || {},
