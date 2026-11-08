@@ -84,15 +84,6 @@ var TranslateControls = function (camera, domElement, scene, renderer) {
         scope.translateGroupObjects = [scope.object];
       }
 
-      for (var i=0;i<scope.translateGroupObjects.length;i++) {
-        var point = intersects[0].point.clone();
-
-        scope.translateGroupObjects[i].translateControls = {
-          offsetPos: point.sub(scope.translateGroupObjects[i].position),
-          originalPos: scope.translateGroupObjects[i].position.clone()
-        }
-      }
-
       if (e.which == 3 && scope.enableVertical) {
         scope.translateMode = 'vertical';
       }
@@ -102,6 +93,22 @@ var TranslateControls = function (camera, domElement, scene, renderer) {
       }
       else {
         plane.lookAt(scope.camera.position.x, scope.object.position.y, scope.camera.position.z);
+      }
+
+      // The grab point is measured on the same plane the drag moves along. The point where the ray
+      // hit the object is on its surface: on anything tall (a 3D prop) that is above the plane, seen
+      // at an angle it lies over another spot, and the object jumped there on the first move.
+      plane.updateMatrixWorld();
+      var onPlane = raycast.intersectObject(plane, false);
+      var grab = onPlane.length > 0 ? onPlane[0].point : intersects[0].point;
+
+      for (var i=0;i<scope.translateGroupObjects.length;i++) {
+        var point = grab.clone();
+
+        scope.translateGroupObjects[i].translateControls = {
+          offsetPos: point.sub(scope.translateGroupObjects[i].position),
+          originalPos: scope.translateGroupObjects[i].position.clone()
+        }
       }
 
       this.dispatchEvent( { type: 'translatestart' } );

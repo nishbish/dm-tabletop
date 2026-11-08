@@ -14,6 +14,22 @@ export interface UserInfo {
 }
 
 // Token appearance, in the shape the viewer uses.
+export interface LibraryItem {
+  id: string;
+  name: string;
+  file: string;
+  texture: string;
+  thumb: string;
+  height?: number;
+  size?: number;
+}
+
+export interface ModelLibrary {
+  characterFolder?: string;
+  characters?: LibraryItem[];
+  props?: { name: string; items: LibraryItem[] }[];
+}
+
 export interface ModelInfo {
   id: string;
   name: string;
@@ -89,6 +105,9 @@ export interface TabletopOptions {
   // with these names go to onAppEvent instead of the viewer; send them with tabletop.sendAppEvent.
   appEvents?: string[];
   onAppEvent?: (name: string, args: Record<string, unknown>, from: string | undefined) => void;
+  // Built-in 3D models (see model-library.js). `file`, `texture` and `thumb` are relative to
+  // `assetBaseUrl`. A character's `height` and a prop's `size` (its longest side) are in grid squares.
+  modelLibrary?: ModelLibrary;
   resolveModel?: (
     modelId: string,
   ) => ModelInfo | null | undefined | Promise<ModelInfo | null | undefined>;
