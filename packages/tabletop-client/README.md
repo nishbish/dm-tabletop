@@ -161,8 +161,8 @@ modelLibrary: {
 
 Paths resolve against `assetBaseUrl`. Models are glTF binaries without embedded pictures; `texture` paints them, one shared material per texture.
 
-- **Characters** appear as a folder in the Tokens pane. A character is a token like any other, on the usual base and with the usual vision and ownership, drawn as a model instead of a picture. It needs animations named `idle` and `walk`. It turns to face the way it moves, and walks and glides between grid squares on the Medium and High presets; on Low it stands still. `height` is in grid squares.
-- **Props** (furniture and decorations) are added with Add Furniture in the right-click menu. A prop is part of the map, not a token: no base, vision, owner or portrait, and only the host edits it, on the Images & Furniture tab with the same move, turn and resize handles as map images. To the server it is a map image whose `image` is `prop:<id>`, so a server needs no change for it. Props do not block movement or sight. `size` is the longest side in grid squares.
+- **Characters** appear as a folder in the Tokens pane. A character is a token like any other, on the usual base and with the usual vision and ownership, drawn as a model instead of a picture. It needs animations named `idle` and `walk`. It always stands on its base, turns to face the way it moves and plays its walk while moving on the Medium and High presets; on Low it stands still. `height` is in grid squares.
+- **Props** (furniture and decorations) are added with Add Furniture in the right-click menu. A prop is part of the map, not a token: no base, vision, owner or portrait, and only the host edits it, on the Images & Furniture tab. It comes at its set size and has no handles: the host drags it to move it, and R turns the picked prop (or every prop in a box selection) by 45 degrees. To the server it is a map image whose `image` is `prop:<id>`, so a server needs no change for it. Props do not block movement or sight. `size` is the longest side in grid squares.
 
 ### Host-app extension points
 

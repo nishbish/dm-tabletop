@@ -1,13 +1,11 @@
-// How a 3D character follows its token: it turns to face the way it goes, walks while it travels,
-// and glides over the jumps between grid squares. Only the character moves; the token, its base and
-// its vision stay exactly where the server says.
+// How a 3D character follows its token: it turns to face the way it goes and plays its walk while it
+// travels. It always stands on its base: trailing behind it looked like the two had come apart.
 
 const FORGET_TRAVEL = 6; // how fast recent travel is forgotten, per second
 const STOPPED = 0.06; // recent travel below this counts as standing still
 const MOVING = 0.15; // recent travel above this counts as moving
 const JUMP = 6; // a move this long in one frame is a teleport, not a walk
 const TURN_SPEED = 10; // how fast it turns, per second
-const GLIDE_SPEED = 12; // how fast it catches up with its token, per second
 const MAX_STEP = 0.1; // seconds, so a stalled frame does not fling anything
 
 export function newCharacterMotion() {
@@ -16,8 +14,6 @@ export function newCharacterMotion() {
     target: 0,
     travel: 0,
     walking: false,
-    offsetX: 0,
-    offsetZ: 0,
     lastX: null,
     lastZ: null,
   };
@@ -41,20 +37,12 @@ export function stepCharacterMotion(motion, x, z, seconds) {
   motion.lastZ = z;
 
   var distance = Math.hypot(dx, dz);
-  if (distance >= JUMP) {
-    motion.offsetX = 0;
-    motion.offsetZ = 0;
-  } else if (distance > 0) {
+  if (distance > 0 && distance < JUMP) {
     motion.target = Math.atan2(dx, dz);
     motion.travel += distance;
-    motion.offsetX -= dx;
-    motion.offsetZ -= dz;
   }
 
   motion.travel *= Math.exp(-FORGET_TRAVEL * dt);
-  var keep = Math.exp(-GLIDE_SPEED * dt);
-  motion.offsetX *= keep;
-  motion.offsetZ *= keep;
   motion.facing = turnTowards(motion.facing, motion.target, 1 - Math.exp(-TURN_SPEED * dt));
 
   var walking = motion.walking ? motion.travel >= STOPPED : motion.travel > MOVING;
@@ -76,8 +64,6 @@ export function updateCharacters(tokens, seconds, setWalking) {
     }
 
     character.body.rotation.y = motion.facing;
-    character.body.position.x = motion.offsetX;
-    character.body.position.z = motion.offsetZ;
     if (token.visible) {
       character.mixer.update(Math.min(seconds, MAX_STEP));
     }
@@ -94,12 +80,8 @@ export function resetCharacters(tokens, setWalking) {
       }
       character.motion.walking = false;
       character.motion.travel = 0;
-      character.motion.offsetX = 0;
-      character.motion.offsetZ = 0;
       character.motion.lastX = null;
       character.motion.lastZ = null;
-      character.body.position.x = 0;
-      character.body.position.z = 0;
     }
   }
 }

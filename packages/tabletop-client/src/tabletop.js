@@ -546,6 +546,10 @@ function init() {
 	  	}
 	  }
 
+	  if (isDM && map.toggleMode == 'plane' && !isTyping(e) && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat && e.code === 'KeyR') {
+	  	turnActiveProps();
+	  }
+
 	  if (e.ctrlKey) {
 	    ctrlPressed = true;
 	  }
@@ -2790,6 +2794,11 @@ function checkSceneClick(e, clickType) {
 					}
 				}
 			}
+			else if (clickType == 'left' && map.local.activeProp) {
+				// a click on bare floor puts the prop down: R no longer turns it
+				map.local.activeProp = null;
+				map.outlinePass.selectedObjects = [];
+			}
 		}
 	}
 
@@ -3115,9 +3124,42 @@ function doorClick(door, local = true) {
 function planeClick(plane) {
 	if (!isDM) { return false; }
 	
-	if (plane != null) {
+	if (plane != null && plane.isProp) {
+		// A prop comes at its proper size and turns in 45 degree steps with R, so it has no
+		// handles: they got in the way of dragging it. It is outlined to show which one R turns.
+		map.rotationControls.plane.detach();
+		map.scaleControls.plane.detach();
+		map.local.activeProp = plane;
+		map.outlinePass.selectedObjects = [plane];
+	}
+	else if (plane != null) {
+		map.local.activeProp = null;
 		map.rotationControls.plane.attach(plane);
 		map.scaleControls.plane.attach(plane);
+	}
+}
+
+// R turns the picked prop (or every prop in a box selection) by 45 degrees.
+function turnActiveProps() {
+	var props = map.translateControls.plane.translateGroupObjects.filter(function(plane) { return plane.isProp; });
+	var active = map.local.activeProp;
+
+	if (props.length == 0 && active && map.objects.planes[active.planeId] === active) {
+		props = [active];
+	}
+
+	for (const plane of props) {
+		var turned = Math.round((plane.rotation.z + Math.PI / 4) / (Math.PI / 4)) * (Math.PI / 4);
+		plane.rotation.z = turned % (Math.PI * 2);
+
+		sendMessage('update', 'updatePlaneTransform', {
+			planeId: plane.planeId,
+			posX: plane.position.x,
+			posZ: plane.position.z,
+			scaleX: plane.scale.x,
+			scaleY: plane.scale.y,
+			rotZ: plane.rotation.z
+		});
 	}
 }
 
@@ -3961,7 +4003,7 @@ var BUILD_HINTS = {
 	room: 'Drag on the floor to draw a room. Right-drag turns the camera, arrow keys move it.',
 	corridor: 'Drag on the floor to draw a corridor ' + CORRIDOR_WIDTH + ' squares wide. Right-drag turns the camera.',
 	door: 'Click a wall to put a door in it, or drag a door along a wall. Click a door to turn it.',
-	plane: 'Click a map image or piece of furniture to move, turn or resize it (hold Ctrl to do it freely). Right-click the floor to add one, or an image to change or remove it.',
+	plane: 'Click a map image to move, turn or resize it (hold Ctrl to do it freely). Drag furniture to move it and press R to turn it. Right-click the floor to add either, or an image to change or remove it.',
 	wallPoint: 'Draw walls point by point, or drag out whole rooms and corridors.'
 };
 

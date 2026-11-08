@@ -57,20 +57,18 @@ describe('character motion', () => {
     expect(turnTowards(-3, 3, 0.5)).toBeLessThan(-3);
   });
 
-  it('glides over a jump to the next grid square', () => {
+  it('stays on its base: nothing about it trails behind its token', () => {
     const motion = newCharacterMotion();
     stepCharacterMotion(motion, 0, 0, FRAME);
     stepCharacterMotion(motion, 1, 0, FRAME);
-    expect(motion.offsetX).toBeLessThan(-0.5); // still drawn behind its token
-    rest(motion);
-    expect(Math.abs(motion.offsetX)).toBeLessThan(0.001);
+    expect(Object.keys(motion)).not.toContain('offsetX');
   });
 
   it('does not walk across the map on a teleport', () => {
     const motion = newCharacterMotion();
     stepCharacterMotion(motion, 0, 0, FRAME);
     expect(stepCharacterMotion(motion, 40, 0, FRAME)).toBe(false);
-    expect(motion.offsetX).toBe(0);
+    expect(motion.travel).toBe(0);
   });
 
   it('survives a stalled frame', () => {
@@ -78,6 +76,6 @@ describe('character motion', () => {
     stepCharacterMotion(motion, 0, 0, FRAME);
     stepCharacterMotion(motion, 1, 0, 30);
     expect(Number.isFinite(motion.facing)).toBe(true);
-    expect(Number.isFinite(motion.offsetX)).toBe(true);
+    expect(Number.isFinite(motion.travel)).toBe(true);
   });
 });
