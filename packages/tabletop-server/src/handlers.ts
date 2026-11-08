@@ -26,6 +26,10 @@ const MAX_AC = 1000;
 // or night when its older `moonlight` switch is on; 'clear' is what a room without weather shows.
 export const TIMES = ['dawn', 'day', 'dusk', 'night'];
 export const WEATHERS = ['clear', 'cloudy', 'rain', 'storm', 'snow', 'fog'];
+// The sound a host can add on top: a scene (a soundscape such as a tavern) and a music track.
+// 'none' is what a room without either has. The viewer holds the sounds themselves.
+export const SCENES = ['none', 'tavern', 'battle', 'cave', 'forest', 'market', 'dungeon'];
+export const MUSIC = ['none', 'explore', 'town', 'tavern', 'battle'];
 
 function newId(room: Room, collection: object): string {
   if (Object.keys(collection).length >= MAX_ENTITIES) {
@@ -236,6 +240,26 @@ const handlers: { [name: string]: Handler } = {
     if (weather === 'clear') delete ctx.room.state.weather;
     else ctx.room.state.weather = weather;
     changed(ctx, { weather });
+  },
+  updateScene(ctx) {
+    requireHost(ctx);
+    const scene = str(requireObject(ctx.args), 'scene');
+    if (SCENES.indexOf(scene) === -1) {
+      throw new HandlerError(`scene must be one of ${SCENES.join(', ')}`);
+    }
+    if (scene === 'none') delete ctx.room.state.scene;
+    else ctx.room.state.scene = scene;
+    changed(ctx, { scene });
+  },
+  updateMusic(ctx) {
+    requireHost(ctx);
+    const music = str(requireObject(ctx.args), 'music');
+    if (MUSIC.indexOf(music) === -1) {
+      throw new HandlerError(`music must be one of ${MUSIC.join(', ')}`);
+    }
+    if (music === 'none') delete ctx.room.state.music;
+    else ctx.room.state.music = music;
+    changed(ctx, { music });
   },
   updateGridSize(ctx) {
     requireHost(ctx);

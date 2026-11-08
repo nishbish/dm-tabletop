@@ -66,9 +66,10 @@ names are not prefixed), so it is best used on a page of its own or in an iframe
 | `uploadPlane`     | none: upload UI hidden                                         | same for map images                                                                                                                                                                                                                                                                                                                                                                          |
 | `uploadLocked`    | none                                                           | A notice (see below). With no upload hook the upload buttons stay visible and show it when pressed, for a host app that sells uploads                                                                                                                                                                                                                                                        |
 | `uploadBadge`     | none                                                           | A short word shown as a small tag on the upload buttons, for example the plan that unlocks uploads. Folders, models and planes in a token or map list may carry the same as `badge` (a diamond and the word after the name; `data-badge` holds it in lower case for styling)                                                                                                                 |
-| `ambiencePremium` | none                                                           | A list of time and weather preset names (`dawn`, `cloudy`, ...) that the host app keeps for some hosts. Each carries `ambienceBadge` as a small diamond in its corner (the word on hover and for screen readers)                                                                                                                                                                             |
+| `ambiencePremium` | none                                                           | A list of time and weather preset names (`dawn`, `cloudy`, ...; scenes and music as `scene:tavern`, `music:battle`) that the host app keeps for some hosts. Each carries `ambienceBadge` as a small diamond in its corner (the word on hover and for screen readers)                                                                                                                         |
 | `ambienceLocked`  | none                                                           | A notice (see below). Pressing one of the `ambiencePremium` presets shows it instead of picking it, for a host app that offers those presets to some hosts only. Players always see the ambience a host has set                                                                                                                                                                              |
 | `ambienceBadge`   | none                                                           | A short word for the `ambiencePremium` presets, like `uploadBadge`                                                                                                                                                                                                                                                                                                                           |
+| `sounds`          | none (no sound)                                                | `{path}`: the folder (under `assetBaseUrl`, default `sounds/`) with `sounds.json` and the sound files. Adds the **Sound** button and the Scene and Music rows of Ambience. See "Sound"                                                                                                                                                                                                       |
 | `inviteLink`      | none: invite button hidden                                     | `(code) => url`; the host app provides the code (see "Host-app extension points")                                                                                                                                                                                                                                                                                                            |
 | `trackerUrl`      | none: tracker button hidden                                    | URL of an initiative tracker page, shown in a frame in the side drawer                                                                                                                                                                                                                                                                                                                       |
 | `mountTracker`    | none                                                           | `(element) => void`: draws a tracker (or anything) into the side drawer the first time it opens; wins over `trackerUrl`                                                                                                                                                                                                                                                                      |
@@ -215,6 +216,7 @@ Any folder, model or plane may also carry `badge`, a short word shown as a small
 | `src/ui.js`, `src/skybox.js`                                   | Toasts and banner, the sky                                                                                                                                  |
 | `src/ping.js`                                                  | The ping: two small shaders on pooled quads                                                                                                                 |
 | `src/time-weather.ts`, `src/weather.js`, `src/clouds.js`       | Ambience: the time and weather presets and the light, sky and cloud colours for each (tested on its own), the rain, snow, lightning and fog, and the clouds |
+| `src/sound.ts`, `src/audio.js`                                 | Sound: the scenes, music, mix and settings (tested on their own), and the Web Audio player                                                                  |
 | `src/walls.ts`, `src/doors.js`                                 | Wall geometry, door openings and snapping, room/corridor outlines; the shared door and wall look                                                            |
 | `src/token-motion.js`, `src/animated-picture.js`               | How token pictures move, and playing animated pictures (Medium and High graphics only)                                                                      |
 | `src/model-library.js`, `src/character-motion.js`              | The built-in 3D characters and props, and how a character follows its token                                                                                 |
@@ -247,7 +249,7 @@ Ambience panel and the drawer use the surface colours; the side buttons, the Edi
 portraits use the bar colours.
 
 The side buttons: **Menu** (Help, Settings, Rooms, Invite Link), and for the host **Edit Map**, **Ambience**
-(the time of day and weather everyone sees, how much fog the host sees), **Initiative Tracker** (a drawer on the right; drag its left edge, or focus it and use the arrow keys, to make it wider; the width is remembered in the browser), any
+(the time of day, weather, scene and music everyone sees and hears, how much fog the host sees), **Sound** (with `sounds` only: each person's own volumes), **Initiative Tracker** (a drawer on the right; drag its left edge, or focus it and use the arrow keys, to make it wider; the width is remembered in the browser), any
 `buttons` from the options, and **Focus Players**. Each shows its name and what it does on hover or keyboard
 focus, and for a moment after a tap. Box select is Shift + drag; a token is raised or lowered with a right
 drag or with **Raise or Lower** in its menu.
@@ -319,6 +321,52 @@ sky and over a host app's own skybox images alike. Rain and snow are one set of 
 (about the cost of a still frame), storms flicker now and then (well under three flashes a second), and fog fades the
 distance. Visitors whose system asks for less motion get the light, sky, clouds and fog but no falling points, drifting
 clouds or lightning.
+
+## Sound
+
+With the `sounds` option the viewer plays sound in three layers at once, plus music:
+
+- **Weather and time**, from the Ambience presets: rain, a storm (with thunder a moment after each flash of
+  lightning, or now and then when no lightning is drawn), wind for cloud, snow and fog; birds at dawn and crickets at
+  dusk and night, which go quiet while it rains or snows.
+- **Scene**, a row in the host's Ambience panel: **Tavern**, **Battle**, **Cave**, **Forest**, **Market** or
+  **Dungeon**. Tavern, Cave and Dungeon are indoors: the weather and time of day then go through a low-pass filter at
+  a lower volume, so a storm heard from inside a tavern is a dull rumble (a cave hears the least).
+- **Effects** for each person: dice (`tabletop.playSound('dice')` from the host app), doors opening and closing, a
+  token put down, pings.
+- **Music**, another row: **Explore**, **Town**, **Tavern** or **Battle**.
+
+The server keeps the scene and music in the room (`updateScene`, `updateMusic`), so everyone hears the host's choices,
+and the card beside the compass names the scene. Everyone's **Sound** button sets their own on/off and volume for
+Ambience, Music and Effects, kept in their browser (`localStorage`, key `tabletop-sound`).
+
+It stays light: nothing is created or downloaded before the person's first click or key press in the viewer (browsers
+allow no sound before that anyway), then only the files the room needs, once each. Loops use the browser's own looping,
+so nothing runs per frame. `src/sound.ts` has the mix (which file, how loud, how much indoors muffles) and the settings,
+tested on their own; `src/audio.js` plays it with Web Audio.
+
+No sound files ship with this package. `sounds.json` in the `sounds` folder names them:
+
+```json
+{
+  "version": 1,
+  "files": {
+    "rain": { "src": "rain.m4a", "rate": 32000, "length": 20.5, "loop": true },
+    "effects": {
+      "src": "effects.m4a",
+      "rate": 44100,
+      "length": 5.66,
+      "clips": { "dice-1": [0.15, 0.63] }
+    }
+  }
+}
+```
+
+Loops are `rain`, `storm`, `wind`, `dawn`, `night`, `tavern`, `fire`, `market`, `crowd`, `battle`, `drips`, `cave`,
+`dungeon`, `forest` and `music-explore`, `music-town`, `music-tavern`, `music-battle`; each should end where it begins.
+Clips (`[start, length]` in seconds, in any file) are `dice`, `door-open`, `door-close`, `token`, `ping` and `thunder`,
+each optionally numbered (`dice-1`, `dice-2`) for variety. `length` and `rate` let the viewer skip the silence some
+browsers leave at the start of decoded AAC. Anything missing stays silent.
 
 ## Assets
 
