@@ -34,6 +34,10 @@ import { createFog, attachDepth } from './fog';
 import { createPing } from './ping.js';
 import { addWallUvs, createWallMaterial, wallTileSize } from './wall-texture';
 import { createWallModel } from './wall-model.js';
+import { startPictureMotion, updateTokenMotion, resetTokenMotion } from './token-motion.js';
+import { createAnimatedPictures } from './animated-picture.js';
+import { createModelLibrary, PROP_PREFIX } from './model-library.js';
+import { newCharacterMotion, updateCharacters, resetCharacters } from './character-motion.js';
 import { showToast, createBanner, escapeHtml, hasWebGL } from './ui';
 import * as walls from './walls';
 import * as grid from './grid';
@@ -103,6 +107,9 @@ if (!hasWebGL()) {
 }
 
 const demo = options.demo;
+// Near the top: tokens can be built while the rest of this function is still being set up.
+const animatedPictures = createAnimatedPictures();
+const modelLibrary = createModelLibrary(options);
 const dev = !!options.debug;
 // Camera to move to once the room has loaded (set when switching rooms).
 let focus = options.focus ? Object.assign({}, options.focus) : {};
@@ -354,6 +361,16 @@ map.menus.door = new ContextMenu( {
   }
 );
 
+map.menus.prop = new ContextMenu( {
+    'parent': root,
+    'theme': 'default',
+      'items': [
+        {'icon': 'open_with', 'name': 'Turn and Resize',  action: (e) => showPropHandles()  },
+        {'icon': 'delete', 'name': 'Remove Prop',  action: (e) => removePlaneImage(e)  },
+      ]
+  }
+);
+
 map.menus.wallPoint = new ContextMenu( {
     'parent': root,
     'theme': 'default',
@@ -378,6 +395,10 @@ function getDefaultItems(kind = 'floor') {
 	}
 
 	items.push({'icon': 'add_photo_alternate', 'name': 'Add Image',  action: (e) => addPlaneImage(e)  });
+
+	if (kind != 'plane' && modelLibrary.hasProps) {
+		items.push({'icon': 'chair', 'name': 'Add Prop',  action: (e) => openPropPane()  });
+	}
 
 	if (kind == 'plane') {
 		items.push({'icon': 'hide_image', 'name': 'Remove Image',  action: (e) => removePlaneImage(e)  });
@@ -538,6 +559,10 @@ function init() {
 	  		undo();
 	  		return;
 	  	}
+	  }
+
+	  if (isDM && map.toggleMode == 'plane' && !isTyping(e) && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat && e.code === 'KeyR') {
+	  	turnActiveProps();
 	  }
 
 	  if (e.ctrlKey) {
@@ -1018,6 +1043,7 @@ function init() {
 
 			if (typeof(plane) != "undefined") {
 				map.rotationControls.plane.updatePosition();
+				syncPropHeight(plane);
 			}
 		}
 	}
@@ -1078,7 +1104,7 @@ function init() {
 				}
 				else {
 					map.rotationControls.plane.snap = Math.PI / 8;
-					plane.scale.x = plane.scale.y;
+					if (!plane.isProp) { plane.scale.x = plane.scale.y; }
 				}
 			}
 		}
@@ -1728,6 +1754,8 @@ function makeTokenInstance(parent, model) {
 		if (parent.children[i].name == 'model') {
 			for (var j=0;j<parent.children[i].children.length;j++) {
 				var child = parent.children[i].children[j];
+					// a 3D character shares its geometry and material with others of its kind
+					if (!child.material) { continue; }
 				
 				if (child.material.map != null) {
 					child.material.map.dispose();
@@ -1789,6 +1817,29 @@ function makeTokenInstance(parent, model) {
 		tokenBodyReady();
 	}
 
+	var character = modelLibrary.character(model.id || model.modelId);
+
+	if (character) {
+		modelLibrary.createCharacter(character, size).then(function(instance) {
+			// the token changed model while this one was loading
+			if (parent.meshes !== modelGroup) { return; }
+
+			instance.motion = newCharacterMotion();
+			instance.body.position.y = -baseOffset;
+			modelGroup.character = instance;
+			modelGroup.geoWidth = size;
+			modelGroup.geoHeight = instance.height;
+			modelGroup.add(instance.body);
+			parent.rotation.set(0, 0, 0); // it faces the way it walks, not the camera
+
+			tokenBodyReady();
+		}, function(error) {
+			console.warn('3D character failed to load', error);
+			addFallbackBody();
+		});
+		return;
+	}
+
 	if (src === null) {
 		addFallbackBody();
 		return;
@@ -1828,6 +1879,9 @@ function makeTokenInstance(parent, model) {
 		modelGroup.uprightPosition = mesh.position.clone();
 		modelGroup.plainColor = 0xffffff;
 		modelGroup.add(mesh);
+		modelGroup.picture = mesh;
+		startPictureMotion(mesh, geoHeight);
+		animatedPictures.add(mesh, src, options.imageUrl({ kind: 'model', src: model.src, size: Math.min(textureSize, 512), quality: map.settings.maxTokenTextureQuality }));
 
 		tokenBodyReady();
 
@@ -2000,7 +2054,75 @@ function assignToken(e) {
 	}
 }
 
+// A prop (a table, a barrel, a gravestone) belongs to the map, like a map image: only the host edits it, in
+// the same place and with the same handles, and it has no base, vision, owner or portrait. So it
+// IS a map image to the server and to the code around it, one whose picture is a 3D model.
+function createProp(file, position, local, scale, rotation, planeId) {
+	var item = modelLibrary.prop(file.slice(PROP_PREFIX.length));
+	var plane = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshPhongMaterial({ color: 0x808080 }));
+
+	plane.isProp = true;
+	plane.dmSelectable = plane;
+	plane.src = file;
+	plane.position.set(position.x, walls.FLOOR_Y + 0.01, position.y); // just above the map images
+	plane.rotation.x = - Math.PI * 0.5;
+	plane.rotation.z = rotation;
+	plane.scale.set(scale.x, scale.y, 1);
+	syncPropHeight(plane);
+
+	map.hover.targets.push(plane);
+	map.translateControls.plane.translateObjects.push(plane);
+	map.scene.add(plane);
+
+	if (!planeId) {
+		planeId = newLocalId();
+	}
+
+	plane.planeId = planeId;
+	map.objects.planes[planeId] = plane;
+
+	if (local) {
+		sendMessage('update', 'addPlane', {
+			x: plane.position.x,
+			z: plane.position.z,
+			planeUploadId: file,
+			image: file,
+			tempPlaneId: planeId
+		});
+	}
+
+	if (!item) {
+		// from a library this viewer does not have: the grey box keeps it visible and removable
+		loadStateUpdate();
+		return plane;
+	}
+
+	modelLibrary.createProp(item).then(function(prop) {
+		plane.geometry.dispose();
+		plane.material.dispose();
+		plane.geometry = prop.geometry;
+		plane.material = prop.material;
+		loadStateUpdate();
+	}, function(error) {
+		console.warn('prop failed to load', error);
+		loadStateUpdate();
+	});
+
+	return plane;
+}
+
+// A prop stretched sideways gets taller with its footprint, so a big table is not a flat one.
+function syncPropHeight(plane) {
+	if (plane.isProp) {
+		plane.scale.z = Math.sqrt(Math.abs(plane.scale.x * plane.scale.y));
+	}
+}
+
 function createPlaneImage(file, planeUploadId, position, local = true, scale = new THREE.Vector2(1, 1), rotation = 0, planeId = false) {
+	if (String(file).startsWith(PROP_PREFIX)) {
+		return createProp(file, position, local, scale, rotation, planeId);
+	}
+
 	var material = new THREE.MeshLambertMaterial({
 		color: 0xffffff,
 		side: THREE.FrontSide,
@@ -2747,10 +2869,18 @@ function checkSceneClick(e, clickType) {
 					else if (clickType == 'right') {
 						setLastClickPos(e);
 						map.menuTarget = planeCheck[i].object;
-						openContextMenu(e, map.menus.defaultPlaneImage);
+						openContextMenu(e, map.menuTarget.isProp ? map.menus.prop : map.menus.defaultPlaneImage);
 						return;
 					}
 				}
+			}
+			else if (clickType == 'left' && map.local.activeProp && !clickedPlaneHandle(e)) {
+				// a click on bare floor puts the prop down: R no longer turns it, its handles go
+				if (map.scaleControls.plane.object === map.local.activeProp) {
+					hidePlaneHandles();
+				}
+				map.local.activeProp = null;
+				map.outlinePass.selectedObjects = [];
 			}
 		}
 	}
@@ -3077,9 +3207,71 @@ function doorClick(door, local = true) {
 function planeClick(plane) {
 	if (!isDM) { return false; }
 	
-	if (plane != null) {
+	if (plane != null && plane.isProp) {
+		// A prop comes at its proper size and turns in 45 degree steps with R, so it has no handles
+		// unless its menu's Turn and Resize asks for them: always there, they got in the way of
+		// dragging it. It is outlined to show which one R turns.
+		if (map.scaleControls.plane.object !== plane) {
+			hidePlaneHandles();
+		}
+		map.local.activeProp = plane;
+		map.outlinePass.selectedObjects = [plane];
+	}
+	else if (plane != null) {
+		map.local.activeProp = null;
 		map.rotationControls.plane.attach(plane);
 		map.scaleControls.plane.attach(plane);
+	}
+}
+
+// A quick click on a turn or resize handle is not a click on the floor. Hidden handles stay in
+// the scene, so only shown ones count.
+function clickedPlaneHandle(e) {
+	if (!map.scaleControls.plane.object) { return false; }
+	var handles = [map.rotationControls.plane.circle, map.scaleControls.plane.container];
+	return typeof(getClicked3DPoint(e, handles, true)) != 'undefined';
+}
+
+function hidePlaneHandles() {
+	map.rotationControls.plane.detach();
+	map.scaleControls.plane.detach();
+}
+
+// From a prop's menu: the full move, turn and resize handles of a map image, until another prop
+// is picked or the floor is clicked.
+function showPropHandles() {
+	hideContextMenu();
+	var plane = map.menuTarget;
+
+	if (plane && map.objects.planes[plane.planeId] === plane) {
+		map.local.activeProp = plane;
+		map.outlinePass.selectedObjects = [plane];
+		map.rotationControls.plane.attach(plane);
+		map.scaleControls.plane.attach(plane);
+	}
+}
+
+// R turns the picked prop (or every prop in a box selection) by 45 degrees.
+function turnActiveProps() {
+	var props = map.translateControls.plane.translateGroupObjects.filter(function(plane) { return plane.isProp; });
+	var active = map.local.activeProp;
+
+	if (props.length == 0 && active && map.objects.planes[active.planeId] === active) {
+		props = [active];
+	}
+
+	for (const plane of props) {
+		var turned = Math.round((plane.rotation.z + Math.PI / 4) / (Math.PI / 4)) * (Math.PI / 4);
+		plane.rotation.z = turned % (Math.PI * 2);
+
+		sendMessage('update', 'updatePlaneTransform', {
+			planeId: plane.planeId,
+			posX: plane.position.x,
+			posZ: plane.position.z,
+			scaleX: plane.scale.x,
+			scaleY: plane.scale.y,
+			rotZ: plane.rotation.z
+		});
 	}
 }
 
@@ -3923,7 +4115,7 @@ var BUILD_HINTS = {
 	room: 'Drag on the floor to draw a room. Right-drag turns the camera, arrow keys move it.',
 	corridor: 'Drag on the floor to draw a corridor ' + CORRIDOR_WIDTH + ' squares wide. Right-drag turns the camera.',
 	door: 'Click a wall to put a door in it, or drag a door along a wall. Click a door to turn it.',
-	plane: 'Click a map image to move, turn or resize it (hold Ctrl to do it freely). Right-click the floor to add one, or an image to change or remove it.',
+	plane: 'Click a map image to move, turn or resize it (hold Ctrl to do it freely). Drag a prop to move it and press R to turn it; its right-click menu has the turn and resize handles. Right-click the floor to add either, or an image to change or remove it.',
 	wallPoint: 'Draw walls point by point, or drag out whole rooms and corridors.'
 };
 
@@ -3931,7 +4123,7 @@ var BUILD_HINTS = {
 var EDIT_TABS = [
 	{ mode: 'wallPoint', button: 'wallMode', icon: 'view_carousel', label: 'Walls', hint: 'wallPoint' },
 	{ mode: 'door', button: 'doorMode', icon: 'door_front', label: 'Doors', hint: 'door' },
-	{ mode: 'plane', button: 'planeMode', icon: 'image', label: 'Images', hint: 'plane' }
+	{ mode: 'plane', button: 'planeMode', icon: 'image', label: modelLibrary.hasProps ? 'Images & Props' : 'Images', hint: 'plane' }
 ];
 
 function buildToolbar() {
@@ -4262,6 +4454,69 @@ function changePlanePage(folderId, parentId, offset) {
 	};
 
 	sendMessage('request', 'getPlaneImages', args);
+}
+
+// The built-in 3D characters: a folder of their own in the Tokens pane, with no server behind it.
+function openCharacterFolder() {
+	var pane = map.panes.tokens;
+	pane.body.innerHTML = '';
+
+	buildPaneItem(pane, 'Back', 'folder').element.addEventListener('click', function() {
+		addToken();
+	});
+
+	modelLibrary.characters.forEach(function(character) {
+		var image = buildPaneItem(pane, escapeHtml(character.name), 'image', modelLibrary.thumb(character));
+		image.input.image.addEventListener('click', function() {
+			getModel(character.id);
+			closePane(pane);
+		}, false);
+	});
+
+	pane.body.scrollTop = 0;
+}
+
+// Props: the library's folders, then what is in one.
+function openPropPane(folder) {
+	var pane = map.panes.props;
+	hideContextMenu();
+	pane.body.innerHTML = '';
+
+	if (!folder) {
+		modelLibrary.propFolders.forEach(function(propFolder) {
+			buildPaneItem(pane, escapeHtml(propFolder.name), 'folder').element.addEventListener('click', function() {
+				openPropPane(propFolder);
+			});
+		});
+	}
+	else {
+		buildPaneItem(pane, 'Back', 'folder').element.addEventListener('click', function() {
+			openPropPane();
+		});
+
+		folder.items.forEach(function(item) {
+			var image = buildPaneItem(pane, escapeHtml(item.name), 'image', modelLibrary.thumb(item));
+			image.input.image.addEventListener('click', function() {
+				placeProp(item);
+				closePane(pane);
+			}, false);
+		});
+	}
+
+	openPane(pane);
+	pane.body.scrollTop = 0;
+}
+
+// Placing one opens the map editor with it selected, ready to be dragged into place.
+function placeProp(item) {
+	var position = new THREE.Vector2(map.lastClickPos[0].point.x, map.lastClickPos[0].point.z);
+	var file = PROP_PREFIX + item.id;
+	var prop = createPlaneImage(file, file, position);
+
+	if (map.toggleMode != 'plane') {
+		setEditMode('plane');
+	}
+	planeClick(prop);
 }
 
 function addPlaneImage(e) {
@@ -5424,6 +5679,7 @@ function buildGui() {
 
 	//image pane
 	var imagesPane = buildPane('Images', 'plane_images');
+	buildPane('Props', 'props');
 	
 	var newPlanePane = buildPane('Images', 'new_plane_image');
 
@@ -5888,6 +6144,8 @@ function buildGui() {
 			saveSettings();
 
 			for (const [planeId, plane] of Object.entries(map.objects.planes)) {
+				if (plane.isProp) { continue; }
+
 				var src = options.imageUrl({ kind: 'plane', src: plane.src, size: map.settings.maxPlaneTextureSize, quality: map.settings.maxPlaneTextureQuality });
 				var texture = new THREE.TextureLoader().load(src);
 				plane.material.map.dispose();
@@ -6643,10 +6901,12 @@ function addAvatar(token, owner = true) {
 			avatar.addEventListener('pointerleave', hideSideTip);
 		}());
 
-		if (avatarModel.src) {
+		var avatarCharacter = modelLibrary.character(token.modelId);
+
+		if (avatarModel.src || avatarCharacter) {
 			var avatarImage = document.createElement('img');
 			avatarImage.alt = '';
-			avatarImage.src = options.imageUrl({ kind: 'model', src: avatarModel.src, size: 128, quality: 80 });
+			avatarImage.src = avatarCharacter ? modelLibrary.thumb(avatarCharacter) : options.imageUrl({ kind: 'model', src: avatarModel.src, size: 128, quality: 80 });
 			face.appendChild(avatarImage);
 		}
 		else {
@@ -7129,6 +7389,7 @@ var updateClient = {
 				
 				plane.scale.x = args.scaleX;
 				plane.scale.y = args.scaleY;
+				syncPropHeight(plane);
 				
 				plane.rotation.z = args.rotZ;
 			}
@@ -7602,6 +7863,10 @@ var clientRequest = {
 			openPane(map.panes.new_token);
 		}, false);
 
+		if (modelLibrary.characterFolder && !isFolderId(args.folderId)) {
+			buildPaneItem(map.panes.tokens, escapeHtml(modelLibrary.characterFolder), 'folder').element.addEventListener('click', openCharacterFolder);
+		}
+
 		//the plain coloured pawns are always on offer: a folder of their own, filled here, unless
 		//the list is already made of them (a server with no image library)
 		var hasPawns = (args.models || []).some(function(m) { return String(m.modelId).startsWith(DEFAULT_MODEL_PREFIX); });
@@ -8031,6 +8296,47 @@ var sph = new THREE.Spherical();
 var destroyed = false;
 var animationFrame = 0;
 var resizeObserver = { disconnect: function() {} };
+var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+var tokenMotionRunning = false;
+var tokenMotionTime = performance.now();
+
+// Token pictures that move, and GIFs that play, are for the Medium and High presets only.
+// What the camera can see this frame, for leaving the characters outside it unanimated.
+const characterView = new THREE.Frustum();
+const characterViewMatrix = new THREE.Matrix4();
+const characterBounds = new THREE.Sphere();
+
+function characterOnScreen() {
+	var camera = map.objects.camera;
+	camera.updateMatrixWorld();
+	characterViewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+	characterView.setFromProjectionMatrix(characterViewMatrix);
+
+	return function(token) {
+		characterBounds.center.copy(token.position);
+		characterBounds.radius = 2 * Math.max(1, token.scale.y || 1);
+		return characterView.intersectsSphere(characterBounds);
+	};
+}
+
+function updateTokenPictures() {
+	var now = performance.now();
+	var seconds = (now - tokenMotionTime) / 1000;
+	var on = map.settings.preset > 0 && !reducedMotion.matches;
+	tokenMotionTime = now;
+
+	if (on) {
+		updateTokenMotion(map.objects.tokens, seconds, now / 1000);
+		updateCharacters(map.objects.tokens, seconds, modelLibrary.setWalking, characterOnScreen());
+		animatedPictures.update(now, map.scene);
+	}
+	else if (tokenMotionRunning) {
+		resetTokenMotion(map.objects.tokens);
+		resetCharacters(map.objects.tokens, modelLibrary.setWalking);
+	}
+
+	tokenMotionRunning = on;
+}
 
 function animate() {
 	if (destroyed) { return; }
@@ -8049,10 +8355,12 @@ function animate() {
 	
 	if (map.settings.lookAtCam && !map.settings.view2d) {
 		for (const [tokenId, token] of Object.entries(map.objects.tokens)) {
-			if (token.settings.disableCamLook) { continue; }
+			if (token.settings.disableCamLook || (token.meshes && token.meshes.character)) { continue; }
 			token.lookAt(map.objects.camera.position.x, token.position.y, map.objects.camera.position.z);
 		}
 	}
+
+	updateTokenPictures();
 
 	map.objects.camera.getWorldDirection(dir);
   sph.setFromVector3(dir);
@@ -8222,6 +8530,7 @@ return {
 	destroy: function() {
 		destroyed = true;
 		cancelAnimationFrame(animationFrame);
+		animatedPictures.dispose();
 		clearTimeout(loadTimeout);
 		connection.close();
 		cleanups.forEach(function(cleanup) { cleanup(); });
