@@ -209,8 +209,18 @@ const handlers: { [name: string]: Handler } = {
   updateGridSize(ctx) {
     requireHost(ctx);
     const a = requireObject(ctx.args);
-    ctx.room.state.grid = { width: int(a, 'width', 1, 1000), height: int(a, 'height', 1, 1000) };
-    changed(ctx, { ...ctx.room.state.grid });
+    const width = int(a, 'width', 1, 1000);
+    const height = int(a, 'height', 1, 1000);
+    ctx.room.state.grid = { ...ctx.room.state.grid, width, height };
+    changed(ctx, { width, height });
+  },
+  updateGridShape(ctx) {
+    requireHost(ctx);
+    const shape = str(requireObject(ctx.args), 'shape');
+    if (shape !== 'square' && shape !== 'hex')
+      throw new HandlerError('shape must be square or hex');
+    ctx.room.state.grid = { ...ctx.room.state.grid, shape };
+    changed(ctx, { shape });
   },
 
   // ---- planes (map images) ----

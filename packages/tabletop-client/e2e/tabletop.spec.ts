@@ -436,6 +436,9 @@ test('camera slides across the floor at one height, like a strategy game', async
 test('ping, and a pane opened from the token menu closes the menu', async ({ page }) => {
   await page.goto('/?demo=1');
   await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  // ping once the load screen is gone: behind it the shaders warm up, which on software WebGL can
+  // hold up the frames (and so the end of a ping) for longer than the poll below waits
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
   const pings = () =>
     page.evaluate(() => {
       const map = (window as any).tabletop.debug.map;
@@ -447,9 +450,9 @@ test('ping, and a pane opened from the token menu closes the menu', async ({ pag
     map.ping(null, 0x3232a8, { x: 6, z: 3 }, false);
   });
   expect(await pings()).toBe(4); // ripple and beam each
-  await expect.poll(pings).toBe(0);
+  // a ping lasts 1.5 s, but software WebGL on a slow runner can take a while to draw the frames
+  await expect.poll(pings, { timeout: 15_000 }).toBe(0);
 
-  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
   await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
   const tokenId = (await stats(page)).tokenIds[0];
   const at = await steadyScreenPosition(page, tokenId);
@@ -875,4 +878,56 @@ test('copy and paste: Ctrl+C copies the highlighted tokens, Ctrl+V pastes them a
   await expect.poll(doors).toBe(doorsBefore * 2);
   await page.keyboard.press('Control+z');
   await expect.poll(doors).toBe(doorsBefore);
+});
+
+test('hex grid: the host switches it, tokens snap to hexes, and nothing else moves', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text());
+  });
+  await page.goto('/?demo=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+  const grid = () =>
+    page.evaluate(() => {
+      const map = (window as any).tabletop.debug.map;
+      return { shape: map.settings.gridShape, drawn: map.gridHelper.name || 'squares' };
+    });
+  const positions = () =>
+    page.evaluate(() =>
+      Object.values<any>((window as any).tabletop.debug.map.objects.tokens).map((t) => [
+        t.position.x,
+        t.position.z,
+      ]),
+    );
+  // the demo room has no shape: squares, as in every room saved before hexes
+  expect(await grid()).toEqual({ shape: 'square', drawn: 'squares' });
+  const before = await positions();
+
+  const toggle = () =>
+    page.evaluate(() => (window as any).tabletop.debug.map.local.gridShapeInput.click());
+  await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
+  await toggle();
+  expect(await grid()).toEqual({ shape: 'hex', drawn: 'hex grid' });
+  expect(await positions()).toEqual(before);
+  await page.waitForTimeout(300); // a few frames with the hex shader
+  await page.screenshot({ path: 'e2e/.results/hex-grid.png' });
+
+  // a dropped token lands in the middle of the hex under it (row 12 is at z = 12 * sqrt(3) / 2)
+  const spot = await dragAndLook(page, '1', [
+    [8, 10],
+    [8.3, 10.6],
+  ]);
+  expect(spot.x).toBe(8);
+  expect(spot.z).toBeCloseTo((12 * Math.sqrt(3)) / 2, 5);
+  expect(spot.area).toBeGreaterThan(0);
+
+  await toggle();
+  expect(await grid()).toEqual({ shape: 'square', drawn: 'squares' });
+  const square = await dragAndLook(page, '1', [[8.3, 10.6]]);
+  expect([square.x, square.z]).toEqual([8, 11]);
+  expect(errors).toEqual([]);
 });

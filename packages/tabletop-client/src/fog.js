@@ -1,79 +1,128 @@
-// Fog of war, drawn as a soft shader instead of a flat black box.
+// Fog of war: one solid black volume with a soft edge, drawn as a screen pass after the scene.
 //
 // What the viewer already works out stays as it was: when a token is picked, the vision code
 // raycasts around it and ends up with a polygon of what it can see. This file turns that polygon
 // into three layers, kept on small canvases (about 16 pixels per grid cell, never more than 2048
 // pixels a side) that the fog shader reads:
-//   visible now   the polygon, blurred so its edge is soft
+//   visible now     the polygon, blurred so its edge is soft
 //   the one before  the previous polygon, so the change fades over about 0.4 s
-//   explored      everything that was ever visible in this browser (never sent anywhere: the
-//                 server's fog data is untouched)
-// The shader draws deep, drifting fog over what was never seen (fully opaque at full strength, so
-// unrevealed walls never show through), a thinner, dimmer veil over what was seen before but is
-// out of sight now, and nothing over what is visible. Wisps of noise drift across the fog and
-// curl into the edge of the vision, so the edge is never a hard outline.
+//   explored        everything that was ever visible in this browser (never sent anywhere: the
+//                   server's fog data is untouched)
+//
+// The fog is not made of planes. It is a volume over the map, from below the floor up to
+// FOG_HEIGHT (solid) and fading out over the next FADE_HEIGHT: wherever the ground has not been
+// seen, everything in that column is fog. The pass reads the depth of the scene, so for every pixel
+// it knows the stretch of the view ray from the camera to the first thing it hits, and walks that
+// stretch through the volume: the pixel is as dark as the thickest fog the ray passes through on
+// the way. So:
+//   - looking down, the fog over a spot is exactly as thick as the ground there is unseen, and the
+//     edge of the view fades out as smoothly as the blurred layer does;
+//   - looking from a low angle, a ray that slips under the edge into unseen ground meets fog and
+//     stops there, so nothing can be seen under or through it, with no sides or curtains to build;
+//   - a camera close to (or in) the fog is covered too, since the walk starts at the camera;
+//   - there is one edge, so no planes overlap and no seams show.
+// The floor fades out just inside the edge of what the token sees and is black from the edge on,
+// so nothing past the edge shows; walls and tokens on the edge stay lit. The black has faint, slow
+// swirls in two layers (one at the top of the fog, one deeper) that slide past each other as the
+// camera moves; they are worked out once per pixel, only where there is fog.
+//
 // `material.opacity` still sets how strong the fog is (1 for players, 0.6 for the host's
-// translucent view, 0 for the clear view); the rest of the viewer keeps changing it as before.
+// translucent view, 0 for the clear view); the rest of the viewer keeps changing it as before. In
+// the translucent view, what was explored before shows through a thinner veil.
 //
-// The fog is a slab, not a sheet: besides the top at FOG_HEIGHT it has vertical sides, so it cannot
-// be seen under from a low camera. A skirt runs round the edge of the map, and a curtain stands just
-// outside the edge of what the token sees now, so looking out of the visible area sideways meets a
-// wall of fog instead of the floor and walls under the top. The sides use the same shader: each side
-// fragment reads the layers a little way into the fog behind it (`aSample`), so a side is solid
-// where that ground is unseen, a veil where it was explored (host's view) and clear where it is
-// visible. It is all one mesh in world coordinates, one draw call; the curtains are rebuilt (a quad
-// per polygon edge) with each new view.
+// The pass needs the depth of the scene: the composer's render targets must carry a depth texture
+// (`attachDepth`). Pings are drawn after the fog, on their own layer (OVERLAY_LAYER), so a ping in
+// the fog still shows.
 //
-// The camera does not draw anything nearer than its near plane (1 unit), so close to the fog the
-// near plane slices the top off and the ground under it would show (zoomed right in, the camera sits
-// at y = 2.1, closer than that to the top at 1.55). A cap fixes that, and also the camera being
-// inside the fog: a quad laid on the near plane every frame, drawn over everything, that shows the
-// same fog wherever the near plane is inside the slab and nothing elsewhere. It is only drawn while
-// the near plane dips below the top.
-//
-// setSimple(true) is for slow devices (the Low graphics setting): the same layers at half the
-// resolution, and a shader with no noise, so the fog is a flat, soft-edged shade that costs about
-// as much as a textured plane.
+// setSimple(true) is for slow devices (the Low graphics setting): half-size layers, fewer and longer
+// steps along each ray, and plain black with no swirls.
 
 import * as THREE from 'three';
+import { Pass, FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 
+// objects on this layer are drawn after the fog (the main render leaves them out)
+export var OVERLAY_LAYER = 3;
+
+// everything up to this height over unseen ground is fog (walls are 2 high from y = -0.5)
 var FOG_HEIGHT = 1.55;
+// above it the fog thins out over this much, so its top has no hard line seen from the side
+var FADE_HEIGHT = 0.3;
+var FOG_BOTTOM = -0.6;
 var MAX_TEXTURE = 2048;
 var PIXELS_PER_CELL = 16;
 var SIMPLE_PIXELS_PER_CELL = 8;
 var FADE_SECONDS = 0.4;
-// the sides reach down below the floor (walls stand on y = -0.5)
-var FOG_BOTTOM = -0.6;
-// how far outside the edge of the view the curtain stands, and how far further out it looks to
-// decide how thick it is there (in grid cells)
-var CURTAIN_OFFSET = 0.3;
-var SIDE_SAMPLE = 0.4;
-// the cap sits just past the near plane (normalised device depth -1 is the near plane itself)
-var CAP_DEPTH = -0.999;
+// how soft the edge of the view is: the blur's spread, in grid cells. The floor fades out over about
+// two of these inside the edge (fully clear where the blurred polygon reaches FLOOR_CLEAR) and is
+// black from the edge on; the air, walls and tokens are clear up to the edge and black about one
+// spread beyond it (where it is down to AIR_FOG). The vision polygon reaches a wall's far face, so
+// walls on the edge stay lit.
+var EDGE_BLUR = 0.25;
+var FLOOR_CLEAR = 0.97;
+var AIR_FOG = 0.12;
+// the floor is at y = -0.5; anything this close above it counts as floor
+var FLOOR_Y = -0.5;
+// the deeper layer of swirls sits this high (the top layer at FOG_HEIGHT)
+var SWIRL_DEEP = 0.0;
+// how far apart (across the floor, in cells) the shader looks along a ray, and how many looks at most
+var STEP = 0.2;
+var MAX_STEPS = 64;
+var SIMPLE_STEP = 0.5;
+var SIMPLE_MAX_STEPS = 12;
+// how much of the host's view the fog over explored ground hides
+var VEIL = 0.5;
 
 var vertexShader = [
-  'attribute vec2 aSample;',
-  'varying vec3 vWorld;',
-  'varying vec2 vSample;',
+  'varying vec2 vUv;',
   'void main() {',
-  '	vec4 world = modelMatrix * vec4(position, 1.0);',
-  '	vWorld = world.xyz;',
-  '	vSample = aSample;',
-  '	gl_Position = projectionMatrix * viewMatrix * world;',
+  '	vUv = uv;',
+  '	gl_Position = vec4(position.xy, 0.0, 1.0);',
   '}',
 ].join('\n');
 
 var fragmentShader = [
-  'varying vec3 vWorld;',
-  'varying vec2 vSample;',
-  'uniform vec2 uGrid;',
+  'varying vec2 vUv;',
+  'uniform sampler2D tColor;',
+  'uniform sampler2D tDepth;',
   'uniform sampler2D uVisible;',
   'uniform sampler2D uPrevious;',
   'uniform sampler2D uExplored;',
+  'uniform vec2 uGrid;',
   'uniform float uMix;',
-  'uniform float uTime;',
   'uniform float uStrength;',
+  'uniform float uVeil;',
+  'uniform float uStep;',
+  'uniform float uTime;',
+  'uniform mat4 uProjectionInverse;',
+  'uniform mat4 uCameraWorld;',
   '',
+  'vec3 unproject(float depth) {',
+  '	vec4 view = uProjectionInverse * vec4(vUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);',
+  '	return (uCameraWorld * vec4(view.xyz / view.w, 1.0)).xyz;',
+  '}',
+  '',
+  '// How much fog stands over this spot: 1 where the ground is unseen, 0 where it is seen, soft',
+  '// between. The blurred polygon is 0.5 on its edge. `lo`/`hi` say where the fade sits: the floor',
+  '// fades out inside the edge and is black from the edge on; the air (and walls and tokens) stays',
+  '// clear up to the edge, so a wall the token sees is never darkened.',
+  'float cover(vec3 p, float lo, float hi) {',
+  '	// grid cell centres are whole numbers, the map starts half a cell before cell 0',
+  '	vec2 uv = vec2((p.x + 0.5) / uGrid.x, 1.0 - (p.z + 0.5) / uGrid.y);',
+  '	float seen = texture2D(uVisible, uv).r;',
+  '	if (uMix < 1.0) { seen = mix(texture2D(uPrevious, uv).r, seen, smoothstep(0.0, 1.0, uMix)); }',
+  '	float fog = 1.0 - smoothstep(lo, hi, seen);',
+  '	if (uVeil > 0.0) {',
+  '		float explored = smoothstep(lo, hi, max(texture2D(uExplored, uv).r, seen));',
+  '		fog *= 1.0 - ' + VEIL.toFixed(3) + ' * explored * uVeil;',
+  '	}',
+  '	return fog * (1.0 - smoothstep(' +
+    FOG_HEIGHT.toFixed(3) +
+    ', ' +
+    (FOG_HEIGHT + FADE_HEIGHT).toFixed(3) +
+    ', p.y));',
+  '}',
+  '',
+  '#ifndef FOG_SIMPLE',
   'float hash(vec2 p) {',
   '	p = fract(p * vec2(123.34, 456.21));',
   '	p += dot(p, p + 45.32);',
@@ -83,69 +132,75 @@ var fragmentShader = [
   '	vec2 i = floor(p);',
   '	vec2 f = fract(p);',
   '	f = f * f * (3.0 - 2.0 * f);',
-  '	float a = hash(i);',
-  '	float b = hash(i + vec2(1.0, 0.0));',
-  '	float c = hash(i + vec2(0.0, 1.0));',
-  '	float d = hash(i + vec2(1.0, 1.0));',
-  '	return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);',
+  '	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);',
   '}',
-  'float fbm(vec2 p) {',
-  '	float v = 0.0;',
-  '	float a = 0.55;',
-  '	for (int i = 0; i < 3; i++) {',
-  '		v += a * vnoise(p);',
-  '		p = p * 2.03 + vec2(17.1, 9.3);',
-  '		a *= 0.5;',
-  '	}',
-  '	return v;',
+  '// slow swirls: noise looked up at a spot that two more noises push round',
+  'float swirl(vec2 p, float t) {',
+  '	vec2 push = vec2(vnoise(p + vec2(t, -0.7 * t)), vnoise(p + vec2(5.2 - 0.6 * t, 1.3 + t)));',
+  '	// turned off the grid of the noise, so its rows and columns never line up into straight lines',
+  '	return vnoise(mat2(0.8, -0.6, 0.6, 0.8) * (p + 2.2 * (push - 0.5)));',
   '}',
+  '// the colour of the fog where this ray meets it: two layers of swirls, one at the top of the fog',
+  '// and one deeper down, which slide past each other as the camera moves, so the black has depth',
+  'vec3 fogColour(vec3 a, vec3 ray, float enter, float leave) {',
+  '	float tTop = clamp((' + FOG_HEIGHT.toFixed(3) + ' - a.y) / ray.y, enter, leave);',
+  '	float tDeep = clamp((' + SWIRL_DEEP.toFixed(3) + ' - a.y) / ray.y, enter, leave);',
+  '	vec2 top = (a + ray * tTop).xz;',
+  '	vec2 deep = (a + ray * tDeep).xz;',
+  '	float near = swirl(top * 0.42, uTime * 0.05);',
+  '	float far = swirl(deep * 0.75 + 11.0, -uTime * 0.07);',
+  '	float glow = 0.65 * near * near + 0.45 * far * far * far;',
+  '	return vec3(0.055, 0.065, 0.085) * glow;',
+  '}',
+  '#endif',
+  '',
   'void main() {',
-  '	// the top has no sample offset; a side reads the ground a little way into the fog behind it',
-  '	float side = step(0.0001, dot(vSample, vSample));',
-  '	vec2 at = vWorld.xz + vSample;',
-  '	// grid cell centres are whole numbers, the map starts half a cell before cell 0',
-  '	vec2 vUv = vec2((at.x + 0.5) / uGrid.x, 1.0 - (at.y + 0.5) / uGrid.y);',
-  '#ifdef FOG_CAP',
-  '	// the cap only shows where the near plane is inside the slab over the map',
-  '	if (vWorld.y > ' +
-    FOG_HEIGHT.toFixed(3) +
-    ' || vWorld.y < ' +
-    FOG_BOTTOM.toFixed(3) +
-    ' || at.x < -0.5 || at.y < -0.5 || at.x > uGrid.x - 0.5 || at.y > uGrid.y - 0.5) discard;',
-  '#endif',
-  '	float visible = mix(texture2D(uPrevious, vUv).r, texture2D(uVisible, vUv).r, smoothstep(0.0, 1.0, uMix));',
-  "	// the memory of explored ground only shows when the fog is translucent (the host's view):",
-  '	// at full strength a player sees nothing outside what the token sees now',
-  '	float explored = smoothstep(0.0, 1.0, max(texture2D(uExplored, vUv).r, visible)) * (1.0 - smoothstep(0.9, 1.0, uStrength));',
+  '	vec4 scene = texture2D(tColor, vUv);',
+  '	gl_FragColor = scene;',
+  '	if (uStrength < 0.001) { return; }',
+  '',
+  '	// the ray from the camera (its near plane) to the first thing it hits',
+  '	float depth = texture2D(tDepth, vUv).x;',
+  '	vec3 a = unproject(0.0);',
+  '	vec3 ray = unproject(depth) - a;',
+  '	ray = mix(ray, vec3(1e-6), vec3(lessThan(abs(ray), vec3(1e-6))));',
+  '	// the part of it inside the fog volume',
+  '	vec3 lo = vec3(-0.5, ' + FOG_BOTTOM.toFixed(3) + ', -0.5);',
+  '	vec3 hi = vec3(uGrid.x - 0.5, ' + (FOG_HEIGHT + FADE_HEIGHT).toFixed(3) + ', uGrid.y - 0.5);',
+  '	vec3 t0 = (lo - a) / ray;',
+  '	vec3 t1 = (hi - a) / ray;',
+  '	vec3 near = min(t0, t1);',
+  '	vec3 far = max(t0, t1);',
+  '	float enter = max(max(near.x, near.y), max(near.z, 0.0));',
+  '	float leave = min(min(far.x, far.y), min(far.z, 1.0));',
+  '	if (leave <= enter) { return; }',
+  '',
+  '	// the thickest fog along it; the fog only changes across the floor (and near the top), so the',
+  '	// steps are spaced across the floor and a ray straight down needs only its two ends',
+  '	vec3 p0 = a + ray * enter;',
+  '	vec3 p1 = a + ray * leave;',
+  '	bool floorHit = depth < 1.0 && leave > 0.999 && p1.y < ' + (FLOOR_Y + 0.08).toFixed(3) + ';',
+  '	float fog = floorHit ? cover(p1, 0.5, ' +
+    FLOOR_CLEAR.toFixed(3) +
+    ') : cover(p1, ' +
+    AIR_FOG.toFixed(3) +
+    ', 0.5);',
+  '	float steps = clamp(ceil(length(p1.xz - p0.xz) / uStep), 1.0, float(FOG_STEPS));',
+  '	for (int i = 0; i < FOG_STEPS; i++) {',
+  '		if (float(i) >= steps || fog > 0.999) { break; }',
+  '		fog = max(fog, cover(mix(p0, p1, float(i) / steps), ' + AIR_FOG.toFixed(3) + ', 0.5));',
+  '	}',
+  '	float alpha = fog * uStrength;',
+  '	if (alpha < 0.002) { return; }',
+  '',
   '#ifdef FOG_SIMPLE',
-  '	// flat fog: no noise, no glow, the soft edge comes from the blurred layers alone',
-  '	float clear = smoothstep(0.08, 0.92, visible);',
-  '	float alpha = mix(1.0, 0.52, explored) * (1.0 - clear);',
-  '	vec3 col = mix(vec3(0.030, 0.043, 0.067), vec3(0.11, 0.14, 0.18), 0.5 * explored);',
+  '	vec3 colour = vec3(0.0);',
   '#else',
-  '	// two layers of noise drifting in different directions',
-  '	// (on a side the noise runs along the side and up it, so it drifts across the face)',
-  '	vec2 across = vSample / max(length(vSample), 0.0001);',
-  '	vec2 np = mix(vWorld.xz, vec2(dot(vWorld.xz, vec2(-across.y, across.x)), vWorld.y * 1.4), side);',
-  '	float slow = fbm(np * 0.32 + vec2(uTime * 0.035, uTime * 0.021));',
-  '	float fast = fbm(np * 0.85 + vec2(-uTime * 0.06, uTime * 0.03) + 7.3);',
-  '	float wisp = slow * 0.65 + fast * 0.35;',
-  '	// along the edge of what is visible the wisps push the boundary in and out (on the top only)',
-  '	float edge = 4.0 * visible * (1.0 - visible) * (1.0 - side);',
-  '	float v = clamp(visible + (wisp - 0.5) * 0.9 * edge, 0.0, 1.0);',
-  '	float clear = smoothstep(0.08, 0.92, v);',
-  '	// deep fog over the never-seen, a thin dim veil over what was seen before',
-  '	// (the never-seen fog is solid: the wisps only change its colour, never let the map through)',
-  '	float density = mix(1.0, 0.52, explored);',
-  '	float alpha = density * (1.0 - clear);',
-  '	alpha *= mix(1.0, 0.9 + 0.1 * smoothstep(0.25, 0.75, wisp), explored);',
-  '	vec3 deep = vec3(0.030, 0.043, 0.067);',
-  '	vec3 pale = vec3(0.19, 0.24, 0.31);',
-  '	vec3 col = mix(deep, pale, smoothstep(0.35, 0.8, wisp) * mix(0.8, 0.35, explored));',
-  '	// near the edge the fog glows a little where it is thin',
-  '	col += vec3(0.05, 0.07, 0.09) * edge * (1.0 - clear) * (0.5 + wisp);',
+  '	vec3 colour = fogColour(a, ray, enter, leave);',
   '#endif',
-  '	gl_FragColor = vec4(col, alpha * uStrength);',
+  '	// a touch of dither, so the dark gradient of the edge shows no bands',
+  '	float dither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) - 0.5;',
+  '	gl_FragColor = vec4(max(mix(scene.rgb, colour, alpha) + dither * alpha / 255.0, 0.0), scene.a);',
   '}',
 ].join('\n');
 
@@ -168,6 +223,64 @@ function makeTexture(canvas) {
   return texture;
 }
 
+// Gives the composer's two render targets a depth texture each, which the fog pass reads. Call it
+// before the composer first renders.
+export function attachDepth(composer) {
+  [composer.renderTarget1, composer.renderTarget2].forEach(function (target) {
+    if (!target.depthTexture) {
+      target.depthTexture = new THREE.DepthTexture(target.width, target.height);
+    }
+  });
+}
+
+// The pass: copies the scene through the fog shader, then draws the overlay layer on top.
+class FogPass extends Pass {
+  constructor(material) {
+    super();
+    this.material = material;
+    this.quad = new FullScreenQuad(material);
+    this.scene = null;
+    this.camera = null;
+    this.overlay = null;
+  }
+
+  render(renderer, writeBuffer, readBuffer) {
+    var uniforms = this.material.uniforms;
+    var camera = this.camera;
+
+    uniforms.tColor.value = readBuffer.texture;
+    uniforms.tDepth.value = readBuffer.depthTexture;
+    if (camera) {
+      // the main render has just brought the camera's matrices up to date
+      uniforms.uProjectionInverse.value.copy(camera.projectionMatrixInverse);
+      uniforms.uCameraWorld.value.copy(camera.matrixWorld);
+    }
+    // without the scene's depth (or a camera) there is nothing to measure against: no fog
+    var strength = uniforms.uStrength.value;
+    if (!readBuffer.depthTexture || !camera) {
+      uniforms.uStrength.value = 0;
+    }
+
+    renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
+    this.quad.render(renderer);
+    uniforms.uStrength.value = strength;
+
+    if (this.scene && camera && this.overlay && this.overlay()) {
+      var layers = camera.layers.mask;
+      var autoClear = renderer.autoClear;
+      camera.layers.set(OVERLAY_LAYER);
+      renderer.autoClear = false;
+      renderer.render(this.scene, camera);
+      renderer.autoClear = autoClear;
+      camera.layers.mask = layers;
+    }
+  }
+
+  dispose() {
+    this.quad.dispose();
+  }
+}
+
 export function createFog(gridWidth, gridHeight) {
   var fog = {
     width: 0,
@@ -178,82 +291,33 @@ export function createFog(gridWidth, gridHeight) {
     mix: 1,
     start: performance.now(),
   };
-  var geometry = null;
 
   var material = new THREE.ShaderMaterial({
     vertexShader: vertexShader,
     fragmentShader: fragmentShader,
-    transparent: true,
+    depthTest: false,
     depthWrite: false,
-    side: THREE.DoubleSide,
-    defines: {},
+    blending: THREE.NoBlending,
+    defines: { FOG_STEPS: MAX_STEPS },
     uniforms: {
+      tColor: { value: null },
+      tDepth: { value: null },
       uVisible: { value: null },
       uPrevious: { value: null },
       uExplored: { value: null },
       uMix: { value: 1 },
-      uTime: { value: 0 },
       uStrength: { value: 1 },
+      uVeil: { value: 0 },
+      uStep: { value: STEP },
+      uTime: { value: 0 },
       uGrid: { value: new THREE.Vector2(1, 1) },
+      uProjectionInverse: { value: new THREE.Matrix4() },
+      uCameraWorld: { value: new THREE.Matrix4() },
     },
   });
   material.opacity = 1;
 
-  var mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
-  mesh.name = 'fog';
-  mesh.renderOrder = 100;
-  mesh.frustumCulled = false;
-
-  // the cap (see the top of the file): a child of the fog, so it hides with it; same uniforms
-  var capMaterial = new THREE.ShaderMaterial({
-    vertexShader: vertexShader,
-    fragmentShader: fragmentShader,
-    transparent: true,
-    depthWrite: false,
-    depthTest: false,
-    side: THREE.DoubleSide,
-    defines: { FOG_CAP: '' },
-    uniforms: material.uniforms,
-  });
-  var capGeometry = new THREE.BufferGeometry();
-  capGeometry.setAttribute('position', new THREE.Float32BufferAttribute(new Array(12).fill(0), 3));
-  capGeometry.setAttribute('aSample', new THREE.Float32BufferAttribute(new Array(8).fill(0), 2));
-  capGeometry.setIndex([0, 1, 2, 0, 2, 3]);
-  var cap = new THREE.Mesh(capGeometry, capMaterial);
-  cap.name = 'fog cap';
-  cap.renderOrder = 101;
-  cap.frustumCulled = false;
-  cap.visible = false;
-  mesh.add(cap);
-  var capCorners = [
-    [-1.01, -1.01],
-    [1.01, -1.01],
-    [1.01, 1.01],
-    [-1.01, 1.01],
-  ];
-  var corner = new THREE.Vector3();
-
-  // Lays the cap on the camera's near plane; shown only when some of it is below the top.
-  function placeCap(camera) {
-    cap.visible = false;
-    if (!camera || !camera.projectionMatrixInverse) {
-      return;
-    }
-
-    camera.updateMatrixWorld();
-    var position = capGeometry.getAttribute('position');
-    var lowest = Infinity;
-    capCorners.forEach(function (c, i) {
-      corner
-        .set(c[0], c[1], CAP_DEPTH)
-        .applyMatrix4(camera.projectionMatrixInverse)
-        .applyMatrix4(camera.matrixWorld);
-      position.setXYZ(i, corner.x, corner.y, corner.z);
-      lowest = Math.min(lowest, corner.y);
-    });
-    position.needsUpdate = true;
-    cap.visible = lowest < FOG_HEIGHT;
-  }
+  var pass = new FogPass(material);
 
   function disposeLayers() {
     if (!fog.layers) {
@@ -266,120 +330,17 @@ export function createFog(gridWidth, gridHeight) {
     fog.layers = null;
   }
 
-  // (Re)builds the plane and the canvases for a grid of this size.
+  // (Re)builds the canvases for a grid of this size.
   function setGrid(width, height) {
     fog.width = width;
     fog.height = height;
 
     material.uniforms.uGrid.value.set(Math.max(1, width), Math.max(1, height));
-    buildGeometry(null);
 
     disposeLayers();
     makeLayers();
     fog.mix = 1;
     clearLayers();
-  }
-
-  // The top, the skirt round the map and (for a view polygon) its curtains, as one geometry in
-  // world coordinates. `aSample` is where each fragment reads the layers, relative to itself.
-  function buildGeometry(points) {
-    var positions = [];
-    var samples = [];
-    var x0 = -0.5;
-    var z0 = -0.5;
-    var x1 = fog.width - 0.5;
-    var z1 = fog.height - 0.5;
-
-    function vertex(x, y, z, sx, sz) {
-      positions.push(x, y, z);
-      samples.push(sx, sz);
-    }
-
-    // a vertical quad from (ax, az) to (bx, bz), reading the layers at (sx, sz) from itself
-    function side(ax, az, bx, bz, sx, sz) {
-      vertex(ax, FOG_BOTTOM, az, sx, sz);
-      vertex(bx, FOG_BOTTOM, bz, sx, sz);
-      vertex(bx, FOG_HEIGHT, bz, sx, sz);
-      vertex(ax, FOG_BOTTOM, az, sx, sz);
-      vertex(bx, FOG_HEIGHT, bz, sx, sz);
-      vertex(ax, FOG_HEIGHT, az, sx, sz);
-    }
-
-    // the skirt, reading the ground just inside the map
-    side(x0, z0, x1, z0, 0, SIDE_SAMPLE);
-    side(x1, z0, x1, z1, -SIDE_SAMPLE, 0);
-    side(x1, z1, x0, z1, 0, -SIDE_SAMPLE);
-    side(x0, z1, x0, z0, SIDE_SAMPLE, 0);
-
-    curtains(points, function (ax, az, bx, bz, nx, nz) {
-      side(ax, az, bx, bz, nx * SIDE_SAMPLE, nz * SIDE_SAMPLE);
-    });
-
-    // the top, last: the fog writes no depth, so triangles blend in buffer order, and the camera
-    // is always above the top (orbit controls keep it at y >= 2.1), so the top is always in front
-    vertex(x0, FOG_HEIGHT, z0, 0, 0);
-    vertex(x0, FOG_HEIGHT, z1, 0, 0);
-    vertex(x1, FOG_HEIGHT, z1, 0, 0);
-    vertex(x0, FOG_HEIGHT, z0, 0, 0);
-    vertex(x1, FOG_HEIGHT, z1, 0, 0);
-    vertex(x1, FOG_HEIGHT, z0, 0, 0);
-
-    var next = new THREE.BufferGeometry();
-    next.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    next.setAttribute('aSample', new THREE.Float32BufferAttribute(samples, 2));
-    if (geometry) {
-      geometry.dispose();
-    }
-    geometry = next;
-    mesh.geometry = geometry;
-  }
-
-  // One curtain per edge of the view polygon, moved CURTAIN_OFFSET outwards (so it stands behind a
-  // wall the token sees, not in its face) and stretched by as much at both ends, so the corners
-  // leave no gaps. Edges along the edge of the map are left to the skirt.
-  function curtains(points, add) {
-    if (!points || points.length < 3) {
-      return;
-    }
-
-    var area = 0;
-    points.forEach(function (p, i) {
-      var q = points[(i + 1) % points.length];
-      area += p.x * q.z - q.x * p.z;
-    });
-    var turn = area >= 0 ? 1 : -1;
-
-    function onEdge(p) {
-      var e = 0.05;
-      return (
-        p.x <= -0.5 + e ||
-        p.z <= -0.5 + e ||
-        p.x >= fog.width - 0.5 - e ||
-        p.z >= fog.height - 0.5 - e
-      );
-    }
-
-    points.forEach(function (a, i) {
-      var b = points[(i + 1) % points.length];
-      var dx = b.x - a.x;
-      var dz = b.z - a.z;
-      var length = Math.sqrt(dx * dx + dz * dz);
-
-      if (length < 1e-6 || (onEdge(a) && onEdge(b))) {
-        return;
-      }
-
-      var ux = dx / length;
-      var uz = dz / length;
-      // outwards: to the right of the edge when the polygon winds anticlockwise (x right, z up)
-      var nx = uz * turn;
-      var nz = -ux * turn;
-      var ox = nx * CURTAIN_OFFSET;
-      var oz = nz * CURTAIN_OFFSET;
-      var ex = ux * CURTAIN_OFFSET;
-      var ez = uz * CURTAIN_OFFSET;
-      add(a.x + ox - ex, a.z + oz - ez, b.x + ox + ex, b.z + oz + ez, nx, nz);
-    });
   }
 
   function cellPixels() {
@@ -406,8 +367,8 @@ export function createFog(gridWidth, gridHeight) {
     material.uniforms.uExplored.value = fog.layers[2].texture;
   }
 
-  // Switches between the soft, drifting fog and the cheap flat one. What was seen is kept: the
-  // layers are copied to the new resolution.
+  // Switches between the full fog and the cheap one. What was seen is kept: the layers are copied
+  // to the new resolution.
   function setSimple(simple) {
     simple = !!simple;
     if (simple === fog.simple) {
@@ -415,14 +376,14 @@ export function createFog(gridWidth, gridHeight) {
     }
 
     fog.simple = simple;
-    [material, capMaterial].forEach(function (m) {
-      if (simple) {
-        m.defines.FOG_SIMPLE = '';
-      } else {
-        delete m.defines.FOG_SIMPLE;
-      }
-      m.needsUpdate = true;
-    });
+    material.defines.FOG_STEPS = simple ? SIMPLE_MAX_STEPS : MAX_STEPS;
+    if (simple) {
+      material.defines.FOG_SIMPLE = '';
+    } else {
+      delete material.defines.FOG_SIMPLE;
+    }
+    material.uniforms.uStep.value = simple ? SIMPLE_STEP : STEP;
+    material.needsUpdate = true;
 
     if (!fog.layers || cellPixels() === fog.scale) {
       return;
@@ -460,7 +421,7 @@ export function createFog(gridWidth, gridHeight) {
   // Draws the polygon in white, softly, onto a layer (on top of what is there when `keep`).
   function drawPolygon(l, points, keep) {
     var ctx = l.context;
-    var blur = Math.max(1.5, fog.scale * 0.45);
+    var blur = Math.max(1.5, fog.scale * EDGE_BLUR);
 
     if (!keep) {
       ctx.globalCompositeOperation = 'source-over';
@@ -512,7 +473,6 @@ export function createFog(gridWidth, gridHeight) {
     } else {
       clearLayer(visible);
     }
-    buildGeometry(points);
   }
 
   // Nothing seen yet (a new room, or a reconnect).
@@ -523,12 +483,17 @@ export function createFog(gridWidth, gridHeight) {
 
     clearLayers();
     fog.mix = 1;
-    buildGeometry(null);
+  }
+
+  // The scene and a test for whether anything on OVERLAY_LAYER is showing (drawn after the fog).
+  function setOverlay(scene, showing) {
+    pass.scene = scene;
+    pass.overlay = showing;
   }
 
   var last = performance.now();
 
-  // Called every frame, after the camera has moved for this frame.
+  // Called every frame with the camera the scene is drawn with.
   function update(now, camera) {
     var dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
@@ -537,34 +502,35 @@ export function createFog(gridWidth, gridHeight) {
       fog.mix = Math.min(1, fog.mix + dt / FADE_SECONDS);
     }
 
+    var strength = material.opacity;
     material.uniforms.uMix.value = fog.mix;
     material.uniforms.uTime.value = (now - fog.start) / 1000;
-    material.uniforms.uStrength.value = material.opacity;
-    mesh.visible = material.opacity > 0.001;
-    if (mesh.visible) {
-      placeCap(camera);
+    material.uniforms.uStrength.value = strength;
+    // the memory of explored ground only shows when the fog is translucent (the host's view):
+    // at full strength a player sees nothing outside what the token sees now
+    material.uniforms.uVeil.value = 1 - THREE.MathUtils.smoothstep(strength, 0.9, 1);
+    if (camera) {
+      pass.camera = camera;
     }
+    // in the clear view, with no ping showing, the pass would only copy the frame: skip it
+    pass.enabled = strength > 0.001 || !!(pass.overlay && pass.overlay());
   }
 
   function dispose() {
     disposeLayers();
-    if (geometry) {
-      geometry.dispose();
-    }
     material.dispose();
-    capGeometry.dispose();
-    capMaterial.dispose();
+    pass.dispose();
   }
 
   setGrid(gridWidth, gridHeight);
 
   return {
-    mesh: mesh,
     material: material,
-    cap: cap,
+    pass: pass,
     setGrid: setGrid,
     setVision: setVision,
     setSimple: setSimple,
+    setOverlay: setOverlay,
     reset: reset,
     update: update,
     dispose: dispose,

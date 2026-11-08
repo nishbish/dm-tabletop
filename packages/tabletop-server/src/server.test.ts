@@ -263,6 +263,7 @@ describe('events and roles', () => {
     });
     send('updatePlaneImage', { planeId: plane.planeId, planeUploadId: 10, image: 'cave.png' });
     send('updateWallPoint', { wallPointId: wall.wallPointId, x: 9, z: 9 });
+    send('updateGridShape', { shape: 'square' });
     send('updateGridSize', { width: 30, height: 40 });
     send('updateMoonlight', { moonlight: 7 });
     send('updateTokenSettings', {
@@ -288,7 +289,8 @@ describe('events and roles', () => {
       planeUploadId: '10',
     });
     expect(state.wallPoints[wall.wallPointId].position).toEqual({ x: 9, z: 9 });
-    expect(state.grid).toEqual({ width: 30, height: 40 });
+    // the size keeps the shape, and the shape the size
+    expect(state.grid).toEqual({ width: 30, height: 40, shape: 'square' });
     expect(state.tokens[token.tokenId].settings.hideAvatar).toBe(true);
     expect(state.tokens[token.tokenId].settings.iconColor).toBe(0xd63a2f);
     expect(state.tokens[token.tokenId].modelId).toBe('elf');
@@ -420,6 +422,7 @@ describe('bad input', () => {
       { type: 'update', name: 'addToken', args: { modelId: 'orc', x: 0, y: 0 } },
       { type: 'update', name: 'updateTokenPosition', args: { tokenId: '999', x: 0, y: 0, z: 0 } },
       { type: 'update', name: 'updateGridSize', args: { width: 0, height: 5 } },
+      { type: 'update', name: 'updateGridShape', args: { shape: 'triangle' } },
       { type: 'update', name: 'getState', args: {} },
       { type: 'request', name: 'ping', args: { x: 1, z: 1 } },
     ];
