@@ -696,9 +696,9 @@ async function dragAndLook(page, tokenId: string, path: number[][]) {
       map.local.dmLight = 0;
       let seen = [];
       const setVision = map.mask.fog.setVision;
-      map.mask.fog.setVision = (points) => {
+      map.mask.fog.setVision = (points, from) => {
         seen = points || [];
-        return setVision(points);
+        return setVision(points, from);
       };
       const token = map.objects.tokens[tokenId];
       const controls = map.translateControls.token;
