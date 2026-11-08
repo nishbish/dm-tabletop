@@ -57,6 +57,26 @@ async function stats(page: Page) {
   return page.evaluate(() => (window as any).tabletop.getSceneStats());
 }
 
+// Where a token is on screen once the camera has finished gliding to it after the load.
+async function steadyScreenPosition(page: Page, tokenId: string) {
+  const at = () =>
+    page.evaluate((id) => (window as any).tabletop.getTokenScreenPosition(id), tokenId);
+  let last = await at();
+  await expect
+    .poll(
+      async () => {
+        await page.waitForTimeout(300);
+        const now = await at();
+        const moved = Math.abs(now.x - last.x) + Math.abs(now.y - last.y);
+        last = now;
+        return moved;
+      },
+      { timeout: 30_000, intervals: [0] },
+    )
+    .toBeLessThan(0.5);
+  return last;
+}
+
 async function waitConnected(page: Page) {
   await expect.poll(async () => (await stats(page))?.status, { timeout: 30_000 }).toBe('connected');
 }
@@ -194,6 +214,278 @@ test('offline demo works with no server', async ({ page }) => {
   expect(s.isHost).toBe(true);
   expect(s.doors).toBe(2);
   await expect(page.locator('#demo-text')).toHaveText('DEMO');
+});
+
+test('badges on chooser tiles and on the upload button', async ({ page }) => {
+  await page.goto('/?demo=1&library=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 60_000 }).toBe(4);
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 60_000 });
+  await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
+  // a spot can land on a token or a wall (another menu), so try a few
+  const open = async (item: string) => {
+    const spots = [
+      [640, 400],
+      [820, 600],
+      [480, 620],
+      [1000, 620],
+      [700, 250],
+    ];
+    let attempt = 0;
+    await expect(async () => {
+      const [x, y] = spots[attempt++ % spots.length];
+      await page.mouse.click(x, y, { button: 'right' });
+      await page
+        .locator('.show-context-menu-default')
+        .getByText(item, { exact: true })
+        .click({ timeout: 5_000 });
+    }).toPass({ timeout: 90_000 });
+  };
+  for (const item of ['Add Token', 'Add Image']) {
+    await open(item);
+    const pane = page.locator('.pane:visible');
+    await expect(pane.locator('.pane-item-badge'), item).toHaveCount(3);
+    await expect(pane.locator('.pane-button .pane-item-badge')).toHaveText('Silver');
+    await expect(
+      pane.locator('.pane-container-folder-item', { hasText: 'Paid' }).locator('.pane-item-badge'),
+    ).toHaveAttribute('data-badge', 'gold');
+    await expect(
+      pane.locator('.pane-container-folder-item', { hasText: 'Free' }).locator('.pane-item-badge'),
+    ).toHaveCount(0);
+    await expect(
+      pane.locator('.pane-container-image-item', { hasText: 'Shiny' }).locator('.pane-item-badge'),
+    ).toHaveText('Silver');
+    await pane.locator('.pane-close-button').click();
+  }
+});
+
+test('2D view: drawn from above, tokens still move, and the choice is remembered', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  const orthographic = () =>
+    page.evaluate(() => {
+      const map = (window as any).tabletop.debug.map;
+      return !!map.objects.camera.isOrthographicCamera;
+    });
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+  await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
+  const tokenId = (await stats(page)).tokenIds[0];
+
+  const turn = () =>
+    page.evaluate(() => (window as any).tabletop.debug.map.orbitControls.getAzimuthalAngle());
+  const turn3d = await turn();
+  expect(Math.abs(turn3d)).toBeGreaterThan(0.01);
+
+  await page.locator('[data-button="view2d"]').click();
+  expect(await orthographic()).toBe(true);
+  expect(await page.evaluate(() => (window as any).tabletop.debug.map.skybox.visible)).toBe(false);
+  // north is up, and right-dragging does not turn it
+  expect(await turn()).toBeCloseTo(0, 5);
+  await page.mouse.move(300, 300);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(420, 300, { steps: 5 });
+  await page.mouse.up({ button: 'right' });
+  expect(await turn()).toBeCloseTo(0, 5);
+  // a host's overlay still gets a camera with perspective, now straight above the same spot
+  const view = await page.evaluate(() => (window as any).tabletop.getView());
+  expect(view.fov).toBeGreaterThan(0);
+  expect(Math.abs(view.position[0] - view.target[0])).toBeLessThan(0.01);
+  expect(view.position[1]).toBeGreaterThan(view.target[1]);
+
+  const before = await page.evaluate(
+    (id) => (window as any).tabletop.getTokenPosition(id),
+    tokenId,
+  );
+  const from = await steadyScreenPosition(page, tokenId);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 120, from.y, { steps: 6 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => {
+      const now = await page.evaluate(
+        (id) => (window as any).tabletop.getTokenPosition(id),
+        tokenId,
+      );
+      return Math.abs(now.x - before.x) + Math.abs(now.z - before.z);
+    })
+    .toBeGreaterThan(0.5);
+
+  await page.reload();
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  expect(await orthographic()).toBe(true);
+  await page.locator('[data-button="view2d"]').click();
+  expect(await orthographic()).toBe(false);
+});
+
+test('camera slides across the floor at one height, like a strategy game', async ({ page }) => {
+  await page.goto('/?demo=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+  await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
+  // skip the glide to the first token, and no easing, so each move has finished by the next frame
+  await expect
+    .poll(() => page.evaluate(() => (window as any).tabletop.debug.map.orbitControls.animating))
+    .toBe(true);
+  await page.evaluate(() => {
+    const map = (window as any).tabletop.debug.map;
+    const c = map.orbitControls;
+    map.objects.camera.position.copy(c.newPosition);
+    c.target.copy(c.newTarget);
+    c.animating = false;
+    map.settings.cameraDamping = 0;
+    c.enableDamping = false;
+  });
+  const camera = () =>
+    page.evaluate(() => {
+      const map = (window as any).tabletop.debug.map;
+      const c = map.orbitControls;
+      return {
+        y: map.objects.camera.position.y,
+        target: c.target.toArray(),
+        tilt: c.getPolarAngle(),
+        turn: c.getAzimuthalAngle(),
+      };
+    });
+  const steady = async () => {
+    let last = await camera();
+    await expect
+      .poll(
+        async () => {
+          await page.waitForTimeout(200);
+          const now = await camera();
+          const moved = Math.abs(now.y - last.y) + Math.abs(now.target[0] - last.target[0]);
+          last = now;
+          return moved;
+        },
+        { timeout: 30_000, intervals: [0] },
+      )
+      .toBeLessThan(1e-4);
+    return last;
+  };
+  const across = (a: number[], b: number[]) => Math.hypot(b[0] - a[0], b[2] - a[2]);
+
+  // left drag on the sky above the room: the view slides, its height stays put
+  let before = await steady();
+  await page.mouse.move(400, 40);
+  await page.mouse.down();
+  await page.mouse.move(250, 120, { steps: 6 });
+  await page.mouse.up();
+  let after = await camera();
+  expect(across(before.target, after.target)).toBeGreaterThan(0.5);
+  expect(after.y).toBeCloseTo(before.y, 4);
+  expect(after.target[1]).toBeCloseTo(before.target[1], 4);
+
+  // W slides forward, the way the camera faces, at the same height
+  before = after;
+  // held until it has gone some way: software WebGL on CI draws only a few frames a second
+  await page.keyboard.down('KeyW');
+  await expect
+    .poll(async () => across(before.target, (await camera()).target), { timeout: 20_000 })
+    .toBeGreaterThan(0.5);
+  await page.keyboard.up('KeyW');
+  after = await camera();
+  const forward = [-Math.sin(before.turn), -Math.cos(before.turn)];
+  const moved = [after.target[0] - before.target[0], after.target[2] - before.target[2]];
+  expect(moved[0] * forward[0] + moved[1] * forward[1]).toBeGreaterThan(0.5);
+  expect(after.y).toBeCloseTo(before.y, 4);
+
+  // Q turns the view round the spot it looks at, without tilting or lifting it
+  before = after;
+  await page.keyboard.down('KeyQ');
+  await expect
+    .poll(async () => Math.abs((await camera()).turn - before.turn), { timeout: 20_000 })
+    .toBeGreaterThan(0.2);
+  await page.keyboard.up('KeyQ');
+  after = await camera();
+  expect(after.tilt).toBeCloseTo(before.tilt, 4);
+  expect(after.y).toBeCloseTo(before.y, 4);
+
+  // the keys do nothing while typing in a text box
+  before = after;
+  await page.evaluate(() => {
+    const input = document.createElement('input');
+    input.id = 'typing-test';
+    document.body.appendChild(input);
+    input.focus();
+  });
+  await page.keyboard.down('KeyW');
+  await page.waitForTimeout(300);
+  await page.keyboard.up('KeyW');
+  after = await camera();
+  expect(across(before.target, after.target)).toBeLessThan(1e-6);
+  await page.evaluate(() => document.getElementById('typing-test')!.remove());
+
+  // the wheel changes the height
+  before = after;
+  await page.mouse.move(400, 300);
+  await page.mouse.wheel(0, 400);
+  after = await steady();
+  expect(after.y).toBeGreaterThan(before.y + 0.5);
+
+  // right drag tilts, but never down to level with the floor
+  await page.mouse.move(400, 300);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(400, 20, { steps: 10 });
+  await page.mouse.up({ button: 'right' });
+  after = await steady();
+  expect(after.tilt).toBeLessThanOrEqual((80 * Math.PI) / 180 + 1e-6);
+});
+
+test('ping, and a pane opened from the token menu closes the menu', async ({ page }) => {
+  await page.goto('/?demo=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  const pings = () =>
+    page.evaluate(() => {
+      const map = (window as any).tabletop.debug.map;
+      return map.scene.children.filter((c) => c.name == 'ping' && c.visible).length;
+    });
+  await page.evaluate(() => {
+    const map = (window as any).tabletop.debug.map;
+    map.ping(null, '0xa83232', { x: 3, z: 3 }, false);
+    map.ping(null, 0x3232a8, { x: 6, z: 3 }, false);
+  });
+  expect(await pings()).toBe(4); // ripple and beam each
+  await expect.poll(pings).toBe(0);
+
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+  await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
+  const tokenId = (await stats(page)).tokenIds[0];
+  const at = await steadyScreenPosition(page, tokenId);
+  await page.mouse.click(at.x, at.y, { button: 'right' });
+  const menu = page.locator('.show-context-menu-default');
+  await menu.locator('.context-menu-default-text', { hasText: 'Edit' }).click();
+  await expect(menu).toHaveCount(0);
+  await expect(page.locator('#iconColorInput')).toBeVisible();
+  // no upload hook in this demo: the form saves to the token, and there is no saving to a picture
+  await expect(page.locator('.pane:visible .pane-header-title')).toHaveText('Edit Token');
+  await expect(page.getByText('Token Size (grid)')).toBeVisible();
+  await expect(page.locator('#token-picture-button')).toBeHidden();
+
+  await page.evaluate(() => {
+    const input = document.querySelector('#iconColorInput') as HTMLInputElement;
+    input.value = '#d63a2f';
+    input.dispatchEvent(new Event('input'));
+  });
+  const colors = () =>
+    page.evaluate((id) => {
+      const token = (window as any).tabletop.debug.map.objects.tokens[id];
+      const face = token.avatar.querySelector('.avatar-face');
+      return [
+        token.meshes.body.material.color.getHex(),
+        token.base.material.color.getHex(),
+        face.style.backgroundColor,
+        face.textContent,
+      ];
+    }, tokenId);
+  // the demo's tokens are plain pawns: the base and the portrait take the colour too
+  expect(await colors()).toEqual([0xd63a2f, 0xd63a2f, 'rgb(214, 58, 47)', '']);
+
+  await page.locator('.pane-color-reset').click();
+  const [body, base] = await colors();
+  expect(body).toBe(base);
+  expect(body).not.toBe(0xd63a2f);
 });
 
 // A token's vision, as the area of the polygon the fog is drawn from, after dragging it along `path`.
@@ -423,4 +715,152 @@ test('the system setting for less motion wins over the graphics preset', async (
   expect(sample.angle).toBe(0);
   expect(sample.playing).toBe(false);
   await context.close();
+});
+
+test('box select: the rectangle goes away however the drag ends', async ({ page }) => {
+  await page.goto('/?demo=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+  await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
+  const at = await steadyScreenPosition(page, (await stats(page)).tokenIds[0]);
+  const rectangle = page.locator('.selectBox');
+  const selected = () =>
+    page.evaluate(() => (window as any).tabletop.debug.map.outlinePass.selectedObjects.length);
+  const clearSelection = async () => {
+    await page.evaluate(() => {
+      (window as any).tabletop.debug.map.outlinePass.selectedObjects = [];
+    });
+  };
+  const startDrag = async () => {
+    await page.keyboard.down('Shift');
+    await page.mouse.move(at.x - 50, at.y - 50);
+    await page.mouse.down();
+    await page.mouse.move(at.x + 50, at.y + 50, { steps: 6 });
+    await expect(rectangle).toBeVisible();
+  };
+
+  // Shift held for the whole drag
+  await startDrag();
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  await expect(rectangle).toHaveCount(0);
+  expect(await selected()).toBeGreaterThan(0);
+
+  // Shift let go before the button: the drag still selects, and the rectangle still goes
+  await clearSelection();
+  await startDrag();
+  await page.keyboard.up('Shift');
+  await page.mouse.move(at.x + 60, at.y + 60, { steps: 2 });
+  await expect(rectangle).toBeVisible();
+  await page.mouse.up();
+  await expect(rectangle).toHaveCount(0);
+  expect(await selected()).toBeGreaterThan(0);
+  // and select mode is off again: a plain drag turns the camera instead of drawing a box
+  expect(await page.evaluate(() => (window as any).tabletop.debug.map.selectModeActive)).toBe(
+    false,
+  );
+
+  // the window loses focus mid-drag (the Shift keyup then goes elsewhere)
+  await startDrag();
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await expect(rectangle).toHaveCount(0);
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  expect(await page.evaluate(() => (window as any).tabletop.debug.map.selectModeActive)).toBe(
+    false,
+  );
+});
+
+test('map images: the floor and image menus, and Change Image keeps the place', async ({
+  page,
+}) => {
+  await page.goto('/?demo=1');
+  await expect.poll(async () => (await stats(page))?.tokens, { timeout: 30_000 }).toBe(4);
+  await page.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
+  await page.locator('.pane:visible .pane-close-button').click(); // the demo's welcome message
+  await steadyScreenPosition(page, (await stats(page)).tokenIds[0]);
+
+  const square =
+    "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20'><rect width='20' height='20' fill='green'/></svg>";
+  const wide =
+    "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='20'><rect width='40' height='20' fill='red'/></svg>";
+  const items = () =>
+    page.locator('.show-context-menu-default .context-menu-default-text').allTextContents();
+  const planes = () =>
+    page.evaluate(() =>
+      Object.entries<any>((window as any).tabletop.debug.map.objects.planes).map(([id, p]) => ({
+        id,
+        src: p.src,
+        x: p.position.x,
+        z: p.position.z,
+        scale: p.scale.x,
+        rotation: p.rotation.z,
+        renderOrder: p.renderOrder,
+        width: p.geometry.parameters ? p.geometry.parameters.width : 0,
+        height: p.geometry.parameters ? p.geometry.parameters.height : 0,
+      })),
+    );
+  // the floor: a spot left of the demo building, away from tokens and the image
+  const floor = { x: 260, y: 520 };
+  const imageAt = async () =>
+    page.evaluate(() => {
+      const map = (window as any).tabletop.debug.map;
+      const p: any = Object.values(map.objects.planes)[0];
+      const v = p.position.clone().project(map.objects.camera);
+      const r = map.canvas.getBoundingClientRect();
+      return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
+    });
+  const pickUrl = async (url: string) => {
+    const pane = page
+      .locator('.pane:visible')
+      .filter({ has: page.locator('.pane-header-title', { hasText: 'Images' }) });
+    await pane.locator('.pane-item', { hasText: 'Image URL' }).locator('input').fill(url);
+    await pane.getByText('Add image from URL', { exact: true }).click();
+  };
+
+  // outside Edit Map the floor offers tokens and images
+  await page.mouse.click(floor.x, floor.y, { button: 'right' });
+  expect(await items()).toEqual(['Add Token', 'Add Image']);
+  await page.locator('.show-context-menu-default').getByText('Add Image', { exact: true }).click();
+  await pickUrl(square);
+  await expect.poll(async () => (await planes()).length).toBe(1);
+  await expect.poll(async () => (await planes())[0].width).toBe(5);
+
+  // editing images: the floor offers images only
+  await page.locator('[data-button="editMap"]').click();
+  await page.locator('[data-button="planeMode"]').click();
+  await page.mouse.click(floor.x + 300, floor.y - 300, { button: 'right' });
+  expect(await items()).toEqual(['Add Image']);
+
+  // an image offers Change Image, Add Image (to layer another) and Remove Image; selected first,
+  // so its handles show
+  const at = await imageAt();
+  await page.mouse.click(at.x, at.y);
+  await page.mouse.click(at.x, at.y, { button: 'right' });
+  expect(await items()).toEqual(['Change Image', 'Add Image', 'Remove Image']);
+  const before = (await planes())[0];
+  await page
+    .locator('.show-context-menu-default')
+    .getByText('Change Image', { exact: true })
+    .click();
+  await pickUrl(wide);
+  // the same image, a new picture: id, place, turn and layer stay, the shape follows the picture
+  await expect.poll(async () => (await planes())[0].height).toBe(2.5);
+  const after = await planes();
+  expect(after).toEqual([{ ...before, src: wide, width: 5, height: 2.5 }]);
+
+  // and Add Image from an image's menu still adds a second one
+  await page.mouse.click(at.x, at.y, { button: 'right' });
+  await page.locator('.show-context-menu-default').getByText('Add Image', { exact: true }).click();
+  await pickUrl(square);
+  await expect.poll(async () => (await planes()).length).toBe(2);
+
+  // Remove Image
+  const top = await imageAt();
+  await page.mouse.click(top.x, top.y, { button: 'right' });
+  await page
+    .locator('.show-context-menu-default')
+    .getByText('Remove Image', { exact: true })
+    .click();
+  await expect.poll(async () => (await planes()).length).toBe(1);
 });

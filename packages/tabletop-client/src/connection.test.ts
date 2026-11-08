@@ -129,6 +129,17 @@ describe('protocol mapping, viewer -> server', () => {
       args: { planeId: '4', x: 1, z: 2, scaleX: 3, scaleY: 4, rotation: 5 },
     });
     expect(
+      toServer('updatePlaneImage', { planeId: 4, planeUploadId: 8, image: 'cave.png' }),
+    ).toEqual({
+      name: 'updatePlaneImage',
+      args: { planeId: '4', planeUploadId: '8', image: 'cave.png' },
+    });
+    expect(
+      fromServerUpdate('updatePlaneImage', { planeId: '4', planeUploadId: '8', image: 'c' }),
+    ).toEqual([
+      { name: 'updatePlaneImage', args: { planeId: '4', planeUploadId: '8', image: 'c' } },
+    ]);
+    expect(
       toServer('addWallPoint', { tempWallPointId: 9, wallPointGroupId: 7, x: 1, z: 2 })?.args,
     ).toEqual({
       wallGroupId: '7',
@@ -139,6 +150,14 @@ describe('protocol mapping, viewer -> server', () => {
     expect(toServer('removeWallPoint', { wallPointGroupId: 7, wallPointId: 3 })).toEqual({
       name: 'removeWallPoint',
       args: { wallPointId: '3' },
+    });
+    expect(toServer('updateTokenOverrides', { tokenId: 4, overrides: { size: 2 } })).toEqual({
+      name: 'updateTokenOverrides',
+      args: { tokenId: '4', overrides: { size: 2 } },
+    });
+    expect(toServer('updateTokenStats', { tokenId: 4, hp: 1, maxHp: 2, ac: 3 })).toEqual({
+      name: 'updateTokenStats',
+      args: { tokenId: '4', hp: 1, maxHp: 2, ac: 3 },
     });
     expect(toServer('assignDM', { user_id: 'bob' })).toEqual({
       name: 'assignHost',
@@ -162,7 +181,16 @@ describe('protocol mapping, viewer -> server', () => {
       tokenId: '1',
       hideAvatar: true,
       disableCamLook: false,
+      iconColor: null,
     });
+    expect(
+      toServer('updateTokenSettings', {
+        tokenId: 1,
+        hideAvatar: 0,
+        disableCamLook: 0,
+        iconColor: 0xd63a2f,
+      })?.args.iconColor,
+    ).toBe(0xd63a2f);
     expect(toServer('addToken', { x: 1, y: 0, z: 2, modelId: 5, tempTokenId: 'l1' })?.args).toEqual(
       {
         modelId: '5',
@@ -286,7 +314,16 @@ describe('protocol mapping, server -> viewer', () => {
       tokenId: '1',
       hideAvatar: 1,
       disableCamLook: 0,
+      iconColor: null,
     });
+    expect(
+      only('updateTokenSettings', {
+        tokenId: '1',
+        hideAvatar: false,
+        disableCamLook: false,
+        iconColor: 0xd63a2f,
+      }).args.iconColor,
+    ).toBe(0xd63a2f);
     // pass-through events
     expect(only('removeToken', { tokenId: '1' })).toEqual({
       name: 'removeToken',
@@ -758,6 +795,40 @@ describe('demo mode', () => {
     s.connection.send('request', 'getModels', {});
     expect(s.calls.find((c) => c.kind === 'request' && c.name === 'getModels')).toBeTruthy();
     s.connection.send('update', 'updateTokenPosition', { tokenId: '1', x: 1, y: 0, z: 1 }); // ignored
+  });
+
+  it('lists the host library for maps and tokens, with the pane request, and no URL box', async () => {
+    const demoLibrary = vi.fn(async (kind: string, args: any) => ({
+      folders: [],
+      [kind === 'plane' ? 'planes' : 'models']: [{ name: 'Cave', src: 'abc' }],
+      folderId: args.folderId,
+      parentId: 0,
+      showNext: false,
+    }));
+    const s = setup({ demo: true, demoLibrary } as any);
+    await flush();
+    s.connection.send('request', 'getPlaneImages', { folderId: 'f1', limit: 20, offset: 0 });
+    await flush();
+    expect(demoLibrary).toHaveBeenCalledWith('plane', { folderId: 'f1', limit: 20, offset: 0 });
+    const planes = s.calls.find((c) => c.kind === 'request' && c.name === 'getPlaneImages')!;
+    expect(planes.args.planes[0].name).toBe('Cave');
+    expect(planes.args.allowUrl).toBe(false);
+    s.connection.send('request', 'getModels', {});
+    await flush();
+    expect(demoLibrary).toHaveBeenLastCalledWith('model', {});
+    expect(s.calls.find((c) => c.kind === 'request' && c.name === 'getModels')).toBeTruthy();
+  });
+
+  it('says so when the host library cannot be loaded', async () => {
+    const demoLibrary = vi.fn(async () => {
+      throw new Error('offline');
+    });
+    const s = setup({ demo: true, demoLibrary } as any);
+    await flush();
+    s.connection.send('request', 'getPlaneImages', {});
+    await flush();
+    expect(s.calls.some((c) => c.kind === 'notify' && /library/.test(c.name!))).toBe(true);
+    expect(s.calls.some((c) => c.kind === 'request' && c.name === 'getPlaneImages')).toBe(false);
   });
 
   it('shows the room the host gives instead of the built-in one, without changing it', async () => {

@@ -166,6 +166,48 @@ describe('events and roles', () => {
     expect(host.messages.filter((m) => m.type === 'update')).toHaveLength(0);
   });
 
+  it('changes a map image in place, for the host only', async () => {
+    const { port, server } = await setup();
+    const { host, player } = await hostAndPlayer(port);
+    host.send({
+      type: 'update',
+      name: 'addPlane',
+      args: { x: 4, z: 5, planeUploadId: 'a', image: 'a.png' },
+    });
+    const { planeId } = (await player.nextUpdate('addPlane')).args;
+    const plane = () => server.rooms.get('r1').state.planes[planeId];
+
+    // players may not, and a bad picture changes nothing (not even the upload id)
+    player.send({
+      type: 'update',
+      name: 'updatePlaneImage',
+      args: { planeId, planeUploadId: 'b', image: 'b.png' },
+    });
+    expect((await player.nextType('error')).message).toContain('host');
+    host.send({
+      type: 'update',
+      name: 'updatePlaneImage',
+      args: { planeId, planeUploadId: 'b', image: 5 },
+    });
+    await host.nextType('error');
+    expect(plane()).toMatchObject({ planeUploadId: 'a', image: 'a.png' });
+
+    host.send({
+      type: 'update',
+      name: 'updatePlaneImage',
+      args: { planeId, planeUploadId: 'b', image: 'b.png' },
+    });
+    const got = await player.nextUpdate('updatePlaneImage');
+    expect(got.args).toEqual({ planeId, planeUploadId: 'b', image: 'b.png' });
+    expect(plane()).toEqual({
+      position: { x: 4, z: 5 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      image: 'b.png',
+      planeUploadId: 'b',
+    });
+  });
+
   it('lets owners (and only owners) move a token', async () => {
     const { port } = await setup();
     const { host, player } = await hostAndPlayer(port);
@@ -219,10 +261,16 @@ describe('events and roles', () => {
       scaleY: 4,
       rotation: 5,
     });
+    send('updatePlaneImage', { planeId: plane.planeId, planeUploadId: 10, image: 'cave.png' });
     send('updateWallPoint', { wallPointId: wall.wallPointId, x: 9, z: 9 });
     send('updateGridSize', { width: 30, height: 40 });
     send('updateMoonlight', { moonlight: 7 });
-    send('updateTokenSettings', { tokenId: token.tokenId, hideAvatar: 1, disableCamLook: false });
+    send('updateTokenSettings', {
+      tokenId: token.tokenId,
+      hideAvatar: 1,
+      disableCamLook: false,
+      iconColor: 0xd63a2f,
+    });
     send('updateTokenModel', { tokenId: token.tokenId, modelId: 'elf' });
     await player.next((m) => m.type === 'update' && m.name === 'updateTokenModel');
 
@@ -232,10 +280,17 @@ describe('events and roles', () => {
       rotation: 1.5,
       open: true,
     });
-    expect(state.planes[plane.planeId].scale).toEqual({ x: 3, y: 4 });
+    expect(state.planes[plane.planeId]).toEqual({
+      position: { x: 1, z: 2 },
+      scale: { x: 3, y: 4 },
+      rotation: 5,
+      image: 'cave.png',
+      planeUploadId: '10',
+    });
     expect(state.wallPoints[wall.wallPointId].position).toEqual({ x: 9, z: 9 });
     expect(state.grid).toEqual({ width: 30, height: 40 });
     expect(state.tokens[token.tokenId].settings.hideAvatar).toBe(true);
+    expect(state.tokens[token.tokenId].settings.iconColor).toBe(0xd63a2f);
     expect(state.tokens[token.tokenId].modelId).toBe('elf');
 
     send('removeDoor', { doorId: door.doorId });
@@ -315,6 +370,7 @@ describe('bad input', () => {
       ['updateTokenSettings', 'tokenId', { hideAvatar: true, disableCamLook: true }],
       ['assignToken', 'tokenId', { userId: 'x' }],
       ['updatePlaneTransform', 'planeId', { x: 1, z: 1, scaleX: 1, scaleY: 1, rotation: 1 }],
+      ['updatePlaneImage', 'planeId', { planeUploadId: 'x', image: 'x' }],
       ['updateDoorTransform', 'doorId', { x: 1, z: 1, rotation: 1 }],
       ['updateDoorState', 'doorId', { open: true }],
       ['updateWallPoint', 'wallPointId', { x: 1, z: 1 }],

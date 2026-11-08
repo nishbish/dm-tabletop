@@ -6,6 +6,8 @@
 //   &wallModel=walls/wall.gltf    draw the walls with this glTF model
 //   &title=Dungeons               the loading screen's title
 //   &tokenImage=/token.gif        every token shows this picture
+//   &library=1                    (with demo=1) a small token and map library with badges, and a
+//                                 locked upload button that has one too
 import { createTabletop } from '../src/index.js';
 
 const params = new URLSearchParams(location.search);
@@ -22,4 +24,25 @@ window.tabletop = createTabletop(document.getElementById('app'), {
   wallModel: params.get('wallModel') ? { src: params.get('wallModel') } : undefined,
   loadingTitle: params.get('title') || undefined,
   resolveModel: tokenImage ? (id) => ({ id, name: 'Token', src: tokenImage }) : undefined,
+  ...(params.get('library') === '1' ? badgedLibrary() : {}),
 });
+
+// A tiny library for trying `badge` and `uploadBadge` (and the browser test that checks them).
+function badgedLibrary() {
+  return {
+    uploadBadge: 'Silver',
+    uploadLocked: { title: 'Uploads', description: 'Uploads are locked on this page.' },
+    demoLibrary: async (kind) => {
+      const folders = [
+        { folderId: 'f-free', parentId: 0, name: 'Free' },
+        { folderId: 'f-paid', parentId: 0, name: 'Paid', badge: 'Gold' },
+      ];
+      const items = [{ name: 'Plain' }, { name: 'Shiny', badge: 'Silver' }];
+      const reply = { folders, folderId: 0, parentId: 0, showNext: false };
+      if (kind === 'plane')
+        reply.planes = items.map((x, i) => ({ ...x, planeUploadId: 'p' + i, src: 'p' + i }));
+      else reply.models = items.map((x, i) => ({ ...x, modelId: 'm' + i, src: 'm' + i }));
+      return reply;
+    },
+  };
+}

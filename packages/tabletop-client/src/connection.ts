@@ -6,7 +6,7 @@
 
 import { ResolvedOptions } from './config';
 import { createDemoRoom } from './demo';
-import { builtInModels, ModelResolver, modelToArgs } from './models';
+import { builtInModelList, ModelResolver, modelToArgs } from './models';
 import {
   Args,
   COALESCED,
@@ -127,22 +127,28 @@ export function createConnection(options: ResolvedOptions, sink: Sink): Connecti
 
   // ---------- local answers ----------
 
-  function legacyModelList(): Args[] {
-    return builtInModels().map((m) => ({
-      modelId: m.id,
-      name: m.name,
-      src: '',
-      baseColor: m.baseColor,
-      ownerId: '0',
-    }));
-  }
-
   // Replies the viewer needs to keep working on a server without an asset library.
-  function answerLocally(name: string): boolean {
+  function answerLocally(name: string, args: Args = {}): boolean {
+    // The offline demo can list a library the host app provides (options.demoLibrary), folders
+    // and pages included. If it fails or is not set, the plain lists below are shown.
+    if (
+      options.demo &&
+      options.demoLibrary &&
+      (name === 'getModels' || name === 'getPlaneImages')
+    ) {
+      const kind = name === 'getModels' ? 'model' : 'plane';
+      Promise.resolve()
+        .then(() => options.demoLibrary(kind, args))
+        .then((reply) => sink.request(name, { ...reply, allowUrl: false }))
+        .catch(() => {
+          note('The library could not be loaded.', 'error');
+        });
+      return true;
+    }
     if (name === 'getModels') {
       sink.request('getModels', {
         folders: [],
-        models: legacyModelList(),
+        models: builtInModelList(),
         folderId: 0,
         parentId: 0,
         showNext: false,
@@ -239,10 +245,10 @@ export function createConnection(options: ResolvedOptions, sink: Sink): Connecti
       return;
     }
     if (options.demo) {
-      if (type === 'request' && !answerLocally(name)) unsupportedMessage(name);
+      if (type === 'request' && !answerLocally(name, args)) unsupportedMessage(name);
       return;
     }
-    if (type === 'request' && unsupported.has(name) && answerLocally(name)) return;
+    if (type === 'request' && unsupported.has(name) && answerLocally(name, args)) return;
     if (!joined) {
       note('Not connected: your last change was not sent.', 'error');
       return;
@@ -367,7 +373,7 @@ export function createConnection(options: ResolvedOptions, sink: Sink): Connecti
       return;
     }
     // permission problems, vanished objects, rate limits...: tell the player, keep going
-    note(message.charAt(0).toUpperCase() + message.slice(1) + '.', 'error');
+    note(message.charAt(0).toUpperCase() + message.slice(1).replace(/\.$/, '') + '.', 'error');
   }
 
   function handleMessage(msg: Args): Promise<void> | void {

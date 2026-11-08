@@ -20,6 +20,8 @@ const required = {
     'package.json',
     'dist/tabletop-client.js',
     'dist/tabletop-client.css',
+    // the icon font, loaded by the bundle from next to itself
+    'dist/assets/material-icons.woff2',
     'types/index.d.ts',
   ],
   'initiative-tracker': ['package.json', 'dist/initiative-tracker.js', 'dist/types/index.d.ts'],

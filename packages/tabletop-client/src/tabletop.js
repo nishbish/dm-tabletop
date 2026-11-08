@@ -5,7 +5,9 @@
 // Changes to the original logic are marked with "NOTE(port)" comments explaining why.
 import './style.css';
 import './context-menu.css';
-import iconFontUrl from 'material-icons/iconfont/material-icons.woff2?url';
+// NOTE(perf): a separate file (dist/assets/), not inlined: inlined it was 171 KB of base64 that every
+// page had to download and parse before the viewer could start (see vite.config.mjs).
+import iconFontUrl from 'material-icons/iconfont/material-icons.woff2?url&no-inline';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SelectionBox } from 'three/examples/jsm/interactive/SelectionBox.js';
@@ -22,10 +24,11 @@ import { ScaleControls } from './ScaleControls.js';
 import { MouseHover } from './MouseHover.js';
 import { resolveOptions } from './config';
 import { createConnection } from './connection';
-import { swatchUrl } from './models';
+import { DEFAULT_MODEL_PREFIX, builtInModelList, swatchUrl } from './models';
 import { createDemoRoom } from './demo';
 import { createSkyboxMaterials } from './skybox';
 import { createFog } from './fog';
+import { createPing } from './ping.js';
 import { addWallUvs, createWallMaterial, wallTileSize } from './wall-texture';
 import { createWallModel } from './wall-model.js';
 import { startPictureMotion, updateTokenMotion, resetTokenMotion } from './token-motion.js';
@@ -56,6 +59,36 @@ function installIconFont() {
 
 // How strong the fog is in the host's translucent view (players always see it at full strength).
 const DM_FOG_OPACITY = 0.6;
+
+// The 2D view: an overhead camera with no perspective. This is how much floor it shows from top to
+// bottom at zoom 1 (camera.zoom does the rest) and how high it hangs; that height changes nothing
+// on screen, it only has to clear everything on the table. North is always at the top of it, and
+// that is where it looks from: the camera's turn around the table is zero.
+const ORTHO_FRAME = 20;
+const ORTHO_HEIGHT = 300;
+// A token lying flat in the 2D view: just above its base, as wide as a little less than its size.
+const FLAT_TOKEN_Y = -0.4;
+const FLAT_TOKEN_FIT = 0.95;
+
+// The 3D view's tilt, from straight down: it stops short of level so the view never runs flat
+// along the floor or under it.
+const MIN_TILT = 0;
+const MAX_TILT = 80 * Math.PI / 180;
+// The camera keys (keyCamera()). By key position, so they sit under the same fingers on any layout.
+const CAMERA_KEYS = {
+	KeyW: 'forward', ArrowUp: 'forward',
+	KeyS: 'back', ArrowDown: 'back',
+	KeyA: 'left', ArrowLeft: 'left',
+	KeyD: 'right', ArrowRight: 'right',
+	KeyQ: 'turnLeft', KeyE: 'turnRight'
+};
+// A held key slides the view this many screen heights a second, and turns it this many radians.
+const CAMERA_KEY_PAN = 0.8;
+const CAMERA_KEY_TURN = 1.6;
+const cameraKeyMove = new THREE.Vector3();
+const cameraKeyForward = new THREE.Vector3();
+const cameraKeyRight = new THREE.Vector3();
+const cameraKeyOffset = new THREE.Vector3();
 
 export function createTabletop(container, userOptions) {
 const options = resolveOptions(userOptions);
@@ -135,7 +168,6 @@ function showNotice(notice) {
 }
 
 var clock = new THREE.Clock();
-var mixer;
 
 var sessionId = 0;
 var user_id;
@@ -144,6 +176,9 @@ var isDM = demo ? true : false;
 var parseData = {
 	int: function(value) {
 			return parseInt(value);
+	},
+	flag: function(value) {
+		return !!value;
 	},
 	float: function(value) {
 			return parseFloat(value);
@@ -165,6 +200,9 @@ var parseData = {
 
 //default map
 const map = {
+	cameraKeys: new Set(),
+	cameraKeyVelocity: new THREE.Vector3(),
+	cameraKeyTime: 0,
 	objects: {
 		tokens: {},
 		planes: {},
@@ -175,6 +213,7 @@ const map = {
 		dmLight: 1,
 		daylight: 0,
 		planeListOffset: 0,
+		planeImageTarget: null,
 		planeListLimit: 24,
 		tokenListOffset: 0,
 		tokenListLimit: 24,
@@ -240,7 +279,8 @@ const map = {
 		dragUpdate: 1,
 		lookAtCam: 1,
 		gridWidth: 100,
-		gridHeight: 100
+		gridHeight: 100,
+		view2d: 0
 	}
 }
 
@@ -260,28 +300,38 @@ map.menus.default = new ContextMenu( {
   }
 );
 
-map.menus.defaultPlaneImage = new ContextMenu( {
+// While the map is being edited (Edit Map bar open) the floor offers images only.
+map.menus.defaultBuild = new ContextMenu( {
 	  'parent': root,
 	  'theme': 'default',
-	  'items': getDefaultItems(true)
+	  'items': getDefaultItems('build')
   }
 );
 
-// NOTE(port): "Edit" opens the token upload form, so it only exists when the host app supplies
-// an uploadModel() hook. (The original also built an unused "tokenChoice" menu, dropped.)
+map.menus.defaultPlaneImage = new ContextMenu( {
+	  'parent': root,
+	  'theme': 'default',
+	  'items': getDefaultItems('plane')
+  }
+);
+
+// NOTE(port): the original also built an unused "tokenChoice" menu, dropped.
 var tokenMenuItems = [
 	{'icon': 'person_add', 'name': 'Enlarge',  action: (e) => resizeToken(e, 1)  },
 	{'icon': 'person_remove', 'name': 'Shrink',  action: (e) => resizeToken(e, -1)  },
 	{'icon': 'height', 'name': 'Raise or Lower',  action: (e) => startVerticalMove()  },
-];
-if (options.uploadModel) {
-	tokenMenuItems.push({'icon': 'edit', 'name': 'Edit',  action: (e) => editModel(e)  });
-}
-tokenMenuItems.push(
+	{'icon': 'edit', 'name': 'Edit',  action: (e) => editToken(e)  },
+	...(options.tokenActions || []).map((item) => ({
+		'icon': item.icon,
+		'name': item.name,
+		action: () => {
+			hideContextMenu();
+			item.onClick(tokenInfo(map.menuTarget));
+		}
+	})),
 	{'icon': 'assignment_ind', 'name': 'Assign Token',  action: (e) => assignTokenMenu(e)  },
-	{'icon': 'remove_circle', 'name': 'Remove Token',  action: (e) => removeToken(e)  },
-	{'icon': 'tune', 'name': 'Settings',  action: (e) => openTokenSettings(e)  }
-);
+	{'icon': 'remove_circle', 'name': 'Remove Token',  action: (e) => removeToken(e)  }
+];
 
 map.menus.token = new ContextMenu( {
 	  'parent': root,
@@ -317,21 +367,36 @@ map.menus.wallPoint = new ContextMenu( {
   }
 );
 
-function getDefaultItems(planeImage = false) {
-	var items = [
-		{'icon': 'person_add_alt_1', 'name': 'Add Token',  action: (e) => addToken(e)  },
-		{'icon': 'add_photo_alternate', 'name': 'Add Image',  action: (e) => addPlaneImage(e)  }
-	];
+// kind: 'floor' (outside Edit Map), 'build' (the floor while editing) or 'plane' (a map image,
+// which can only be right-clicked while editing images). Add Image stays on an image so images
+// can be layered.
+function getDefaultItems(kind = 'floor') {
+	var items = [];
 
-	if (modelLibrary.hasProps) {
+	if (kind == 'floor') {
+		items.push({'icon': 'person_add_alt_1', 'name': 'Add Token',  action: (e) => addToken(e)  });
+	}
+
+	if (kind == 'plane') {
+		items.push({'icon': 'photo_library', 'name': 'Change Image',  action: (e) => changePlaneImageMenu(e)  });
+	}
+
+	items.push({'icon': 'add_photo_alternate', 'name': 'Add Image',  action: (e) => addPlaneImage(e)  });
+
+	if (kind != 'plane' && modelLibrary.hasProps) {
 		items.push({'icon': 'chair', 'name': 'Add Furniture',  action: (e) => openPropPane()  });
 	}
-	
-	if (planeImage) {
+
+	if (kind == 'plane') {
 		items.push({'icon': 'hide_image', 'name': 'Remove Image',  action: (e) => removePlaneImage(e)  });
 	}
-	
+
 	return items;
+}
+
+// The Edit Map bar is open (walls, doors or images).
+function isEditingMap() {
+	return isDM && map.toggleMode != 'token';
 }
 
 function getUserDetailItems() {
@@ -381,14 +446,13 @@ function init() {
 	map.scene = new THREE.Scene();
 
 	if (options.wallModel && options.wallModel.src) {
-		map.wallModel = createWallModel(options, map.scene, function() {
-			for (const wallGroup of Object.values(map.wallPointGroups)) {
-				if (wallGroup.mesh) { wallGroup.mesh.visible = false; }
-			}
-		});
+		map.wallModel = createWallModel(options, map.scene, updateWallLook);
 	}
 
 	map.objects.camera = new THREE.PerspectiveCamera( map.settings.fov, viewWidth() / viewHeight(), 1, map.settings.viewDistance );
+	map.perspCamera = map.objects.camera;
+	map.orthoCamera = new THREE.OrthographicCamera( -1, 1, 1, -1, 1, map.settings.viewDistance );
+	updateCameraFrame();
 
 	//composer
 	map.composer = new EffectComposer( map.renderer );
@@ -417,7 +481,10 @@ function init() {
 	map.orbitControls.enablePan = true;
 	map.orbitControls.enableDamping = map.settings.cameraDamping ? true : false;
 	map.orbitControls.dampingFactor = 0.05;
-	map.orbitControls.maxPolarAngle = Math.PI / 2;
+	map.orbitControls.minPolarAngle = MIN_TILT;
+	map.orbitControls.maxPolarAngle = MAX_TILT;
+	//strategy-game panning: a drag slides the view across the floor at the same height
+	map.orbitControls.screenSpacePanning = false;
 	map.orbitControls.panSpeed = 1.4;
 	map.orbitControls.endTimer = null;
 	
@@ -444,10 +511,22 @@ function init() {
 	map.orbitControls.touches.ONE = THREE.TOUCH.PAN;
 	map.orbitControls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;	
 
-	// NOTE(port): newer three.js no longer listens to the keyboard unless asked to (and uses
-	// string key names, whose defaults are the arrow keys we want).
-	map.orbitControls.listenToKeyEvents(window);
-	map.orbitControls.keyPanSpeed = 15;
+	// WASD and the arrow keys slide the view, Q and E turn it (see keyCamera()). The controls' own
+	// key handling moved one step per key repeat and also ran while typing in a text box.
+	listen(window, 'keydown', function(e) {
+		var key = CAMERA_KEYS[e.code];
+		if (!key || e.defaultPrevented || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) { return; }
+		e.preventDefault();
+		map.cameraKeys.add(key);
+	});
+
+	listen(window, 'keyup', function(e) {
+		var key = CAMERA_KEYS[e.code];
+		if (key) { map.cameraKeys.delete(key); }
+	});
+
+	//a key let go while the page was in the background never sends its keyup
+	listen(window, 'blur', function() { map.cameraKeys.clear(); });
 
 	//modifier key
 	var ctrlPressed = false;
@@ -496,6 +575,18 @@ function init() {
 	// NOTE(port): the helper's constructor changed; it is only active while select mode is on.
 	map.selectionHelper = new SelectionHelper( map.renderer, 'selectBox' );
 	map.selectionHelper.enabled = false;
+
+	// A box drag can end away from the canvas: the button let go over a pane or outside the
+	// window, the window losing focus, or the browser taking the pointer. Finish or drop the box
+	// there too, so its rectangle is never left on screen.
+	listen(window, 'pointerup', function() { endBoxSelect(true); });
+	listen(window, 'pointercancel', function() { endBoxSelect(false); });
+	listen(window, 'blur', function() {
+		ctrlPressed = false;
+		shiftPressed = false;	// the Shift keyup goes to another window
+		endBoxSelect(false);
+		setSelectMode(false);
+	});
 
 	//ambient light
 	map.objects.light = new THREE.HemisphereLight( 0xffffff, 0x777777, lightLevel(1) );
@@ -548,6 +639,8 @@ function init() {
 
 	map.orbitControls.update();
 	updateCameraFar();
+	map.local.polarAngle = map.orbitControls.getPolarAngle();
+	map.local.azimuthAngle = map.orbitControls.getAzimuthalAngle();
 
 	// NOTE(port): watch the container, not just the window, so embedding in a resizable element works.
 	if (typeof ResizeObserver !== 'undefined') {
@@ -1203,6 +1296,8 @@ function init() {
 		demoText.textContent = 'DEMO';
 		root.appendChild(demoText);
 	}
+
+	if (map.settings.view2d) { setView2d(true); }
 }
 
 function updateTokenPlaceHolder(token) {
@@ -1261,6 +1356,7 @@ function tokenScaleReposition(token) {
 	}
 
 	token.meshes.position.y = newPos;
+	updateTokenBar(token);
 }
 
 function snapPosition(object) {
@@ -1353,7 +1449,7 @@ function updateTokenSettings(token) {
 	sendMessage('update', 'updateTokenSettings', args);
 }
 
-function createToken(pos, scale, modelId, local = true, owners = [], tokenId = false, settings = {}) {
+function createToken(pos, scale, modelId, local = true, owners = [], tokenId = false, settings = {}, overrides = null, stats = null) {
 	if (!(modelId in map.models)) {
 		return false;
 	}
@@ -1372,16 +1468,19 @@ function createToken(pos, scale, modelId, local = true, owners = [], tokenId = f
 	token.scale.set(scale.x, scale.y, scale.z);
 	token.prevScale = new THREE.Vector3(1, 1, 1);
 	token.modelName = map.models[modelId].name;
+	token.overrides = overrides;
+	token.stats = stats;
 	token.settings = {
 		hideAvatar: 0,
-		disableCamLook: 0
+		disableCamLook: 0,
+		iconColor: null
 	};
 
 	//override default token settings
 	// NOTE(port): the server sends booleans, the UI works with 0/1.
 	for (const settingName in settings) {
 		if (settings[settingName] === null) { continue; }
-		token.settings[settingName] = settings[settingName] ? 1 : 0;
+		token.settings[settingName] = settingName == 'iconColor' ? settings[settingName] : (settings[settingName] ? 1 : 0);
 	}
 	
 	if (!isDM) {
@@ -1426,7 +1525,143 @@ function createToken(pos, scale, modelId, local = true, owners = [], tokenId = f
 	}
 }
 
+// What a token looks like: its picture's settings with this token's own on top.
+function tokenModel(token, model = map.models[token.modelId]) {
+	return token.overrides ? Object.assign({}, model, token.overrides) : model;
+}
+
+function pictureName(token) {
+	// a built-in pawn can be recoloured, so its colour's name would not stay true
+	return String(token.modelId).startsWith(DEFAULT_MODEL_PREFIX) ? 'Pawn' : map.models[token.modelId].name || 'Token';
+}
+
+function tokenName(token) {
+	return (token.overrides && token.overrides.name) || pictureName(token);
+}
+
+// A token as the host app sees it.
+function tokenInfo(token) {
+	return {
+		tokenId: token.tokenId,
+		roomId: connection.roomId,
+		name: tokenName(token),
+		named: !!(token.overrides && token.overrides.name),
+		stats: token.stats ? Object.assign({}, token.stats) : null
+	};
+}
+
+function tokenChanged(token) {
+	if (options.onTokenChange) { options.onTokenChange(tokenInfo(token)); }
+}
+
+function tokenRemoved(token) {
+	if (options.onTokenChange) { options.onTokenChange(Object.assign(tokenInfo(token), { removed: true })); }
+}
+
+// The fields of a model that change what is drawn; a new name or view distance needs no rebuild.
+var TOKEN_LOOK_FIELDS = ['size', 'scale', 'baseColor', 'textureRepeat', 'textureOffset', 'modelOffset'];
+
+function setTokenOverrides(token, overrides) {
+	var before = tokenModel(token);
+
+	token.overrides = overrides && Object.keys(overrides).length > 0 ? overrides : null;
+
+	var after = tokenModel(token);
+
+	if (TOKEN_LOOK_FIELDS.some(function(field) { return String(before[field]) != String(after[field]); })) {
+		makeTokenInstance(token, map.models[token.modelId]);
+	}
+
+	if (before.viewDistance != after.viewDistance) { updateTokenVision(); }
+
+	updateAvatar(token);
+	tokenChanged(token);
+}
+
+function setTokenStats(token, stats) {
+	token.stats = {
+		hp: Math.min(Math.max(Math.round(stats.hp) || 0, 0), MAX_TOKEN_HP),
+		maxHp: Math.min(Math.max(Math.round(stats.maxHp) || 0, 0), MAX_TOKEN_HP),
+		ac: Math.min(Math.max(Math.round(stats.ac) || 0, 0), MAX_TOKEN_AC)
+	};
+
+	updateTokenBar(token);
+	updateAvatar(token);
+	sendMessage('update', 'updateTokenStats', Object.assign({ tokenId: token.tokenId }, token.stats));
+	tokenChanged(token);
+}
+
+var MAX_TOKEN_HP = 1000000;
+var MAX_TOKEN_AC = 1000;
+
+// The HP bar above a token, seen by the host and the token's owners. It is a child of the token, so
+// it hides with it. All bars share one plane and four materials: a bar costs two draw calls and
+// redrawing it only moves a mesh.
+var tokenBarParts = null;
+
+function getTokenBarParts() {
+	if (!tokenBarParts) {
+		var material = function(color) { return new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide }); };
+
+		tokenBarParts = {
+			geometry: new THREE.PlaneGeometry(1, 1),
+			back: material(0x14201c),
+			high: material(0x2f9e5a),
+			middle: material(0xd6b02a),
+			low: material(0xc0392b)
+		};
+	}
+
+	return tokenBarParts;
+}
+
+function updateTokenBar(token) {
+	var stats = token.stats;
+	var group = token.meshes;
+
+	if (!stats || !stats.maxHp || !group || !(isDM || checkTokenOwner(token))) {
+		if (token.hpBar) { token.hpBar.visible = false; }
+		return;
+	}
+
+	var parts = getTokenBarParts();
+
+	if (!token.hpBar) {
+		var bar = new THREE.Group();
+
+		bar.name = 'hpBar';
+		bar.back = new THREE.Mesh(parts.geometry, parts.back);
+		bar.fill = new THREE.Mesh(parts.geometry, parts.high);
+		bar.fill.position.z = 0.005;
+		bar.add(bar.back, bar.fill);
+		token.add(bar);
+		token.hpBar = bar;
+	}
+
+	var width = Math.max(0.6, group.placeHolder.size * 0.8);
+	var height = 0.1;
+	var ratio = Math.min(stats.hp / stats.maxHp, 1);
+
+	token.hpBar.visible = true;
+	token.hpBar.back.scale.set(width, height, 1);
+	token.hpBar.fill.scale.set(Math.max(width * ratio, 0.001), height * 0.7, 1);
+	token.hpBar.fill.position.x = -(width * (1 - ratio)) / 2;
+	token.hpBar.fill.material = ratio > 0.5 ? parts.high : ratio > 0.25 ? parts.middle : parts.low;
+
+	if (map.settings.view2d) {
+		//lying on the table, below the flat picture
+		token.hpBar.rotation.x = -Math.PI / 2;
+		token.hpBar.position.set(0, FLAT_TOKEN_Y, (group.placeHolder.size / 2) + 0.1);
+	}
+	else {
+		token.hpBar.rotation.x = 0;
+		token.hpBar.position.set(0, group.position.y + (group.geoHeight || group.placeHolder.size) - group.baseOffset + 0.15, 0);
+	}
+}
+
 function makeTokenInstance(parent, model) {
+	model = tokenModel(parent, model);
+
 	var size = model.size;
 	var textureSize = map.settings.maxTokenTextureSize * size * parent.scale.y;
 	var src = model.src ? options.imageUrl({ kind: 'model', src: model.src, size: textureSize, quality: map.settings.maxTokenTextureQuality }) : null;
@@ -1500,6 +1735,8 @@ function makeTokenInstance(parent, model) {
 	function tokenBodyReady() {
 		tokenScaleReposition(parent);
 		updateTokenPlaceHolder(parent);
+		applyTokenColor(parent);
+		layTokenFlat(parent);
 
 		loadStateUpdate();
 
@@ -1519,6 +1756,8 @@ function makeTokenInstance(parent, model) {
 
 		modelGroup.geoWidth = bodyRadius * 2;
 		modelGroup.geoHeight = bodyHeight;
+		modelGroup.body = body;
+		modelGroup.plainColor = model.baseColor;
 		modelGroup.add(body);
 
 		tokenBodyReady();
@@ -1581,6 +1820,10 @@ function makeTokenInstance(parent, model) {
 
 		modelGroup.geoWidth = geoWidth;
 		modelGroup.geoHeight = geoHeight;
+		modelGroup.body = mesh;
+		modelGroup.imageBody = true;
+		modelGroup.uprightPosition = mesh.position.clone();
+		modelGroup.plainColor = 0xffffff;
 		modelGroup.add(mesh);
 		modelGroup.picture = mesh;
 		startPictureMotion(mesh, geoHeight);
@@ -1592,6 +1835,49 @@ function makeTokenInstance(parent, model) {
 		console.warn('token image failed to load', error);
 		addFallbackBody();
 	});
+}
+
+// A token's colour multiplies its picture: the pale icons take the colour and their dark outline
+// stays, and it is a single material value, so changing it costs nothing.
+function applyTokenColor(token) {
+	var group = token.meshes;
+
+	if (group && group.body) {
+		var color = token.settings.iconColor === null ? group.plainColor : token.settings.iconColor;
+
+		group.body.material.color.setHex(color);
+
+		//a plain pawn is one solid colour, its base and portrait included
+		if (!group.imageBody) {
+			token.base.material.color.setHex(color);
+
+			if (token.avatar) {
+				token.avatar.style.setProperty('--avatar-edge', hexColor(color));
+				token.avatar.querySelector('.avatar-face').style.backgroundColor = hexColor(color);
+			}
+		}
+	}
+}
+
+// In the 2D view a standing token would be seen edge-on, so its picture lies on its base instead,
+// sized to the base whatever the picture's shape.
+function layTokenFlat(token) {
+	var group = token.meshes;
+
+	if (!group || !group.imageBody) { return; }
+
+	var body = group.body;
+
+	if (map.settings.view2d) {
+		body.rotation.x = -Math.PI / 2;
+		body.position.set(0, FLAT_TOKEN_Y, 0);
+		body.scale.setScalar(FLAT_TOKEN_FIT * group.placeHolder.size / Math.max(group.geoWidth, group.geoHeight));
+	}
+	else {
+		body.rotation.x = 0;
+		body.position.copy(group.uprightPosition);
+		body.scale.setScalar(1);
+	}
 }
 
 function updateTokenTextureSize(maxSize) {
@@ -1638,17 +1924,45 @@ function chooseTokenModel(modelId) {
 	}
 }
 
-function openTokenSettings(e) {
-	const token = map.menuTarget;
+// The token pane has two parts: what applies at once to this token, and the form, saved with its
+// button. Editing a token, the form saves to that token only; whoever created the picture can also
+// save it to the picture, which reaches every token using it. New Token only has the form.
+function setTokenPaneParts(editing, canSaveToPicture, hasPicture = true) {
+	var pane = map.panes.new_token;
 
+	pane.advanced.element.style.display = hasPicture ? '' : 'none';
+
+	pane.options.element.style.display = editing ? '' : 'none';
+
+	for (const heading of pane.headings) {
+		heading.element.style.display = editing ? '' : 'none';
+	}
+
+	for (const part of pane.editOnly) {
+		part.element.style.display = editing ? '' : 'none';
+	}
+
+	pane.pictureButton.element.style.display = canSaveToPicture ? '' : 'none';
+	map.local.tokenFormData.file.element.style.display = editing ? 'none' : '';
+	pane.submit.textContent = editing ? 'Save to This Token' : 'Submit';
+	pane.header.title.textContent = editing ? 'Edit Token' : 'New Token';
+}
+
+function fillTokenOptions(token) {
 	// each radio group shows its own setting (the original set every group to the last setting)
-	for (const item of map.panes.token_settings.items) {
+	for (const item of map.panes.new_token.options.items) {
 		if (!(item.name in token.settings)) { continue; }
 		var value = token.settings[item.name] ? 1 : 0;
 		if (item.input[value]) { item.input[value].checked = true; }
 	}
 
-	openPane(map.panes.token_settings);
+	map.local.iconColorInput.value = hexColor(token.settings.iconColor === null ? 0xffffff : token.settings.iconColor);
+
+	var stats = token.stats || { hp: 0, maxHp: 0, ac: 0 };
+
+	for (const field in map.local.tokenStatInputs) {
+		map.local.tokenStatInputs[field].value = stats[field];
+	}
 }
 
 function assignTokenMenu(e) {
@@ -1755,8 +2069,6 @@ function createPlaneImage(file, planeUploadId, position, local = true, scale = n
 		return createProp(file, position, local, scale, rotation, planeId);
 	}
 
-	var image = options.imageUrl({ kind: 'plane', src: file, size: map.settings.maxPlaneTextureSize, quality: map.settings.maxPlaneTextureQuality });
-	
 	var material = new THREE.MeshLambertMaterial({
 		color: 0xffffff,
 		side: THREE.FrontSide,
@@ -1782,6 +2094,7 @@ function createPlaneImage(file, planeUploadId, position, local = true, scale = n
 	plane.position.y += (planeLength / 100);
 
 	plane.src = file;
+	plane.planeUploadId = planeUploadId;
 
 	plane.defaultMatrix = {
 		position: new THREE.Vector3().copy(plane.position),
@@ -1813,8 +2126,18 @@ function createPlaneImage(file, planeUploadId, position, local = true, scale = n
 		sendMessage('update', 'addPlane', args);
 	}
 
+	loadPlaneTexture(plane, file, true);
+}
+
+// Sizes the plane to the picture (5 squares on its long side) once it has loaded. `counted`: the
+// plane is part of the room's first load, which the load screen waits for.
+function loadPlaneTexture(plane, file, counted) {
+	var image = options.imageUrl({ kind: 'plane', src: file, size: map.settings.maxPlaneTextureSize, quality: map.settings.maxPlaneTextureQuality });
+
 	new THREE.TextureLoader().load(image, function(texture) {
-		
+		// a later Change Image won the race
+		if (plane.src !== file) { texture.dispose(); return; }
+
 		var maxPlaneSize = 5;
 
 		if (texture.image.width > texture.image.height) {
@@ -1831,6 +2154,8 @@ function createPlaneImage(file, planeUploadId, position, local = true, scale = n
 		}
 
 		var geometry = new THREE.PlaneGeometry(texSize.w, texSize.h, 1, 1);
+		var oldGeometry = plane.geometry;
+		var oldMap = plane.material.map;
 		plane.geometry = geometry;
 		
 		texture.magFilter = THREE.LinearFilter;
@@ -1839,38 +2164,22 @@ function createPlaneImage(file, planeUploadId, position, local = true, scale = n
 		plane.material.map = texture;
 		plane.material.needsUpdate = true;
 
-		loadStateUpdate();
+		if (oldGeometry && oldGeometry !== geometry) { oldGeometry.dispose(); }
+		if (oldMap && oldMap !== texture) { oldMap.dispose(); }
+
+		if (counted) { loadStateUpdate(); }
 		
 	}, false, function(error) {
 		console.log(error);
-		loadStateUpdate();
+		if (counted) { loadStateUpdate(); }
+		else { notify('That image could not be loaded.', 'error'); }
 	});
 }
 
 function initPing() {
-	var circleRadius = 1;
-	var shape = new THREE.Shape().absarc( 0, 0, circleRadius, 0, Math.PI * 2, false )
-	var holePath = new THREE.Path().absarc( 0, 0, circleRadius - 0.1, 0, Math.PI * 2, true );
-	shape.holes.push( holePath );
-	var extrudeSettings = { depth: 0.1, bevelEnabled: false, steps: 2 };
-	var geometry = new THREE.ExtrudeGeometry( shape, extrudeSettings );
-	var animationGroup = new THREE.AnimationObjectGroup();
-	
-	var mesh = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: 0x0886c4, transparent: true, opacity: 0 } ));
-	mesh.position.set( -5, 0, -5 );
-	mesh.rotation.x = Math.PI / 2;
-	mesh.renderOrder = -1;
-	map.scene.add(mesh);
+	var pings = createPing(map.scene);
 
-	var distance = 3;
-	var yPos = -0.5;
-
-	var opacityKF = new THREE.NumberKeyframeTrack( '.material.opacity', [ 0, 1 ], [ 1, 1 ] );
-	var scaleKF = new THREE.VectorKeyframeTrack( '.scale', [ 0, 1 ], [ 1, 1, 1, 2, 2, 2 ] );
-
-	var playClip = function(e, color, position = false, local = true) {
-		mesh.material.color.setHex(color);
-		
+	var playPing = function(e, color, position = false, local = true) {
 		if (!position) {
 			var mousePosition = parseClickPos(e);
 
@@ -1879,32 +2188,14 @@ function initPing() {
 			raycast.setFromCamera(mousePosition, map.objects.camera);
 			var intersects = raycast.intersectObjects([map.objects.plane], false);
 
-			if (intersects.length > 0) {
-				var position = { x: intersects[0].point.x, z: intersects[0].point.z };
-			}
+			if (intersects.length == 0) { return; }
+
+			position = { x: intersects[0].point.x, z: intersects[0].point.z };
 		}
-		
-		var positionKF = new THREE.VectorKeyframeTrack( '.position', [ 0, 1, 0 ], [
-			position.x,
-			yPos,
-			position.z,
 
-			position.x,
-			yPos + distance,
-			position.z,
-
-			position.x,
-			yPos - distance,
-			position.z,
-		]);
-		
-		var clip = new THREE.AnimationClip( 'Action', 1, [ positionKF, opacityKF, scaleKF ] );
-		mixer = new THREE.AnimationMixer( mesh );
-		mixer.loop = false;
-		var clipAction = mixer.clipAction( clip );
-		clipAction.loop = THREE.LoopOnce;
-		clipAction.clampWhenFinished = true;
-		clipAction.play();
+		// never smaller than a few squares, and still easy to find when zoomed far out
+		var size = Math.max(2.4, floorViewHeight() * 0.05);
+		pings.play(position.x, map.objects.plane.position.y + 0.03, position.z, Number(color), size, !map.settings.view2d);
 
 		//send to clients
 		if (local) {
@@ -1917,8 +2208,12 @@ function initPing() {
 			sendMessage('update', 'ping', args);
 		}
 	}
-	
-	return playClip;
+
+	playPing.update = pings.update;
+	playPing.warmUpMeshes = pings.warmUpMeshes;
+	playPing.dispose = pings.dispose;
+
+	return playPing;
 }
 
 // NOTE(port): in protocol v2 "assignHost" adds a host; the sender stays host too (the server does
@@ -1980,6 +2275,136 @@ var MAX_GRID_SIZE = 1000;
 // The far plane is the View Distance setting, but never so near that zooming out cuts off the
 // map: it always reaches the far corner of the grid from where the camera is. (The low setting
 // used to make zooming out on a phone show nothing past a few dozen squares.)
+// Both cameras follow the size of the view, whichever is in use.
+function updateCameraFrame() {
+	var aspect = viewWidth() / viewHeight();
+
+	map.perspCamera.aspect = aspect;
+	map.perspCamera.updateProjectionMatrix();
+
+	map.orthoCamera.left = -ORTHO_FRAME * aspect / 2;
+	map.orthoCamera.right = ORTHO_FRAME * aspect / 2;
+	map.orthoCamera.top = ORTHO_FRAME / 2;
+	map.orthoCamera.bottom = -ORTHO_FRAME / 2;
+	map.orthoCamera.updateProjectionMatrix();
+}
+
+// How much floor the view shows from top to bottom, around the point it looks at.
+function floorViewHeight() {
+	if (map.objects.camera === map.orthoCamera) {
+		return ORTHO_FRAME / map.orthoCamera.zoom;
+	}
+
+	var distance = map.perspCamera.position.distanceTo(map.orbitControls.target);
+
+	return 2 * distance * Math.tan(THREE.MathUtils.degToRad(map.perspCamera.fov / 2));
+}
+
+function distanceForFloorHeight(height) {
+	return height / (2 * Math.tan(THREE.MathUtils.degToRad(map.perspCamera.fov / 2)));
+}
+
+// Hands the camera to everything that draws or picks with it.
+function useCamera(camera) {
+	map.objects.camera = camera;
+	map.renderPass.camera = camera;
+	map.selectionBox.camera = camera;
+	map.orbitControls.object = camera;
+	map.hover.camera = camera;
+
+	for (const controls of [map.translateControls, map.rotationControls, map.scaleControls]) {
+		for (const control of Object.values(controls)) {
+			control.camera = camera;
+		}
+	}
+
+	// The outline pass compiles its depth test for one kind of camera. A token's base lies under
+	// its flat picture in the 2D view, and has to keep the bright outline.
+	var outline = map.outlinePass;
+	outline.renderCamera = camera;
+	outline.prepareMaskMaterial.fragmentShader = outline.prepareMaskMaterial.fragmentShader.replace(/\w+DepthToViewZ/g, (camera.isOrthographicCamera ? 'orthographic' : 'perspective') + 'DepthToViewZ');
+	outline.prepareMaskMaterial.needsUpdate = true;
+	outline.hiddenEdgeColor.setHex(camera.isOrthographicCamera ? 0xffffff : 0x272727);
+}
+
+// Switches between the 3D view and the 2D one, keeping the spot on the floor and how much of it
+// shows. The 3D view gets back the angle it had. The 2D view skips the skybox and the wall models, so it is also the lighter
+// of the two on a slow device.
+function setView2d(on) {
+	var controls = map.orbitControls;
+	var ortho = map.orthoCamera;
+	var persp = map.perspCamera;
+	var height = floorViewHeight();
+
+	map.settings.view2d = on ? 1 : 0;
+	controls.animating = false;
+
+	if (on) {
+		map.local.polarAngle = controls.getPolarAngle();
+		map.local.azimuthAngle = controls.getAzimuthalAngle();
+		ortho.zoom = ORTHO_FRAME / height;
+		ortho.updateProjectionMatrix();
+		ortho.position.set(controls.target.x, controls.target.y + ORTHO_HEIGHT, controls.target.z + 1);
+		controls.minPolarAngle = 0;
+		controls.maxPolarAngle = 0;
+		controls.minAzimuthAngle = 0;
+		controls.maxAzimuthAngle = 0;
+		useCamera(ortho);
+	}
+	else {
+		persp.position.setFromSphericalCoords(distanceForFloorHeight(height), map.local.polarAngle, map.local.azimuthAngle).add(controls.target);
+		controls.minPolarAngle = MIN_TILT;
+		controls.maxPolarAngle = MAX_TILT;
+		controls.minAzimuthAngle = -Infinity;
+		controls.maxAzimuthAngle = Infinity;
+		useCamera(persp);
+	}
+
+	map.skybox.visible = !on;
+	updateWallLook();
+	controls.update();
+	updateCameraFar();
+
+	for (const token of Object.values(map.objects.tokens)) {
+		layTokenFlat(token);
+		updateTokenBar(token);
+		token.rotation.y = 0;
+	}
+
+	map.hover.object = null;
+	updateViewButton();
+}
+
+// Moves the view to a position and target, gliding there (see animate()). The 2D view has no
+// position of its own: it only follows the target and keeps its zoom.
+function flyCamera(position, target) {
+	var controls = map.orbitControls;
+
+	controls.animating = true;
+	controls.newTarget = target;
+	controls.newPosition = map.settings.view2d ? map.objects.camera.position.clone().sub(controls.target).add(target) : position;
+}
+
+// Where a camera with perspective would have to stand to show what the current view shows. That is
+// the camera itself in the 3D view; in the 2D view it stands straight above the same spot.
+function perspectiveEye() {
+	if (!map.settings.view2d) { return map.perspCamera.position.clone(); }
+
+	var direction = new THREE.Vector3();
+	map.orthoCamera.getWorldDirection(direction);
+
+	return map.orbitControls.target.clone().addScaledVector(direction, -distanceForFloorHeight(floorViewHeight()));
+}
+
+function updateViewButton() {
+	var button = map.sideButtons.view2d;
+
+	if (button) {
+		button.element.classList.toggle('active', !!map.settings.view2d);
+		button.element.setAttribute('aria-pressed', map.settings.view2d ? 'true' : 'false');
+	}
+}
+
 function updateCameraFar() {
 	var camera = map.objects.camera;
 	if (!camera) { return; }
@@ -2190,15 +2615,14 @@ function canvasClick(event) {
 	}
 
 	//box select
-	if (map.selectModeActive) {
+	if (map.selectModeActive && map.selectionHelper.isDown) {
 		map.selectionBox.endPoint.set(
 			ndcX(event.clientX),
 			ndcY(event.clientY),
 			0.5
 		);
 
-		setSelectMode(false); 	//turn off select once done
-		handleSelectionBox();
+		endBoxSelect(true);
 		return;
 	}
 
@@ -2375,7 +2799,7 @@ function checkSceneClick(e, clickType) {
 	
 		if (typeof(planeCheck) != "undefined") {
 			setLastClickPos(e);
-			openContextMenu(e, map.menus.default);
+			openContextMenu(e, isEditingMap() ? map.menus.defaultBuild : map.menus.default);
 		}
 	}
 
@@ -2490,7 +2914,7 @@ function updateTokenVision() {
 		var viewDistance = 100;
 	}
 	else {
-		var viewDistance = map.models[token.modelId].viewDistance / 5;
+		var viewDistance = tokenModel(token).viewDistance / 5;
 	}
 
 	visionRaycaster.near = 0;
@@ -3024,7 +3448,7 @@ function updateWallGroup(wallGroup, doors = null, joints = null) {
 		if (!wallGroup.mesh) {
 			var mesh = new THREE.Mesh(geometry, sharedWallMaterial());
 			mesh.name = 'wall mesh';
-			mesh.visible = !(map.wallModel && map.wallModel.ready);
+			mesh.visible = plainWallsShown();
 			wallGroup.mesh = mesh;
 			map.scene.add(mesh);
 		}
@@ -3537,7 +3961,7 @@ var BUILD_HINTS = {
 	room: 'Drag on the floor to draw a room. Right-drag turns the camera, arrow keys move it.',
 	corridor: 'Drag on the floor to draw a corridor ' + CORRIDOR_WIDTH + ' squares wide. Right-drag turns the camera.',
 	door: 'Click a wall to put a door in it, or drag a door along a wall. Click a door to turn it.',
-	plane: 'Click a map image or piece of furniture to move, turn or resize it (hold Ctrl to do it freely). Right-click the floor to add one.',
+	plane: 'Click a map image or piece of furniture to move, turn or resize it (hold Ctrl to do it freely). Right-click the floor to add one, or an image to change or remove it.',
 	wallPoint: 'Draw walls point by point, or drag out whole rooms and corridors.'
 };
 
@@ -3652,6 +4076,21 @@ function setEditMode(mode) {
 	syncBuildMode();
 }
 
+// The wall model is only for the 3D view: from above the plain walls look the same and cost less.
+function plainWallsShown() {
+	return !!map.settings.view2d || !(map.wallModel && map.wallModel.ready);
+}
+
+function updateWallLook() {
+	var plain = plainWallsShown();
+
+	for (const wallGroup of Object.values(map.wallPointGroups)) {
+		if (wallGroup.mesh) { wallGroup.mesh.visible = plain; }
+	}
+
+	if (map.wallModel) { map.wallModel.setVisible(!map.settings.view2d); }
+}
+
 // Brings the toolbar, camera buttons and previews in line with the current mode and tool.
 function syncBuildMode() {
 	var dragTool = isDM && map.toggleMode == 'wallPoint' && map.wallTool != 'points';
@@ -3744,35 +4183,83 @@ function addToken(e) {
 	sendMessage('request', 'getModels', args);
 }
 
-function editModel(e) {
-	if (map.menuTarget.modelId in map.models) {
-		var model = map.models[map.menuTarget.modelId];
+// Only for models this user may change: plain pawns have nothing stored, and the host marks the
+// rest (built-in tokens, other people's). With uploads locked a user's own token still shows, and
+// Submit shows the notice.
+function canEditModel(model) {
+	return !!(model && model.src && model.editable !== false && (options.uploadModel || options.uploadLocked));
+}
 
-		map.local.tokenFormData.name.value = model.name;
-		map.local.tokenFormData.id.value = map.menuTarget.modelId;
-		map.local.tokenFormData.src.value = model.src;
-		map.local.tokenFormData.textureRepeatX.value = model.textureRepeat[0];
-		map.local.tokenFormData.textureRepeatY.value = model.textureRepeat[1];
-		map.local.tokenFormData.textureOffsetX.value = model.textureOffset[0];
-		map.local.tokenFormData.textureOffsetY.value = model.textureOffset[1];
-		map.local.tokenFormData.size.value = model.size;
-		map.local.tokenFormData.scale.value = model.scale;
-		map.local.tokenFormData.modelOffsetX.value = model.modelOffset[0];
-		map.local.tokenFormData.modelOffsetY.value = model.modelOffset[1];
-		map.local.tokenFormData.viewDistance.value = model.viewDistance;
-		map.local.tokenFormData.baseColor.value = '#' + (model.baseColor).toString(16);
+function editToken(e) {
+	var token = map.menuTarget;
+	var model = tokenModel(token);
 
-		var fileLabel = map.local.tokenFormData.file.element.querySelector('.pane-item-label-text');
-		fileLabel.innerHTML = 'Image File (Leave blank if unchanged)';
+	// kept apart from menuTarget: the pane stays open while other menus are used
+	map.local.editedToken = token;
+	fillTokenOptions(token);
+	setTokenPaneParts(true, canEditModel(map.models[token.modelId]), !!model.src);
 
-		var tokenFile = byId('token_file');
+	map.local.tokenFormData.name.value = tokenName(token);
+	map.local.tokenFormData.id.value = token.modelId;
+	map.local.tokenFormData.src.value = model.src;
+	map.local.tokenFormData.textureRepeatX.value = model.textureRepeat[0];
+	map.local.tokenFormData.textureRepeatY.value = model.textureRepeat[1];
+	map.local.tokenFormData.textureOffsetX.value = model.textureOffset[0];
+	map.local.tokenFormData.textureOffsetY.value = model.textureOffset[1];
+	map.local.tokenFormData.size.value = model.size;
+	map.local.tokenFormData.scale.value = model.scale;
+	map.local.tokenFormData.modelOffsetX.value = model.modelOffset[0];
+	map.local.tokenFormData.modelOffsetY.value = model.modelOffset[1];
+	map.local.tokenFormData.viewDistance.value = model.viewDistance;
+	map.local.tokenFormData.baseColor.value = hexColor(model.baseColor);
 
-		if (tokenFile != null) {
-			tokenFile.value = '';
-		}
+	var tokenFile = byId('token_file');
 
-		openPane(map.panes.new_token);
+	if (tokenFile != null) {
+		tokenFile.value = '';
 	}
+
+	openPane(map.panes.new_token);
+}
+
+// What the form says, as far as it differs from the picture: only that is stored, so the token
+// keeps following its picture for everything else.
+function tokenFormOverrides(token) {
+	var form = map.local.tokenFormData;
+	var model = map.models[token.modelId];
+	var number = function(input) { return parseFloat(input.value); };
+	var wanted = {
+		name: form.name.value.trim(),
+		size: number(form.size),
+		scale: number(form.scale),
+		viewDistance: number(form.viewDistance),
+		baseColor: parseInt(form.baseColor.value.slice(1), 16),
+		textureRepeat: [number(form.textureRepeatX), number(form.textureRepeatY)],
+		textureOffset: [number(form.textureOffsetX), number(form.textureOffsetY)],
+		modelOffset: [number(form.modelOffsetX), number(form.modelOffsetY)]
+	};
+	var overrides = {};
+
+	for (const field in wanted) {
+		if (String(wanted[field]) != String(model[field])) { overrides[field] = wanted[field]; }
+	}
+
+	// an empty box or the picture's own name means no name of its own
+	if (!wanted.name || wanted.name == pictureName(token)) { delete overrides.name; }
+
+	return overrides;
+}
+
+// The server answers everyone, the sender too, so nothing shows that it refused. Without a server
+// there is nobody to ask.
+function saveTokenOverrides(token, overrides) {
+	sendMessage('update', 'updateTokenOverrides', { tokenId: token.tokenId, overrides: overrides });
+
+	if (options.demo) { setTokenOverrides(token, overrides); }
+}
+
+function hexColor(color) {
+	return '#' + Number(color).toString(16).padStart(6, '0');
 }
 
 function isFolderId(id) {
@@ -3788,7 +4275,10 @@ function getModel(modelId) {
 	sendMessage('request', 'getModel', args);
 }
 
+// The page shown is remembered, so Next and Previous count from it; a folder or Up starts at 0.
 function changeTokenPage(folderId, parentId, offset) {
+	map.local.tokenListOffset = offset;
+
 	var args = {
 		parentId: parentId,
 		folderId: folderId,
@@ -3800,6 +4290,8 @@ function changeTokenPage(folderId, parentId, offset) {
 }
 
 function changePlanePage(folderId, parentId, offset) {
+	map.local.planeListOffset = offset;
+
 	var args = {
 		parentId: parentId,
 		folderId: folderId,
@@ -3874,15 +4366,52 @@ function placeProp(item) {
 }
 
 function addPlaneImage(e) {
-	//populate images pane
-	var args = {
-		parentId: 0,
-		folderId: 0,
-		limit: map.local.planeListLimit,
-		offset: map.local.planeListOffset
-	};
+	map.local.planeImageTarget = null;
+	//populate images pane, from the first page
+	changePlanePage(0, 0, 0);
+}
 
-	sendMessage('request', 'getPlaneImages', args);
+// Change Image: the images pane opens as for Add Image, and the picked image replaces this one's.
+function changePlaneImageMenu(e) {
+	map.local.planeImageTarget = map.menuTarget;
+	changePlanePage(0, 0, 0);
+}
+
+// The image an images pane pick should replace, or null to add a new one. Used once.
+function takePlaneImageTarget() {
+	var plane = map.local.planeImageTarget;
+	map.local.planeImageTarget = null;
+
+	if (plane && map.objects.planes[plane.planeId] === plane) { return plane; }
+	return null;
+}
+
+// Another picture on the same plane: its place, size, turn and layer stay.
+function changePlaneImage(plane, file, planeUploadId, local = true) {
+	plane.src = file;
+	plane.planeUploadId = planeUploadId;
+
+	map.scaleControls.plane.detach();
+	map.rotationControls.plane.detach();
+
+	if (local) {
+		sendMessage('update', 'updatePlaneImage', { planeId: plane.planeId, planeUploadId: planeUploadId, image: file });
+	}
+
+	loadPlaneTexture(plane, file, false);
+}
+
+// Picked in the images pane (library or URL): a new image, or Change Image's.
+function placePlaneImage(file, planeUploadId) {
+	var target = takePlaneImageTarget();
+
+	if (target) {
+		changePlaneImage(target, file, planeUploadId);
+		return;
+	}
+
+	var position = map.lastClickPos ? new THREE.Vector2(map.lastClickPos[0].point.x, map.lastClickPos[0].point.z) : new THREE.Vector2(0, 0);
+	createPlaneImage(file, planeUploadId, position);
 }
 
 function removePlaneImage(e) {
@@ -3929,16 +4458,15 @@ function removeToken(e) {
 		map.scene.remove(map.menuTarget)
 		delete map.objects.tokens[map.menuTarget.tokenId];
 		removeAvatar(map.menuTarget);
+		tokenRemoved(map.menuTarget);
 		
 		sendMessage('update', 'removeToken', { tokenId: map.menuTarget.tokenId });
 	}
 }
 
 function lookAtObject(object) {
-	map.orbitControls.animating = true;
-	map.objects.camera.newPosition = new THREE.Vector3(object.position.x - 2, 8, object.position.z + 12);
-	map.orbitControls.newTarget = object.position.clone();
-	
+	flyCamera(new THREE.Vector3(object.position.x - 2, 8, object.position.z + 12), object.position.clone());
+
 	if (object.name == 'token') {
 		map.local.tokenVisionActive = object;
 		updateVisionMeshes();
@@ -3948,8 +4476,7 @@ function lookAtObject(object) {
 
 function onResize() {
 
-	map.objects.camera.aspect = viewWidth() / viewHeight();
-	map.objects.camera.updateProjectionMatrix();
+	updateCameraFrame();
 
 	map.composer.setSize( viewWidth() * (map.settings.renderFactor / 100), viewHeight() * (map.settings.renderFactor / 100) );
 	map.renderer.setSize( viewWidth() * (map.settings.renderFactor / 100), viewHeight() * (map.settings.renderFactor / 100) );
@@ -4035,6 +4562,9 @@ function dragPane(pane, handle = false) {
 }
 
 function openPane(pane) {
+	// a menu item that opens a pane must not leave the menu lying over it
+	hideContextMenu();
+
 	if (!pane.open) {
 		pane.open = true;
 		clearTimeout(pane.timer);
@@ -4125,6 +4655,54 @@ function buildPane(title, name = false) {
 	return pane;
 }
 
+// A part of a pane that can be shown or hidden. Items are built into it like into the pane itself.
+function buildPaneGroup(pane) {
+	var group = { element: document.createElement('div'), items: [] };
+
+	group.element.className = 'pane-group';
+	group.body = group.element;
+	pane.body.appendChild(group.element);
+
+	return group;
+}
+
+// A fold-out part of a pane. Items are built into it like into the pane itself.
+function buildPaneSection(pane, title) {
+	var details = document.createElement('details');
+	details.className = 'pane-section';
+
+	var summary = document.createElement('summary');
+	summary.className = 'pane-section-title noselect';
+	summary.innerHTML = '<span class="material-icons" aria-hidden="true">chevron_right</span>' + title;
+	details.appendChild(summary);
+
+	var body = document.createElement('div');
+	details.appendChild(body);
+	pane.body.appendChild(details);
+
+	return { element: details, body: body, items: [] };
+}
+
+// A short word a host app puts on a chooser tile or an upload button (for example the plan that
+// unlocks it, "Silver"): a small tag after the label. `data-badge` holds the word in lower case so
+// the host can style each one. Anything but a non-empty string is ignored.
+function addPaneBadge(target, badge) {
+	if (typeof badge !== 'string' || !badge.trim() || !target) {
+		return;
+	}
+
+	var word = badge.trim().slice(0, 24);
+	var tag = document.createElement('span');
+	tag.className = 'pane-item-badge';
+	tag.dataset.badge = word.toLowerCase();
+	tag.textContent = word;
+	target.appendChild(tag);
+}
+
+function badgeLabel(item) {
+	return item.element.querySelector('.pane-item-label-text');
+}
+
 function buildPaneItem(pane, text, type, value = false, dmOnly = false, name = '') {
 	var container = document.createElement('div');
 	container.className = 'pane-item';
@@ -4203,13 +4781,13 @@ function buildPaneItem(pane, text, type, value = false, dmOnly = false, name = '
 		inputNumberIncrement.addEventListener('click', function() {
 			input.value++;
 			inputMinMax();
-			input.onchange();
+			if (input.onchange) { input.onchange(); }
 		}, false);
 
 		inputNumberDecrement.addEventListener('click', function() {
 			input.value--;
 			inputMinMax();
-			input.onchange();
+			if (input.onchange) { input.onchange(); }
 		}, false);
 	}
 
@@ -4724,6 +5302,12 @@ function toggleTrackerDrawer(button) {
 	button.classList.toggle('active', open);
 }
 
+function openTrackerDrawer() {
+	var button = map.sideButtons.tracker.element;
+
+	if (!trackerDrawer || !trackerDrawer.classList.contains('open')) { toggleTrackerDrawer(button); }
+}
+
 // The drawer's left edge widens or narrows it (drag, or arrow keys when focused). The width is a
 // per-browser convenience, so it lives in localStorage and is simply forgotten if that fails.
 var DRAWER_WIDTH_KEY = 'dmt.trackerWidth';
@@ -4785,14 +5369,29 @@ function addDrawerGrip(drawer) {
 	});
 }
 
-// Box select: on while Shift is held.
+// Box select: on while Shift is held. Letting go of Shift in the middle of a drag keeps it on
+// until the button comes up, so that drag still selects and its rectangle is still taken away
+// (three.js's helper ignores the pointer while it is turned off).
 function setSelectMode(on) {
+	if (!on && map.selectionHelper.isDown) { return; }	// endBoxSelect turns it off
 	if (map.selectModeActive == on) { return; }
 
 	map.selectModeActive = on;
 	map.orbitControls.enablePan = !on;
 	map.orbitControls.enableRotate = !on;
 	map.selectionHelper.enabled = on;
+}
+
+// Ends a box drag: `finish` selects what is inside the box (up to where the pointer last was),
+// otherwise the drag is dropped and whatever it had selected so far stays selected. Select mode
+// turns off afterwards, as it always has once a box is done; holding Shift turns it back on.
+function endBoxSelect(finish) {
+	if (!map.selectionHelper.isDown) { return; }
+
+	map.selectionHelper.isDown = false;
+	map.selectionHelper.element.remove();
+	if (finish) { handleSelectionBox(); }
+	setSelectMode(false);
 }
 
 // "Raise or Lower" in the token menu: the next drag of a token moves it up and down (a right drag
@@ -4869,14 +5468,7 @@ function buildGui() {
 				}
 				else {
 					//populate plane images pane
-					var args = {
-						parentId: 0,
-						folderId: 0,
-						limit: map.local.planeListLimit,
-						offset: 0
-					};
-
-					sendMessage('request', 'getPlaneImages', args);
+					changePlanePage(0, 0, 0);
 					notify('New image uploaded.');
 				}
 			}
@@ -4891,22 +5483,41 @@ function buildGui() {
 	var tokenPane = buildPane('Tokens', 'tokens');
 
 	//new token pane
-	var newTokenPane = buildPane('New Token', 'new_token');	
+	var newTokenPane = buildPane('New Token', 'new_token');
+	var tokenOptions = buildPaneGroup(newTokenPane);
+	var tokenForm = buildPaneGroup(newTokenPane);
+	newTokenPane.options = tokenOptions;
+	newTokenPane.form = tokenForm;
+	newTokenPane.headings = [
+		buildPaneItem(tokenOptions, 'This Token', 'header'),
+		buildPaneItem(tokenForm, 'Name and Look', 'header')
+	];
 
-	map.local.tokenFormData = {
-		name: buildPaneItem(newTokenPane, 'Name', 'text-input', map.local.tokenFormDefault.name).input,
-		textureRepeatX: buildPaneItem(newTokenPane, 'Texture Repeat X', 'number', map.local.tokenFormDefault.textureRepeatX).input,
-		textureRepeatY: buildPaneItem(newTokenPane, 'Texture Repeat Y', 'number', map.local.tokenFormDefault.textureRepeatY).input,
-		textureOffsetX: buildPaneItem(newTokenPane, 'Texture Offset X', 'number', map.local.tokenFormDefault.textureOffsetX).input,
-		textureOffsetY: buildPaneItem(newTokenPane, 'Texture Offset Y', 'number', map.local.tokenFormDefault.textureOffsetY).input,
-		size: buildPaneItem(newTokenPane, 'Token Size (grid)', 'number', map.local.tokenFormDefault.size).input,
-		scale: buildPaneItem(newTokenPane, 'Token Image Scale', 'number', map.local.tokenFormDefault.scale).input,
-		modelOffsetX: buildPaneItem(newTokenPane, 'Model Offset X', 'number', map.local.tokenFormDefault.modelOffsetX).input,
-		modelOffsetY: buildPaneItem(newTokenPane, 'Model Offset Y', 'number', map.local.tokenFormDefault.modelOffsetY).input,
-		viewDistance: buildPaneItem(newTokenPane, 'View Distance (feet)', 'number', map.local.tokenFormDefault.viewDistance).input
+	//hit points and armour class: this token only, applied at once and shown in the tracker
+	map.local.tokenStatInputs = {
+		hp: buildPaneItem(tokenOptions, 'Hit Points', 'number', 0).input,
+		maxHp: buildPaneItem(tokenOptions, 'Max Hit Points', 'number', 0).input,
+		ac: buildPaneItem(tokenOptions, 'Armour Class', 'number', 0).input
 	};
 
-	var baseColor = buildPaneItem(newTokenPane, 'Base Colour', 'text', '<input id="baseColorInput" type="color" value="' + map.local.tokenFormDefault.baseColor + '">');
+	for (const field in map.local.tokenStatInputs) {
+		map.local.tokenStatInputs[field].onchange = function() {
+			var token = editedToken();
+			var inputs = map.local.tokenStatInputs;
+
+			if (token) {
+				setTokenStats(token, { hp: parseInt(inputs.hp.value), maxHp: parseInt(inputs.maxHp.value), ac: parseInt(inputs.ac.value) });
+			}
+		};
+	}
+
+	map.local.tokenFormData = {
+		name: buildPaneItem(tokenForm, 'Name', 'text-input', map.local.tokenFormDefault.name).input,
+		size: buildPaneItem(tokenForm, 'Token Size (grid)', 'number', map.local.tokenFormDefault.size).input,
+		viewDistance: buildPaneItem(tokenForm, 'View Distance (feet)', 'number', map.local.tokenFormDefault.viewDistance).input
+	};
+
+	var baseColor = buildPaneItem(tokenForm, 'Base Colour', 'text', '<input id="baseColorInput" type="color" value="' + map.local.tokenFormDefault.baseColor + '">');
 	var baseColorElem = baseColor.element.querySelector('#baseColorInput');
 	map.local.tokenFormData.baseColor = baseColorElem;
 
@@ -4919,20 +5530,67 @@ function buildGui() {
 	</div>
 	`;
 
-	map.local.tokenFormData.file = buildPaneItem(newTokenPane, 'Image File', 'text', tokenFile);
+	map.local.tokenFormData.file = buildPaneItem(tokenForm, 'Image File', 'text', tokenFile);
 	map.local.tokenFormData.id = byId('token_id');
 	map.local.tokenFormData.src = byId('token_src');
 
-	var tokenFormButton = '<div id="new-token-form-button" class="button button-3d button-primary">Submit</div>';
-	var formButton = buildPaneItem(newTokenPane, '', 'text', tokenFormButton);
-	var formButtonElem = formButton.element.querySelector('#new-token-form-button');
+	//fine tuning of the picture, out of the way until someone needs it
+	var tokenAdvanced = buildPaneSection(tokenForm, 'Advanced');
+	newTokenPane.advanced = tokenAdvanced;
+	var tokenDefaults = map.local.tokenFormDefault;
+	Object.assign(map.local.tokenFormData, {
+		textureRepeatX: buildPaneItem(tokenAdvanced, 'Texture Repeat X', 'number', tokenDefaults.textureRepeatX).input,
+		textureRepeatY: buildPaneItem(tokenAdvanced, 'Texture Repeat Y', 'number', tokenDefaults.textureRepeatY).input,
+		textureOffsetX: buildPaneItem(tokenAdvanced, 'Texture Offset X', 'number', tokenDefaults.textureOffsetX).input,
+		textureOffsetY: buildPaneItem(tokenAdvanced, 'Texture Offset Y', 'number', tokenDefaults.textureOffsetY).input,
+		scale: buildPaneItem(tokenAdvanced, 'Token Image Scale', 'number', tokenDefaults.scale).input,
+		modelOffsetX: buildPaneItem(tokenAdvanced, 'Model Offset X', 'number', tokenDefaults.modelOffsetX).input,
+		modelOffsetY: buildPaneItem(tokenAdvanced, 'Model Offset Y', 'number', tokenDefaults.modelOffsetY).input
+	});
 
-	formButtonElem.addEventListener('click', async function() {
+	var tokenFormButton = '<div id="new-token-form-button" class="button button-3d button-primary">Submit</div>';
+	var formButton = buildPaneItem(tokenForm, '', 'text', tokenFormButton);
+	var formButtonElem = formButton.element.querySelector('#new-token-form-button');
+	newTokenPane.submit = formButtonElem;
+
+	var tokenResetButton = '<div id="token-reset-button" class="button button-3d">Back to the Picture\'s Settings</div>';
+	var resetButton = buildPaneItem(tokenForm, '', 'text', tokenResetButton);
+	newTokenPane.editOnly = [resetButton];
+
+	var tokenPictureButton = '<div id="token-picture-button" class="button button-3d">Save to Every Token With This Picture</div>';
+	newTokenPane.pictureButton = buildPaneItem(tokenForm, '', 'text', tokenPictureButton);
+
+	formButtonElem.addEventListener('click', function() {
+		var token = editedToken();
+
+		if (token) {
+			saveTokenOverrides(token, tokenFormOverrides(token));
+			closePane(newTokenPane);
+		}
+		else {
+			saveTokenPicture();
+		}
+	}, false);
+
+	resetButton.element.querySelector('#token-reset-button').addEventListener('click', function() {
+		var token = editedToken();
+
+		if (token) {
+			saveTokenOverrides(token, {});
+			closePane(newTokenPane);
+		}
+	}, false);
+
+	newTokenPane.pictureButton.element.querySelector('#token-picture-button').addEventListener('click', function() {
+		saveTokenPicture();
+	}, false);
+
+	async function saveTokenPicture() {
 
 		var fd = new FormData();
 		var files = byId('token_file').files;
 
-		if (!options.uploadModel) { return; }
+		if (!options.uploadModel) { showNotice(options.uploadLocked); return; }
 
 		if (files.length > 0 || (map.menuTarget != null && map.local.tokenFormData.src.value != '')) {
 			for (var key in map.local.tokenFormData) {
@@ -4998,21 +5656,26 @@ function buildGui() {
 		else {
 			notify('No file selected.');
 		}
-	}, false);
+	}
 	
-	//token settings pane	
-	var tokenSettingsPane = buildPane('Token Settings', 'token_settings');
+	//the token being edited, while it is still on the table
+	function editedToken() {
+		var token = map.local.editedToken;
+
+		return token && map.objects.tokens[token.tokenId];
+	}
 
 	//hide avatar setting
 	var hideAvatarSetting = [
 		{ value: 0, name: 'Off', default: true },
 		{ value: 1, name: 'On' }
 	];	
-	var hideAvatar = buildPaneItem(tokenSettingsPane, 'Hide token\'s avatar', 'radio-segment', hideAvatarSetting, false, 'hideAvatar');	
+	var hideAvatar = buildPaneItem(tokenOptions, 'Hide token\'s avatar', 'radio-segment', hideAvatarSetting, false, 'hideAvatar');	
 	for (const hideAvatarSetting of hideAvatar.input) {
 		hideAvatarSetting.addEventListener('change', hideAvatarSetting.fn = function() {
-			if (map.menuTarget.tokenId in map.objects.tokens) {
-				const token = map.objects.tokens[map.menuTarget.tokenId];
+			const token = editedToken();
+
+			if (token) {
 				token.avatar.classList[parseInt(this.value) ? 'add' : 'remove']('avatar-hidden');
 				token.settings.hideAvatar = parseInt(this.value);
 				updateTokenSettings(token);
@@ -5025,17 +5688,51 @@ function buildGui() {
 		{ value: 0, name: 'Off', default: true },
 		{ value: 1, name: 'On' }
 	];	
-	var lookAtCam = buildPaneItem(tokenSettingsPane, 'Disable Look at Camera', 'radio-segment', lookAtCamSetting, false, 'disableCamLook');	
+	var lookAtCam = buildPaneItem(tokenOptions, 'Disable Look at Camera', 'radio-segment', lookAtCamSetting, false, 'disableCamLook');	
 	for (const lookAtCamSetting of lookAtCam.input) {
 		lookAtCamSetting.addEventListener('change', lookAtCamSetting.fn = function() {
-			if (map.menuTarget.tokenId in map.objects.tokens) {
-				const token = map.objects.tokens[map.menuTarget.tokenId];				
+			const token = editedToken();
+
+			if (token) {
 				token.settings.disableCamLook = parseInt(this.value);
 				token.rotation.y = 0;
 				updateTokenSettings(token);
 			}
 		});
 	}
+
+	//icon colour: this token only, so the same library icon can be told apart on the table. It
+	//shows while picking and goes to the room once, when the picker closes.
+	var iconColor = buildPaneItem(tokenOptions, 'Icon Colour', 'text', '<input id="iconColorInput" type="color" value="#ffffff">');
+	var iconColorReset = document.createElement('div');
+	iconColorReset.className = 'pane-color-reset button button-3d noselect';
+	iconColorReset.textContent = 'Reset Colour';
+	iconColor.element.appendChild(iconColorReset);
+	map.local.iconColorInput = iconColor.element.querySelector('#iconColorInput');
+
+	map.local.iconColorInput.addEventListener('input', function() {
+		var token = editedToken();
+
+		if (token) {
+			token.settings.iconColor = parseInt(this.value.slice(1), 16);
+			applyTokenColor(token);
+		}
+	});
+	map.local.iconColorInput.addEventListener('change', function() {
+		var token = editedToken();
+
+		if (token) { updateTokenSettings(token); }
+	});
+	iconColorReset.addEventListener('click', function() {
+		var token = editedToken();
+
+		if (token) {
+			token.settings.iconColor = null;
+			applyTokenColor(token);
+			updateTokenSettings(token);
+			map.local.iconColorInput.value = '#ffffff';
+		}
+	});
 	
 	//settings pane
 	var settingsPane = buildPane('Settings', 'settings');
@@ -5225,8 +5922,8 @@ function buildGui() {
 	fov.input.onchange = function() {
 		map.settings.fov = fov.input.value;
 		saveSettings();
-		map.objects.camera.fov = fov.input.value;
-		map.objects.camera.updateProjectionMatrix();
+		map.perspCamera.fov = fov.input.value;
+		map.perspCamera.updateProjectionMatrix();
 	};		
 
 	//camera damping
@@ -5432,23 +6129,38 @@ function buildGui() {
 		extraButton.element.addEventListener('click', function() { extra.onClick(); }, false);
 	}
 
+	//2D view: this browser only, every player picks their own
+	var viewButton = buildSideButton('view2d', '2D View', 'map', false, 'A flat view from above. Also lighter on slow devices.');
+	viewButton.element.addEventListener('click', function() {
+		setView2d(!map.settings.view2d);
+		saveSettings();
+	}, false);
+	updateViewButton();
+
 	//cam focus button
 	var camFocusIndicator = document.createElement('div');
 	camFocusIndicator.id = 'camFocusIndicator';
 	root.appendChild(camFocusIndicator);
+	var camFocusTimer = 0;
 
 	var camFocus = buildSideButton('focus', 'Focus Players', 'center_focus_strong', true, 'Moves every player\'s camera to your view and your current room.', false);
 	camFocus.element.addEventListener('click', function() {
 
+		//from the start again when pressed twice in a row
+		camFocusIndicator.classList.remove('camFocusIndicatorAnim');
+		void camFocusIndicator.offsetWidth;
 		camFocusIndicator.classList.add('camFocusIndicatorAnim');
-		setTimeout(function() {
+		clearTimeout(camFocusTimer);
+		camFocusTimer = setTimeout(function() {
 			camFocusIndicator.classList.remove('camFocusIndicatorAnim');
 		}, 1000);
 
+		var eye = perspectiveEye();
+
 		var args = {
-			xpos: map.objects.camera.position.x,
-			ypos: map.objects.camera.position.y,
-			zpos: map.objects.camera.position.z,
+			xpos: eye.x,
+			ypos: eye.y,
+			zpos: eye.z,
 			xtarget: map.orbitControls.target.x,
 			ytarget: map.orbitControls.target.y,
 			ztarget: map.orbitControls.target.z,
@@ -5490,8 +6202,10 @@ function buildGui() {
 	var helpPane = buildPane('Help');
 
 	buildPaneItem(helpPane, 'Controls', 'header');
-	buildPaneItem(helpPane, 'Left Drag / 1 Touch Drag', 'text', 'Pan');
-	buildPaneItem(helpPane, 'Right Drag / 2 Touch Drag', 'text', 'Rotate the camera, or raise and lower a token');
+	buildPaneItem(helpPane, 'Left Drag / 1 Touch Drag', 'text', 'Move the camera across the map');
+	buildPaneItem(helpPane, 'W A S D / Arrow Keys', 'text', 'Move the camera across the map');
+	buildPaneItem(helpPane, 'Right Drag / 2 Touch Drag', 'text', 'Turn and tilt the camera, or raise and lower a token');
+	buildPaneItem(helpPane, 'Q / E', 'text', 'Turn the camera');
 	buildPaneItem(helpPane, 'Scroll Wheel / 2 Touch Pinch', 'text', 'Zoom Camera');
 	buildPaneItem(helpPane, 'Double Click', 'text', 'Ping Location');
 	buildPaneItem(helpPane, 'Right-click / Long Press', 'text', 'Menu: add tokens and images, resize, raise or lower a token');
@@ -5704,10 +6418,16 @@ function buildRoom(room) {
 			
 			if ('camera' in user) {
 				var position = user.camera.position;
-				map.objects.camera.position.set(position.x, position.y, position.z);
-
 				var target = user.camera.target;
 				map.orbitControls.target.set(target.x, target.y, target.z);
+
+				if (map.settings.view2d) {
+					map.orthoCamera.position.set(target.x, target.y + ORTHO_HEIGHT, target.z + 1);
+				}
+				else {
+					map.objects.camera.position.set(position.x, position.y, position.z);
+				}
+
 				updateCameraFar();
 			}
 		}
@@ -5823,7 +6543,7 @@ function buildRoom(room) {
 				owners.push(parseData.id(token.owners[j]));
 			}
 
-			createToken(pos, scale, parseData.id(token.modelId), false, owners, parseData.id(tokenId), token.settings);
+			createToken(pos, scale, parseData.id(token.modelId), false, owners, parseData.id(tokenId), token.settings, token.overrides || null, token.stats || null);
 		}
 
 		// Look at our first token, but only when the room is first shown: after a reconnect the
@@ -5855,6 +6575,8 @@ function buildRoom(room) {
 	if (map.loadItemCount === 0) {
 		loadStateUpdate();
 	}
+
+	if (options.onRoomLoad) { options.onRoomLoad(connection.roomId); }
 }
 
 function saveSettings() {
@@ -5896,11 +6618,10 @@ function addAvatar(token, owner = true) {
 		var avatar = document.createElement('button');
 		avatar.type = 'button';
 		avatar.className = 'avatar';
-		var avatarModel = map.models[token.modelId];
-		var borderColor = '#' + ('000000' + (avatarModel.baseColor).toString(16)).slice(-6);
-		var avatarName = avatarModel.name || 'Token';
+		var avatarModel = tokenModel(token);
+		var pawnColor = token.settings.iconColor === null ? avatarModel.baseColor : token.settings.iconColor;
+		var borderColor = hexColor(avatarModel.src ? avatarModel.baseColor : pawnColor);
 		avatar.style.setProperty('--avatar-edge', borderColor);
-		avatar.setAttribute('aria-label', 'Look through ' + avatarName + '\u2019s eyes');
 
 		var face = document.createElement('span');
 		face.className = 'avatar-face';
@@ -5911,7 +6632,7 @@ function addAvatar(token, owner = true) {
 				lookAtObject(token);
 			}, false);
 			avatar.addEventListener('pointerenter', function(e) {
-				if (e.pointerType == 'mouse') { showSideTip(avatar, avatarName, 'Click to see through its eyes.', 0, 'top'); }
+				if (e.pointerType == 'mouse') { showSideTip(avatar, tokenName(token), statsLine(token) + 'Click to see through its eyes.', 0, 'top'); }
 			});
 			avatar.addEventListener('pointerleave', hideSideTip);
 		}());
@@ -5925,15 +6646,36 @@ function addAvatar(token, owner = true) {
 			face.appendChild(avatarImage);
 		}
 		else {
-			// tokens without an image show their colour and initial
+			// tokens without an image show their colour
 			face.style.backgroundColor = borderColor;
 			face.classList.add('avatar-face-plain');
-			face.textContent = avatarName.trim().charAt(0).toUpperCase();
 		}
+
+		var hp = document.createElement('span');
+		hp.className = 'avatar-hp';
+		avatar.appendChild(hp);
 
 		avatarInnerContainer.appendChild(avatar);
 		token.avatar = avatar;
+		updateAvatar(token);
 	}
+}
+
+function statsLine(token) {
+	return token.stats ? 'HP ' + token.stats.hp + ' of ' + token.stats.maxHp + ', AC ' + token.stats.ac + '. ' : '';
+}
+
+function updateAvatar(token) {
+	if (!token.avatar) { return; }
+
+	var model = tokenModel(token);
+	var color = token.settings.iconColor === null ? model.baseColor : token.settings.iconColor;
+	var hp = token.avatar.querySelector('.avatar-hp');
+
+	token.avatar.style.setProperty('--avatar-edge', hexColor(model.src ? model.baseColor : color));
+	token.avatar.setAttribute('aria-label', statsLine(token) + 'Look through ' + tokenName(token) + '\u2019s eyes');
+	hp.textContent = token.stats && token.stats.maxHp ? token.stats.hp + '/' + token.stats.maxHp : '';
+	hp.hidden = !hp.textContent;
 }
 
 function removeAvatar(token) {
@@ -6003,7 +6745,8 @@ var updateClient = {
 			modelOffsetX: 'float',
 			modelOffsetY: 'float',
 			viewDistance: 'int',
-			baseColor: 'int'
+			baseColor: 'int',
+			editable: 'flag?'
 		});
 
 		if (args !== false) {
@@ -6056,6 +6799,7 @@ var updateClient = {
 
 				map.scene.remove(token);
 				delete map.objects.tokens[args.tokenId];
+				tokenRemoved(token);
 
 				if (chooseOwnVisionToken()) {
 					updateVisionMeshes();
@@ -6086,6 +6830,8 @@ var updateClient = {
 			if (args.modelId in map.models) {
 				var model = modelFromArgs(args);
 
+				//who may change it is per user, and this message comes from whoever changed it
+				model.editable = map.models[args.modelId].editable;
 				map.models[model.modelId] = model;
 
 				for (const [tokenId, token] of Object.entries(map.objects.tokens)) {
@@ -6158,7 +6904,8 @@ var updateClient = {
 		args = validateArguments(args, {
 			tokenId: 'id',
 			hideAvatar: 'int',
-			disableCamLook: 'int'
+			disableCamLook: 'int',
+			iconColor: 'int?'
 		});
 
 		if (args !== false && args.tokenId in map.objects.tokens) {
@@ -6166,6 +6913,8 @@ var updateClient = {
 
 			token.settings.hideAvatar = args.hideAvatar ? 1 : 0;
 			token.settings.disableCamLook = args.disableCamLook ? 1 : 0;
+			token.settings.iconColor = args.iconColor === undefined ? null : args.iconColor;
+			applyTokenColor(token);
 
 			if (token.avatar) {
 				token.avatar.classList[token.settings.hideAvatar ? 'add' : 'remove']('avatar-hidden');
@@ -6174,6 +6923,36 @@ var updateClient = {
 			if (token.settings.disableCamLook) {
 				token.rotation.y = 0;
 			}
+		}
+	},
+
+	updateTokenOverrides: function(args) {
+		var overrides = args.overrides && typeof args.overrides === 'object' ? args.overrides : null;
+
+		args = validateArguments(args, {
+			tokenId: 'id'
+		});
+
+		if (args !== false && args.tokenId in map.objects.tokens) {
+			setTokenOverrides(map.objects.tokens[args.tokenId], overrides);
+		}
+	},
+
+	updateTokenStats: function(args) {
+		args = validateArguments(args, {
+			tokenId: 'id',
+			hp: 'int',
+			maxHp: 'int',
+			ac: 'int'
+		});
+
+		if (args !== false && args.tokenId in map.objects.tokens) {
+			var token = map.objects.tokens[args.tokenId];
+
+			token.stats = { hp: args.hp, maxHp: args.maxHp, ac: args.ac };
+			updateTokenBar(token);
+			updateAvatar(token);
+			tokenChanged(token);
 		}
 	},
 
@@ -6316,6 +7095,18 @@ var updateClient = {
 		}
 	},
 	
+	updatePlaneImage: function(args) {
+		args = validateArguments(args, {
+			planeId: 'id',
+			planeUploadId: 'id',
+			image: 'text'
+		});
+
+		if (args !== false && args.planeId in map.objects.planes) {
+			changePlaneImage(map.objects.planes[args.planeId], args.image, args.planeUploadId, false);
+		}
+	},
+
 	updatePlaneTransform: function(args) {
 		args = validateArguments(args, {
 			planeId: 'id',
@@ -6631,9 +7422,7 @@ var updateClient = {
 				changeRoom(args.roomId, args);
 			}
 			else {
-				map.orbitControls.animating = true;
-				map.objects.camera.newPosition = new THREE.Vector3(args.xpos, args.ypos, args.zpos);
-				map.orbitControls.newTarget = new THREE.Vector3(args.xtarget, args.ytarget, args.ztarget);
+				flyCamera(new THREE.Vector3(args.xpos, args.ypos, args.zpos), new THREE.Vector3(args.xtarget, args.ytarget, args.ztarget));
 			}
 		}
 	},
@@ -6667,7 +7456,8 @@ function modelFromArgs(args) {
 		scale: args.scale,
 		modelOffset: [args.modelOffsetX, args.modelOffsetY],
 		viewDistance: args.viewDistance,
-		baseColor: args.baseColor
+		baseColor: args.baseColor,
+		editable: args.editable !== false
 	};
 }
 
@@ -6748,7 +7538,8 @@ var clientRequest = {
 			modelOffsetX: 'float',
 			modelOffsetY: 'float',
 			viewDistance: 'int',
-			baseColor: 'int'
+			baseColor: 'int',
+			editable: 'flag?'
 		});
 
 		if (args !== false) {
@@ -6768,12 +7559,14 @@ var clientRequest = {
 		var newTokenButton = buildPaneItem(map.panes.tokens, '', 'button', '+ New Token');
 		newTokenButton.element.querySelector('.pane-item-label-text').style.display = 'none';
 		if (!options.uploadModel && !options.uploadLocked) { newTokenButton.element.style.display = 'none'; }
+		addPaneBadge(newTokenButton.input, options.uploadBadge);
 
 		newTokenButton.input.addEventListener('click', function() {
 			if (!options.uploadModel) { showNotice(options.uploadLocked); return; }
 
 			closePane(map.panes.tokens);
 
+			map.local.editedToken = null;
 			map.local.tokenFormData.name.value = map.local.tokenFormDefault.name;
 			map.local.tokenFormData.id.value = '';
 			map.local.tokenFormData.src.value = '';
@@ -6787,6 +7580,7 @@ var clientRequest = {
 			map.local.tokenFormData.modelOffsetY.value = map.local.tokenFormDefault.modelOffsetY;
 			map.local.tokenFormData.viewDistance.value = map.local.tokenFormDefault.viewDistance;
 			map.local.tokenFormData.baseColor.value = map.local.tokenFormDefault.baseColor;
+			setTokenPaneParts(false, false);
 
 			var fileLabel = map.local.tokenFormData.file.element.querySelector('.pane-item-label-text');
 			fileLabel.innerHTML = 'Image File';
@@ -6804,25 +7598,28 @@ var clientRequest = {
 			buildPaneItem(map.panes.tokens, escapeHtml(modelLibrary.characterFolder), 'folder').element.addEventListener('click', openCharacterFolder);
 		}
 
+		//the plain coloured pawns are always on offer: a folder of their own, filled here, unless
+		//the list is already made of them (a server with no image library)
+		var hasPawns = (args.models || []).some(function(m) { return String(m.modelId).startsWith(DEFAULT_MODEL_PREFIX); });
+
+		if (!isFolderId(args.folderId) && !hasPawns) {
+			buildPaneItem(map.panes.tokens, 'Coloured Pawns', 'folder').element.addEventListener('click', function() {
+				clientRequest.getModels({ folders: [], models: builtInModelList(), folderId: 'pawns', parentId: 0, showNext: false });
+			});
+		}
+
 		if ('folders' in args) {
 			for (var j=0;j<args.folders.length;j++) {
 				var folder = buildPaneItem(map.panes.tokens, escapeHtml(args.folders[j].name), 'folder', args.folders[j].image);
+				addPaneBadge(badgeLabel(folder), args.folders[j].badge);
 
 				(function() {
 					var pane = map.panes.tokens;
 					var folderId = args.folders[j].folderId;
 					var parentId = args.folders[j].parentId;
 					
-					folder.element.addEventListener('click', function() {															
-
-						var args = {
-							parentId: parentId,
-							folderId: folderId,
-							limit: map.local.tokenListLimit,
-							offset: map.local.tokenListOffset
-						};
-
-						sendMessage('request', 'getModels', args);
+					folder.element.addEventListener('click', function() {
+						changeTokenPage(folderId, parentId, 0);
 					});
 				}());
 			}
@@ -6837,6 +7634,7 @@ var clientRequest = {
 				var thumbPath = model.src ? options.imageUrl({ kind: 'model', src: model.src, size: 200, quality: 80 }) : swatchUrl(model.baseColor);
 			
 				var image = buildPaneItem(map.panes.tokens, escapeHtml(model.name), 'image', thumbPath);
+				addPaneBadge(badgeLabel(image), model.badge);
 				
 				if (model.ownerId !== undefined && String(model.ownerId) !== '0') {
 					image.input.deleteButton.style.display = 'block';
@@ -6891,8 +7689,7 @@ var clientRequest = {
 			if ((args.folders.length > 0 || args.models.length > 0) && 'showNext' in args && args.showNext) {
 				paginaiton.input.next.style.display = 'inline-block';
 				paginaiton.input.next.addEventListener('click', function() {
-					map.local.tokenListOffset += map.local.tokenListLimit;
-					changeTokenPage(args.folderId, args.parentId, map.local.tokenListOffset);
+					changeTokenPage(args.folderId, args.parentId, map.local.tokenListOffset + map.local.tokenListLimit);
 				}, false);
 			}
 			
@@ -6900,8 +7697,7 @@ var clientRequest = {
 			if (map.local.tokenListOffset > 0) {
 				paginaiton.input.prev.style.display = 'inline-block';
 				paginaiton.input.prev.addEventListener('click', function() {
-					map.local.tokenListOffset -= map.local.tokenListLimit;
-					changeTokenPage(args.folderId, args.parentId, map.local.tokenListOffset);
+					changeTokenPage(args.folderId, args.parentId, Math.max(0, map.local.tokenListOffset - map.local.tokenListLimit));
 				}, false);
 			}
 		}
@@ -6920,6 +7716,7 @@ var clientRequest = {
 		var newPlaneButton = buildPaneItem(map.panes.plane_images, '', 'button', '+ New Plane');
 		newPlaneButton.element.querySelector('.pane-item-label-text').style.display = 'none';
 		if (!options.uploadPlane && !options.uploadLocked) { newPlaneButton.element.style.display = 'none'; }
+		addPaneBadge(newPlaneButton.input, options.uploadBadge);
 
 		newPlaneButton.input.addEventListener('click', function() {
 			if (!options.uploadPlane) { showNotice(options.uploadLocked); return; }
@@ -6953,8 +7750,7 @@ var clientRequest = {
 					return;
 				}
 
-				var position = map.lastClickPos ? new THREE.Vector2(map.lastClickPos[0].point.x, map.lastClickPos[0].point.z) : new THREE.Vector2(0, 0);
-				createPlaneImage(url, 'url', position);
+				placePlaneImage(url, 'url');
 				closePane(map.panes.plane_images);
 			}, false);
 		}
@@ -6963,22 +7759,15 @@ var clientRequest = {
 			//build folder items
 			for (var j=0;j<args.folders.length;j++) {
 				var folder = buildPaneItem(map.panes.plane_images, escapeHtml(args.folders[j].name), 'folder', args.folders[j].image);
+				addPaneBadge(badgeLabel(folder), args.folders[j].badge);
 
 				(function() {
 					var pane = map.panes.plane_images;
 					var folderId = args.folders[j].folderId;
 					var parentId = args.folders[j].parentId;
 					
-					folder.element.addEventListener('click', function() {															
-
-						var args = {
-							parentId: parentId,
-							folderId: folderId,
-							limit: map.local.tokenListLimit,
-							offset: map.local.tokenListOffset
-						};
-
-						sendMessage('request', 'getPlaneImages', args);
+					folder.element.addEventListener('click', function() {
+						changePlanePage(folderId, parentId, 0);
 					});
 				}());
 			}
@@ -6994,6 +7783,7 @@ var clientRequest = {
 				var thumbPath = options.imageUrl({ kind: 'plane', src: src, size: 200, quality: 80 });
 				
 				var image = buildPaneItem(map.panes.plane_images, name, 'image', thumbPath);
+				addPaneBadge(badgeLabel(image), args.planes[j].badge);
 				
 				if (args.planes[j].ownerId !== undefined && String(args.planes[j].ownerId) !== '0') {
 					image.input.deleteButton.style.display = 'block';
@@ -7023,8 +7813,7 @@ var clientRequest = {
 					var puid = planeUploadId;
 					
 					image.input.image.addEventListener('click', function() {
-						var position = new THREE.Vector2(map.lastClickPos[0].point.x, map.lastClickPos[0].point.z);
-						createPlaneImage(file, puid, position);
+						placePlaneImage(file, puid);
 						closePane(pane);
 					});
 				}());
@@ -7050,8 +7839,7 @@ var clientRequest = {
 			if ((args.folders.length > 0 || args.planes.length > 0) && 'showNext' in args && args.showNext) {
 				paginaiton.input.next.style.display = 'inline-block';
 				paginaiton.input.next.addEventListener('click', function() {
-					map.local.planeListOffset += map.local.planeListLimit;
-					changePlanePage(args.folderId, args.parentId, map.local.planeListOffset);
+					changePlanePage(args.folderId, args.parentId, map.local.planeListOffset + map.local.planeListLimit);
 				}, false);
 			}
 			
@@ -7059,14 +7847,14 @@ var clientRequest = {
 			if (map.local.planeListOffset > 0) {
 				paginaiton.input.prev.style.display = 'inline-block';
 				paginaiton.input.prev.addEventListener('click', function() {
-					map.local.planeListOffset -= map.local.planeListLimit;
-					changePlanePage(args.folderId, args.parentId, map.local.planeListOffset);
+					changePlanePage(args.folderId, args.parentId, Math.max(0, map.local.planeListOffset - map.local.planeListLimit));
 				}, false);
 			}
 		}
 		
 		hideContextMenu();
 		openPane(map.panes.plane_images);
+		map.panes.plane_images.body.scrollTop = 0;
 	},
 
 	getRooms: function(args) {
@@ -7269,14 +8057,15 @@ function animate() {
 	if (map.orbitControls.animating) {
 		var delta = clock.getDelta();
 		var speed = 2;
-		map.objects.camera.position.lerp(map.objects.camera.newPosition, delta * speed);
+		map.objects.camera.position.lerp(map.orbitControls.newPosition, delta * speed);
 		map.orbitControls.target.lerp(map.orbitControls.newTarget, delta * speed);
 	}
-	
+
+	keyCamera();
 	map.orbitControls.update();
-	map.mask.fog.update(performance.now());
+	map.mask.fog.update(performance.now(), map.objects.camera);
 	
-	if (map.settings.lookAtCam) {
+	if (map.settings.lookAtCam && !map.settings.view2d) {
 		for (const [tokenId, token] of Object.entries(map.objects.tokens)) {
 			if (token.settings.disableCamLook || (token.meshes && token.meshes.character)) { continue; }
 			token.lookAt(map.objects.camera.position.x, token.position.y, map.objects.camera.position.z);
@@ -7295,12 +8084,61 @@ function animate() {
 	render();
 }
 
-function render() {
-	var delta = clock.getDelta();
+// Moves the view for the camera keys held down: across the floor relative to where the camera faces,
+// at the same height, and round the point it looks at. The pace follows how much floor shows, so a
+// zoomed-out view crosses the room as quickly as a close one crosses a corridor. With camera damping
+// on, the view eases in and out instead of starting and stopping dead.
+function keyCamera() {
+	var now = performance.now();
+	var seconds = Math.min((now - (map.cameraKeyTime || now)) / 1000, 0.1);
+	map.cameraKeyTime = now;
 
-	if (mixer) {
-		mixer.update( delta );
+	var controls = map.orbitControls;
+	var keys = map.cameraKeys;
+	var free = controls.enabled && !controls.animating;
+	var wanted = cameraKeyMove.set(0, 0, 0);
+
+	if (free && controls.enablePan) {
+		wanted.x = (keys.has('right') ? 1 : 0) - (keys.has('left') ? 1 : 0);
+		wanted.y = (keys.has('forward') ? 1 : 0) - (keys.has('back') ? 1 : 0);
 	}
+	if (free && controls.enableRotate && !map.settings.view2d) {
+		wanted.z = (keys.has('turnLeft') ? 1 : 0) - (keys.has('turnRight') ? 1 : 0);
+	}
+
+	var velocity = map.cameraKeyVelocity;
+	if (map.settings.cameraDamping) {
+		velocity.lerp(wanted, Math.min(1, seconds * 8));
+		if (velocity.lengthSq() < 1e-6) { velocity.set(0, 0, 0); }
+	}
+	else {
+		velocity.copy(wanted);
+	}
+
+	if (seconds === 0 || velocity.lengthSq() === 0) { return; }
+
+	var camera = map.objects.camera;
+	var target = controls.target;
+	var azimuth = controls.getAzimuthalAngle();
+
+	if (velocity.x || velocity.y) {
+		var step = floorViewHeight() * CAMERA_KEY_PAN * seconds;
+		var forward = cameraKeyForward.set(-Math.sin(azimuth), 0, -Math.cos(azimuth));
+		var right = cameraKeyRight.set(Math.cos(azimuth), 0, -Math.sin(azimuth));
+		var offset = forward.multiplyScalar(velocity.y * step).addScaledVector(right, velocity.x * step);
+		camera.position.add(offset);
+		target.add(offset);
+	}
+
+	if (velocity.z) {
+		cameraKeyOffset.copy(camera.position).sub(target).applyAxisAngle(camera.up, velocity.z * CAMERA_KEY_TURN * seconds);
+		camera.position.copy(target).add(cameraKeyOffset);
+	}
+}
+
+function render() {
+	clock.getDelta();	//keeps the camera glide in animate() measuring one frame
+	map.ping.update(map.orbitControls.getAzimuthalAngle());
 
 	//map.renderer.render( map.scene, map.objects.camera );
 	map.composer.render();
@@ -7341,6 +8179,7 @@ function warmUpShaders() {
 	if (plane) { outlined.push(plane); }
 
 	var handles = isDM ? [map.scaleControls.plane.container, map.rotationControls.plane.circle, map.rotationControls.door.circle] : [];
+	handles = handles.concat(map.ping.warmUpMeshes);
 	var wasVisible = handles.map(function(h) { return h.visible; });
 	handles.forEach(function(h) { h.visible = true; });
 
@@ -7408,12 +8247,12 @@ return {
 		connection.close();
 		cleanups.forEach(function(cleanup) { cleanup(); });
 		resizeObserver.disconnect();
-		map.orbitControls.stopListenToKeyEvents();
 		map.orbitControls.dispose();
 		map.selectionHelper.dispose();
 		resetRoom();
 		map.composer.dispose();
 		map.mask.fog.dispose();
+		map.ping.dispose();
 		cancelAnimationFrame(wallModelFrame);
 		if (map.wallModel) { map.wallModel.dispose(); }
 		if (wallMaterial) {
@@ -7466,19 +8305,44 @@ return {
 		return true;
 	},
 	showNotice: showNotice,
+	getRoomId: function() {
+		return connection.roomId;
+	},
+	getTokens: function() {
+		return Object.values(map.objects.tokens).map(tokenInfo);
+	},
+	setTokenStats: function(tokenId, stats) {
+		var token = map.objects.tokens[tokenId];
+
+		if (!token) { return false; }
+
+		setTokenStats(token, stats);
+		return true;
+	},
+	focusToken: function(tokenId) {
+		var token = map.objects.tokens[tokenId];
+
+		if (!token) { return false; }
+
+		flyCamera(new THREE.Vector3(token.position.x - 2, 8, token.position.z + 12), token.position.clone());
+		return true;
+	},
+	openTracker: openTrackerDrawer,
 	// The camera as plain numbers, so a host app can draw its own layer (dice) with the same view.
 	getView: function() {
 		var camera = map.objects.camera;
 		if (!camera || !map.canvas) { return null; }
 		camera.updateMatrixWorld();
-		var p = camera.position, q = camera.quaternion, t = map.orbitControls.target;
+		// always a view with perspective: in the 2D view, one from straight above that shows the
+		// floor at the same size, so a host's layer needs nothing special
+		var p = perspectiveEye(), q = camera.quaternion, t = map.orbitControls.target;
 		return {
 			position: [p.x, p.y, p.z],
 			quaternion: [q.x, q.y, q.z, q.w],
 			target: [t.x, t.y, t.z],
-			fov: camera.fov,
-			near: camera.near,
-			far: camera.far,
+			fov: map.perspCamera.fov,
+			near: map.perspCamera.near,
+			far: map.perspCamera.far,
 			width: viewWidth(),
 			height: viewHeight(),
 			floorY: map.objects.plane ? map.objects.plane.position.y : -0.53

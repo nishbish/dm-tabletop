@@ -13,6 +13,8 @@ var TranslateControls = function (camera, domElement, scene, renderer) {
 
   var scope = this;
 
+  // replaced by the viewer when it switches between the 3D and the 2D view
+  this.camera = camera;
   this.enabled = true;
   this.isTranslating = false;
   this.snap = 0;
@@ -43,7 +45,7 @@ var TranslateControls = function (camera, domElement, scene, renderer) {
     var pointerPos = scope.parsePointerPos(e);
 
     //raycaster
-    raycast.setFromCamera(pointerPos, camera);
+    raycast.setFromCamera(pointerPos, scope.camera);
 
     var intersectObjects = [];
 
@@ -99,7 +101,7 @@ var TranslateControls = function (camera, domElement, scene, renderer) {
         plane.rotation.set(-Math.PI / 2, 0, 0);
       }
       else {
-        plane.lookAt(camera.position.x, scope.object.position.y, camera.position.z);
+        plane.lookAt(scope.camera.position.x, scope.object.position.y, scope.camera.position.z);
       }
 
       this.dispatchEvent( { type: 'translatestart' } );
@@ -124,7 +126,7 @@ var TranslateControls = function (camera, domElement, scene, renderer) {
       
       var pointerPos = scope.parsePointerPos(e);      
 
-      raycast.setFromCamera(pointerPos, camera);
+      raycast.setFromCamera(pointerPos, scope.camera);
       var intersects = raycast.intersectObjects([plane], false);      
       
       if (intersects.length > 0) {

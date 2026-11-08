@@ -12,7 +12,7 @@ npm run dev -w @dm-tabletop/initiative-tracker     # demo page on http://127.0.0
 npm run build -w @dm-tabletop/initiative-tracker   # dist/initiative-tracker.js + dist/types
 ```
 
-The built file is about 65 kB (16 kB gzipped); about 28 kB of that is the creature list.
+The built file is about 120 kB (33 kB gzipped); most of that is the two creature lists. The full SRD stat blocks are a separate file, loaded only when the host asks for them (see "Stat blocks").
 
 ## Use
 
@@ -51,47 +51,52 @@ small rule:
 }
 ```
 
-| Variable              | Light default                                              | Dark default                     | Used for                                                                           |
-| --------------------- | ---------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------- |
-| `--it-bg`             | `#f4f1e4`                                                  | `#0e2a24`                        | Background of the whole widget                                                     |
-| `--it-fg`             | `#16261f`                                                  | `#eef0e2`                        | Main text on the background                                                        |
-| `--it-muted`          | `#4d5b52`                                                  | `#b6c4b9`                        | Secondary text and labels                                                          |
-| `--it-border-strong`  | `#5f6f63`                                                  | `#8fae9f`                        | Borders of fields and buttons                                                      |
-| `--it-surface`        | `#e7e5d2`                                                  | `#17382f`                        | Buttons and raised parts                                                           |
-| `--it-input-bg`       | `#ffffff`                                                  | `#0a211c`                        | Fill of text fields                                                                |
-| `--it-rule`           | `#c9c9ad`                                                  | `#dbdbc7`                        | The panel behind the creature list: shows between the cells and under the headings |
-| `--it-head-bg`        | `#244e44`                                                  | `#2b5a4e`                        | Background of the column headings                                                  |
-| `--it-head-fg`        | `#f4f1e4`                                                  | same                             | Text of the column headings                                                        |
-| `--it-row-bg`         | `#244e44`                                                  | `#1c4137`                        | Fill of a creature row                                                             |
-| `--it-row-fg`         | `#f4f1e4`                                                  | `#eef0e2`                        | Text in a creature row                                                             |
-| `--it-active-bg`      | `#2f7a5e`                                                  | same                             | Fill of the row whose turn it is                                                   |
-| `--it-down-bg`        | `#7a3535`                                                  | `#773636`                        | Fill of a row whose creature is down (0 hit points)                                |
-| `--it-accent`         | `#1d6a4c`                                                  | `#9be3b4`                        | Primary buttons and markers                                                        |
-| `--it-accent-fg`      | `#ffffff`                                                  | `#07241a`                        | Text and icons on the accent colour                                                |
-| `--it-focus`          | `#a35200`                                                  | `#ffc566`                        | Keyboard focus ring                                                                |
-| `--it-danger`         | `#a4161a`                                                  | `#ff9a9d`                        | Clear and Delete buttons                                                           |
-| `--it-cut`            | `0px`                                                      | same                             | Size of the cut corners of buttons, fields and rows (0 = square corners)           |
-| `--it-font`           | `system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | same                             | Font family                                                                        |
-| `--it-weight`         | `500`                                                      | same                             | Normal font weight                                                                 |
-| `--it-weight-strong`  | `700`                                                      | same                             | Bold font weight (buttons, headings, the round number)                             |
-| `--it-shadow`         | `0 2px 10px rgba(0, 0, 0, 0.12)`                           | `0 2px 12px rgba(0, 0, 0, 0.45)` | Shadow of the suggestion list and of a row being dragged                           |
-| `--it-control-height` | `44px`                                                     | same                             | Minimum height of buttons and fields (touch target)                                |
-| `--it-pad`            | `14px`                                                     | same                             | Padding inside the widget                                                          |
+| Variable              | Light default                                              | Dark default                     | Used for                                                                                              |
+| --------------------- | ---------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `--it-bg`             | `#f4f1e4`                                                  | `#0e2a24`                        | Background of the whole widget                                                                        |
+| `--it-fg`             | `#16261f`                                                  | `#eef0e2`                        | Main text on the background                                                                           |
+| `--it-muted`          | `#4d5b52`                                                  | `#b6c4b9`                        | Secondary text and labels                                                                             |
+| `--it-border-strong`  | `#5f6f63`                                                  | `#8fae9f`                        | Borders of fields and buttons                                                                         |
+| `--it-surface`        | `#e7e5d2`                                                  | `#17382f`                        | Buttons and raised parts                                                                              |
+| `--it-input-bg`       | `#ffffff`                                                  | `#0a211c`                        | Fill of text fields                                                                                   |
+| `--it-rule`           | `#c9c9ad`                                                  | `#dbdbc7`                        | The panel behind the creature list, which shows as the lines between the cells (a gradient works too) |
+| `--it-head-bg`        | `#244e44`                                                  | `#2b5a4e`                        | Background of the column headings                                                                     |
+| `--it-head-fg`        | `#f4f1e4`                                                  | same                             | Text of the column headings                                                                           |
+| `--it-row-bg`         | `#244e44`                                                  | `#1c4137`                        | Fill of a creature row                                                                                |
+| `--it-row-fg`         | `#f4f1e4`                                                  | `#eef0e2`                        | Text in a creature row                                                                                |
+| `--it-active-bg`      | `#2f7a5e`                                                  | same                             | Fill of the row whose turn it is                                                                      |
+| `--it-down-bg`        | `#7a3535`                                                  | `#773636`                        | Fill of a row whose creature is down (0 hit points)                                                   |
+| `--it-accent`         | `#1d6a4c`                                                  | `#9be3b4`                        | Primary buttons and markers                                                                           |
+| `--it-accent-fg`      | `#ffffff`                                                  | `#07241a`                        | Text and icons on the accent colour                                                                   |
+| `--it-focus`          | `#a35200`                                                  | `#ffc566`                        | Keyboard focus ring                                                                                   |
+| `--it-tag-pf2e`       | `#e2c48a`                                                  | `#7a5c2a`                        | Fill of the "PF2e" badge in the suggestions (the "5e" one uses the accent)                            |
+| `--it-danger`         | `#a4161a`                                                  | `#ff9a9d`                        | Clear and Delete buttons                                                                              |
+| `--it-cut`            | `0px`                                                      | same                             | Size of the cut corners of the widget, the creature list, buttons and fields (0 = square)             |
+| `--it-font`           | `system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | same                             | Font family                                                                                           |
+| `--it-weight`         | `500`                                                      | same                             | Normal font weight                                                                                    |
+| `--it-weight-strong`  | `700`                                                      | same                             | Bold font weight (buttons, headings, the round number)                                                |
+| `--it-shadow`         | `0 2px 10px rgba(0, 0, 0, 0.12)`                           | `0 2px 12px rgba(0, 0, 0, 0.45)` | Shadow of the suggestion list and of a row being dragged                                              |
+| `--it-control-height` | `44px`                                                     | same                             | Minimum height of buttons and fields (touch target)                                                   |
+| `--it-pad`            | `14px`                                                     | same                             | Padding inside the widget                                                                             |
 
 The same list is exported as `themeVariables` (name, defaults, description). Layout classes all
 start with `it-`; they are not a stable API, the variables are.
 
 ### Options
 
-| Option          | Type                       | Default        | Meaning                                                                                       |
-| --------------- | -------------------------- | -------------- | --------------------------------------------------------------------------------------------- |
-| `storage`       | `EncounterStorage \| null` | localStorage   | Where encounters are saved. `null` turns saving off and hides the open/save/new/delete UI.    |
-| `creatures`     | `CreatureTemplate[]`       | `srdCreatures` | Autocomplete list. It replaces the built-in list; spread `srdCreatures` into yours to extend. |
-| `rng`           | `() => number` in [0, 1)   | `Math.random`  | Random source for rolls (inject a fake one in tests).                                         |
-| `onChange`      | `(state) => void`          | none           | Called after every change the user makes (not after `setState`).                              |
-| `onLimit`       | `(reason: string) => void` | none           | Called when `storage.save` rejects with `code === 'LIMIT'`.                                   |
-| `initialState`  | `TrackerState`             | last session   | Start from this state instead of restoring the last session.                                  |
-| `autosaveDelay` | `number` (ms)              | `400`          | Wait after the last change before the working state is autosaved.                             |
+| Option          | Type                       | Default            | Meaning                                                                                                                    |
+| --------------- | -------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `storage`       | `EncounterStorage \| null` | localStorage       | Where encounters are saved. `null` turns saving off and hides the folder and new buttons.                                  |
+| `creatures`     | `CreatureTemplate[]`       | `defaultCreatures` | Autocomplete list. It replaces the built-in list (`srdCreatures` then `pf2eCreatures`); spread those into yours to extend. |
+| `rng`           | `() => number` in [0, 1)   | `Math.random`      | Random source for rolls (inject a fake one in tests).                                                                      |
+| `onChange`      | `(state) => void`          | none               | Called after every change the user makes (not after `setState`).                                                           |
+| `onRowEdit`     | `(row) => void`            | none               | Called when the user changes the HP, max HP or AC of a linked row.                                                         |
+| `onLoad`        | `(state) => void`          | none               | Called after an encounter was opened or the last session restored.                                                         |
+| `onLinkClick`   | `(row) => void`            | none               | When given, linked rows show a button that calls this.                                                                     |
+| `onLimit`       | `(reason: string) => void` | none               | Called when `storage.save` rejects with `code === 'LIMIT'`.                                                                |
+| `initialState`  | `TrackerState`             | last session       | Start from this state instead of restoring the last session.                                                               |
+| `autosaveDelay` | `number` (ms)              | `400`              | Wait after the last change before the working state is autosaved.                                                          |
+| `statBlocks`    | `{ load, has?, pageUrl? }` | none               | When given, rows filled from the SRD list get a book button that opens the creature's stat block.                          |
 
 ### State
 
@@ -116,19 +121,41 @@ interface TrackerState {
 
 `migrate(anything)` turns old or damaged saved data into a valid current state. The pure
 functions the UI uses (`sortByInitiative`, `nextTurn`, `resetRound`, `rollInitiative`, `addRow`,
-`removeRow`, `clear`, `moveRow`, `applyHpInput`) are exported too.
+`removeRow`, `clear`, `moveRow`, `applyHpInput`, `changeHp`, `rollHitDice`) are exported too.
+
+### Linking rows
+
+A row can carry a `link`, a string the tracker only stores, to tie it to something outside it such as a token on a map. `tracker.linkRow(link, fields)` finds the row that has the link, else the first unlinked row with the same name, else the first empty row, else adds one, and returns it. `tracker.updateLinked(link, patch)` changes the linked row (`link: undefined` unties it) without calling `onRowEdit`, so two sides can follow each other without a loop.
 
 ### Using it
 
-- Press **Add creature**, type a name. Suggestions come from the creature list; picking one fills
-  AC, HP and the initiative bonus. Any other name is fine, fill the numbers in by hand.
-- The d20 button in the initiative column rolls d20 + bonus for one row, **Roll all** for everyone, **Sort** orders by initiative
-  (ties: higher bonus, then the order they were in). **Next** moves the turn on; after the last
-  creature the round counter goes up. **Reset round** goes back to round 1.
+- A new encounter starts with five empty rows; **Add creature** (the big **+**) adds more. Type a
+  name: suggestions come from the creature list, and picking one fills AC, HP and the initiative
+  bonus, shown in brackets beside the initiative ("(+2)"). Any other name is fine, fill the
+  numbers in by hand; players give their total, so there is no bonus to type in. Empty rows show
+  empty fields.
+- The d20 button in the initiative cell (shown on hover, or while the cell is in use on a touch
+  screen) rolls d20 + bonus for one row, **Roll all** for every filled-in row, **Sort** orders by
+  initiative with empty rows last (ties: higher bonus, then the order they were in). **Next** moves
+  the turn on, skipping empty rows; after the last creature the round counter goes up. **Reset
+  round** goes back to round 1.
+- A creature picked from the list can also roll its hit points: the die button in the HP cell
+  (shown the same way as the d20, labelled with the die, e.g. "d6") rolls its hit dice and sets HP
+  and max HP to the result.
+- While the initiative field has focus, a small box under it has an amount (1 to start with) and
+  **-** / **+** buttons that change the initiative by that much.
 - In the HP field type a number to set it, or `-5` / `+3` to change it. Max HP is the next field.
+  While the HP field has focus, a small box under it has an amount (1 to start with) and **-** /
+  **+** buttons that take that many hit points away or add them, by the same rules: never below 0,
+  but above max HP if you add that much (healing past the maximum is the DM's call). **Escape**
+  closes the box.
 - Reorder by dragging the handle (the row follows the pointer while the others slide aside), or
   focus the handle and press the up and down arrow keys.
-- **Clear** and **Delete** ask for a second press.
+- The encounter's name sits above the list. Changes are saved on their own a moment after the
+  last one (there is no Save button): an encounter is kept once it has a filled-in row, without
+  its empty rows. The folder button beside the name lists the saved encounters, to open one or
+  delete it; the **+** beside it starts a new encounter.
+- **Clear** (which leaves five empty rows) and deleting a saved encounter ask for a second press.
 
 ### Storage
 
@@ -143,17 +170,22 @@ interface EncounterStorage {
 
 The default `LocalStorageEncounterStorage({ prefix = 'it-tracker', storage? })` keeps encounters in
 the browser; it treats damaged JSON as empty and rejects `save` (instead of throwing) when the disk
-is full. The tracker also autosaves the working state under the reserved id `LAST_SESSION_ID`
-(`'_last_session'`) and restores it on start, so a custom storage must accept that id and should
-not count it as one of the user's encounters.
+is full. The tracker autosaves the open encounter with `save(id, state)` (`save(null, state)` the first
+time), and the working state under the reserved id `LAST_SESSION_ID` (`'_last_session'`), which it
+restores on start. That copy carries `encounterId`, so after a reload the tracker carries on saving
+into the same encounter; a custom storage must accept the reserved id, keep `encounterId`, and
+should not count it as one of the user's encounters. If `save(id, ...)` rejects with `status` 404
+or `code` `'NOT_FOUND'` (deleted elsewhere), the tracker saves the encounter again as a new one.
 
 The package sets no limits. A host that wants to cap saved encounters rejects `save` with an error
 whose `code` is `'LIMIT'`; the tracker then calls `onLimit(error.message)` and shows the message
-without blocking.
+beside the name without blocking. It stops trying to create that encounter until one is deleted
+or another is started.
 
 ### Creature data
 
 `srdCreatures` has the monsters and NPCs of the D&D 5e SRD 5.1: `{ id, name, ac, hp, hitDice, dex, cr }`.
+The full stat blocks (`srd-monsters.json`, the `Monster` type) have the same ids.
 The initiative bonus is `floor((dex - 10) / 2)`. A `CreatureTemplate` may give `initiativeBonus`
 directly instead of `dex`. To regenerate the file (it is committed), download the SRD 5.1 PDF
 (Creative Commons edition) from the page named below and run:
@@ -163,18 +195,68 @@ npm install --no-save pdfjs-dist@4
 node packages/initiative-tracker/scripts/build-creatures.mjs path/to/SRD_CC_v5.1.pdf
 ```
 
+`pf2eCreatures` has the creatures of Pathfinder Monster Core and Monster Core 2 (Paizo, ORC License,
+see [NOTICE.md](NOTICE.md)): `{ id, name, ac, hp, initiativeBonus, level, ruleset: 'PF2e' }`. The
+initiative bonus is the creature's Perception, which Pathfinder rolls initiative with; there are no
+hit dice (fixed hit points). Names that are Reserved Material under the ORC License (deities, planes
+and other places, named characters) are left out. Suggestions show the `ruleset` tag. To regenerate
+the file (it is committed), check out the Foundry VTT PF2e system
+(https://github.com/foundryvtt/pf2e) and run:
+
+```
+node packages/initiative-tracker/scripts/build-pf2e-creatures.mjs path/to/pf2e
+```
+
+`defaultCreatures` is both lists, SRD first.
+
+The same script writes the full Pathfinder stat blocks, `pf2e-monsters.json` (shipped as
+`@dm-tabletop/initiative-tracker/pf2e-monsters.json`, about 2.2 MB, 450 kB gzipped; the type is
+`Pf2eMonster`). `renderPf2eStatBlock` draws one, `renderAnyStatBlock` either kind (a Pathfinder id
+starts with `pf2e-`), and `PF2E_CREDIT_HTML` is the ORC Notice and attribution to show beside it.
+Setting names that are Reserved Material under the ORC License are removed by
+`scripts/pf2e-block.mjs`; the build stops if one is left.
+
+It writes both files. The stat blocks are read from the PDF's fonts (bold italic trait names,
+bold section headings); a test checks a sample of them against the printed stat blocks.
+
+### Stat blocks
+
+With the `statBlocks` option, a row filled from the built-in creature list (SRD or Pathfinder) shows
+a small book button in its name cell (`has(monsterId)` picks other rows, for a host with stat blocks of its own). It opens the creature's full stat block in a panel at the side of the window (along the
+bottom on a phone), without leaving the tracker; × or Escape closes it. `load(monsterId)` returns
+the stat block (it is called once per creature), `pageUrl(monsterId)` adds a "Full page" link.
+
+The full SRD stat blocks ship as `@dm-tabletop/initiative-tracker/srd-monsters.json` (about
+470 kB, 85 kB gzipped, so serve it on its own rather than bundling it). The renderer is exported
+too, also as the DOM-free `@dm-tabletop/initiative-tracker/statblock`, so a server can render the
+same markup into pages: `renderStatBlock(monster, { headingLevel, headingId, description })`
+returns HTML, `statBlockCss` its styles, `SRD_CREDIT_HTML` the credit line to show beside it.
+
+```js
+let all;
+createTracker(el, {
+  statBlocks: {
+    load: async (id) => {
+      all = all || (await fetch('/srd-monsters.json').then((r) => r.json()));
+      return all.find((m) => m.id === id) || null;
+    },
+  },
+});
+```
+
 ### Accessibility
 
 Every input has a label, every button an `aria-label`, and focus is always visible. The current
 turn is marked with the text "Turn" and a bar, not only a colour, and announced in a polite live
-region ("Round 2, turn: Goblin"); messages like "Saved" use another. Rows can be reordered with
+region ("Round 2, turn: Goblin") that is not shown on screen; other messages ("Opened Lair") use
+another, shown only when something went wrong. Rows can be reordered with
 the arrow keys on their handle as well as dragging, and the name field is an ARIA combobox (arrow keys, Enter, Escape).
 
 ## Attribution
 
 This work includes material taken from the System Reference Document 5.1 ("SRD 5.1") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.
 
-A host app that offers the built-in creature list should show this notice too.
+A host app that offers the built-in creature list or shows the stat blocks should show this notice too (the stat block panel shows a short credit line with links).
 
 ## Tests
 

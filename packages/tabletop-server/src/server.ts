@@ -31,6 +31,9 @@ export interface TabletopServerOptions {
   logger?: Logger;
   // Extra event names (asset libraries, room lists, ...) supplied by the hosting app.
   handlers?: { [name: string]: Handler };
+  // Looks at a name a user gave something that everyone in the room sees (a token's name). Return
+  // a sentence to refuse it, which the sender is shown, or null to accept it. Default: accept all.
+  checkName?: (name: string) => string | null;
   // Lifecycle callbacks for the hosting app (presence, usage stats...). onJoin runs after a
   // connection joined (the `joined` message is already sent), onLeave after a joined connection
   // closed. They run one after another for the same user and room, in the order the events
@@ -71,6 +74,8 @@ export interface TabletopServer {
   // that is already running, so afterwards the host app can safely delete the stored copy.
   // Resolves false when the room was not loaded.
   discardRoom(roomId: string, closeCode?: number): Promise<boolean>;
+  // The host app's checkName option; handlers call it for names they store.
+  checkName(name: string): string | null;
   // Schedules a save for a loaded room whose `state` a handler changed from outside that room
   // (ctx.markDirty only covers the room the message came from). False if it is not loaded.
   markDirty(roomId: string): boolean;
@@ -675,6 +680,7 @@ export function createTabletopServer(options: TabletopServerOptions): TabletopSe
     sendToUsers,
     broadcastAllRooms,
     discardRoom,
+    checkName: (name) => (options.checkName ? options.checkName(name) : null),
     markDirty(roomId: string): boolean {
       const room = rooms.get(roomId);
       if (!room) return false;

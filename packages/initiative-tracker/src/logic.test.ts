@@ -2,20 +2,29 @@ import { describe, expect, it } from 'vitest';
 import {
   addRow,
   applyHpInput,
+  changeHp,
   clear,
   createState,
+  hasContent,
+  isBlankRow,
   migrate,
   moveRow,
   nextTurn,
   removeRow,
   resetRound,
+  rollHitDice,
   rollInitiative,
   sortByInitiative,
+  linkRow,
+  withoutBlankRows,
 } from './logic';
 import { TrackerState } from './types';
 
+// a state with no rows at all (a new encounter has five empty ones)
+const empty = (): TrackerState => ({ ...createState(), rows: [] });
+
 function withRows(specs: Array<[string, number, number?]>): TrackerState {
-  let s = createState();
+  let s = empty();
   for (const [name, initiative, bonus] of specs) {
     s = addRow(s, { name, initiative, initiativeBonus: bonus || 0 }, name);
   }
@@ -115,8 +124,18 @@ describe('nextTurn', () => {
   });
 
   it('with no rows, nothing changes', () => {
-    const s = createState();
+    const s = empty();
     expect(nextTurn(s)).toEqual(s);
+  });
+
+  it('skips empty rows, and steps through them when nothing is filled in', () => {
+    let s = addRow(addRow(addRow(empty(), {}, 'x'), { name: 'a' }, 'a'), {}, 'y');
+    s = nextTurn(s); // from the empty first row to a
+    expect([s.turn, s.round]).toEqual([1, 1]);
+    s = nextTurn(s); // past the empty last row, round 2
+    expect([s.turn, s.round]).toEqual([1, 2]);
+    const blank = nextTurn(createState());
+    expect([blank.turn, blank.round]).toEqual([1, 1]);
   });
 });
 
@@ -133,9 +152,11 @@ describe('resetRound, clear, removeRow, moveRow', () => {
     expect([s.round, s.turn]).toEqual([1, 0]);
   });
 
-  it('clear removes rows and resets, keeping the name', () => {
+  it('clear removes the creatures and leaves five empty rows, keeping the name', () => {
     const s = clear({ ...withRows([['a', 1]]), name: 'Ambush', round: 3 });
-    expect(s).toMatchObject({ name: 'Ambush', rows: [], round: 1, turn: 0 });
+    expect(s).toMatchObject({ name: 'Ambush', round: 1, turn: 0 });
+    expect(s.rows).toHaveLength(5);
+    expect(s.rows.every(isBlankRow)).toBe(true);
   });
 
   it('removeRow keeps the active creature active', () => {
@@ -213,12 +234,23 @@ describe('rollInitiative', () => {
   });
 });
 
+describe('changeHp', () => {
+  it('adds or takes away, never below 0, and may go above max', () => {
+    expect(changeHp(12, 20, -5)).toBe(7);
+    expect(changeHp(12, 20, 3)).toBe(15);
+    expect(changeHp(12, 20, -50)).toBe(0);
+    expect(changeHp(12, 20, 50)).toBe(62);
+    expect(changeHp(12, 0, 50)).toBe(62);
+    expect(changeHp(12, 20, NaN)).toBe(12);
+  });
+});
+
 describe('applyHpInput', () => {
   it('applies relative changes, clamped to 0 and max', () => {
     expect(applyHpInput('-5', 12, 20)).toEqual({ hp: 7, maxHp: 20 });
     expect(applyHpInput('+3', 12, 20)).toEqual({ hp: 15, maxHp: 20 });
     expect(applyHpInput('-50', 12, 20).hp).toBe(0);
-    expect(applyHpInput('+50', 12, 20).hp).toBe(20);
+    expect(applyHpInput('+50', 12, 20)).toEqual({ hp: 62, maxHp: 20 });
     expect(applyHpInput('+50', 12, 0).hp).toBe(62);
   });
 
@@ -235,17 +267,13 @@ describe('applyHpInput', () => {
 
 describe('migrate', () => {
   it('returns a fresh state for junk', () => {
-    expect(migrate(null).rows).toEqual([]);
+    expect(migrate(null).rows).toHaveLength(5);
     expect(migrate('x').version).toBe(1);
     expect(migrate(42).round).toBe(1);
   });
 
   it('keeps a valid state unchanged', () => {
-    const s = addRow(
-      createState(),
-      { name: 'Orc', hp: 15, maxHp: 15, ac: 13, monsterId: 'orc' },
-      'x1',
-    );
+    const s = addRow(empty(), { name: 'Orc', hp: 15, maxHp: 15, ac: 13, monsterId: 'orc' }, 'x1');
     expect(migrate(JSON.parse(JSON.stringify(s)))).toEqual(s);
   });
 
@@ -266,5 +294,89 @@ describe('migrate', () => {
 
   it('accepts a state with no version', () => {
     expect(migrate({ name: 'Old', rows: [] }).name).toBe('Old');
+  });
+
+  it('keeps the encounter id of a last session, and adds none', () => {
+    expect(migrate({ rows: [], encounterId: 'e1' }).encounterId).toBe('e1');
+    expect('encounterId' in migrate({ rows: [] })).toBe(false);
+  });
+});
+
+describe('linkRow', () => {
+  const base = () => addRow(addRow(empty(), { name: 'Goblin', hp: 7 }, 'a'), { name: 'Orc' }, 'b');
+
+  it('adds a row when nothing matches', () => {
+    const state = linkRow(base(), 'r:1', { name: 'Troll', hp: 84, maxHp: 84 }, 'c');
+    expect(state.rows.map((r) => r.name)).toEqual(['Goblin', 'Orc', 'Troll']);
+    expect(state.rows[2]).toMatchObject({ link: 'r:1', hp: 84 });
+  });
+
+  it('takes the first unlinked row of that name, whatever its case, and keeps its numbers', () => {
+    const state = linkRow(base(), 'r:1', { name: 'goblin' });
+    expect(state.rows).toHaveLength(2);
+    expect(state.rows[0]).toMatchObject({ name: 'Goblin', hp: 7, link: 'r:1' });
+  });
+
+  it('skips rows linked to something else', () => {
+    const one = linkRow(base(), 'r:1', { name: 'Goblin' });
+    const two = linkRow(one, 'r:2', { name: 'Goblin' }, 'c');
+    expect(two.rows.map((r) => r.link)).toEqual(['r:1', undefined, 'r:2']);
+  });
+
+  it('does nothing new for a link it already has', () => {
+    const one = linkRow(base(), 'r:1', { name: 'Goblin' });
+    expect(linkRow(one, 'r:1', { name: 'Goblin' }).rows).toHaveLength(2);
+  });
+
+  it('fills the first empty row before adding one', () => {
+    const state = linkRow(createState(), 'r:1', { name: 'Troll', hp: 84 });
+    expect(state.rows).toHaveLength(5);
+    expect(state.rows[0]).toMatchObject({ name: 'Troll', hp: 84, link: 'r:1' });
+  });
+
+  it('survives saving, and old saved rows need nothing', () => {
+    const state = linkRow(base(), 'r:1', { name: 'Goblin' });
+    expect(migrate(JSON.parse(JSON.stringify(state))).rows[0].link).toBe('r:1');
+    expect('link' in migrate(JSON.parse(JSON.stringify(base()))).rows[0]).toBe(false);
+  });
+});
+
+describe('empty rows', () => {
+  it('a new encounter has five of them and nothing worth saving', () => {
+    const s = createState();
+    expect(s.rows).toHaveLength(5);
+    expect(s.rows.every(isBlankRow)).toBe(true);
+    expect(new Set(s.rows.map((r) => r.id)).size).toBe(5);
+    expect(hasContent(s)).toBe(false);
+    expect(hasContent(addRow(s, { name: 'Orc' }))).toBe(true);
+  });
+
+  it('sort puts them at the bottom', () => {
+    const s = addRow(addRow(addRow(empty(), {}, 'x'), { name: 'a', initiative: -2 }, 'a'), {}, 'y');
+    expect(sortByInitiative(s).rows.map((r) => r.id)).toEqual(['a', 'x', 'y']);
+  });
+
+  it('are left out of a saved encounter, and the active creature stays active', () => {
+    let s = addRow(addRow(addRow(empty(), {}, 'x'), { name: 'a' }, 'a'), { name: 'b' }, 'b');
+    s = { ...s, turn: 2 };
+    const kept = withoutBlankRows(s);
+    expect(kept.rows.map((r) => r.id)).toEqual(['a', 'b']);
+    expect(kept.turn).toBe(1);
+    const full = withRows([['a', 1]]);
+    expect(withoutBlankRows(full)).toBe(full);
+  });
+});
+
+describe('rollHitDice', () => {
+  it('rolls the dice and adds the modifier, never below 1', () => {
+    expect(rollHitDice('2d6', () => 0)).toBe(2);
+    expect(rollHitDice('2d6', () => 0.999)).toBe(12);
+    expect(rollHitDice('18d10+36', () => 0)).toBe(54);
+    expect(rollHitDice('1d4-3', () => 0)).toBe(1);
+  });
+
+  it('refuses anything that is not dice', () => {
+    expect(rollHitDice('', () => 0)).toBeNull();
+    expect(rollHitDice('lots', () => 0)).toBeNull();
   });
 });

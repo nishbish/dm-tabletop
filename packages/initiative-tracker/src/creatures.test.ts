@@ -1,5 +1,58 @@
 import { describe, expect, it } from 'vitest';
-import { initiativeBonusFromDex, searchCreatures, srdCreatures } from './creatures';
+import {
+  defaultCreatures,
+  initiativeBonusFromDex,
+  pf2eCreatures,
+  searchCreatures,
+  srdCreatures,
+} from './creatures';
+
+describe('built-in Pathfinder creature data (Monster Core, ORC License)', () => {
+  it('is well formed, with unique ids that do not clash with the SRD ones', () => {
+    const ids = new Set(srdCreatures.map((c) => c.id));
+    for (const c of pf2eCreatures) {
+      expect(c.id).toMatch(/^pf2e-[a-z0-9]+(-[a-z0-9]+)*$/);
+      expect(ids.has(c.id)).toBe(false);
+      ids.add(c.id);
+      expect(c.ruleset).toBe('PF2e');
+      for (const key of ['ac', 'hp', 'initiativeBonus', 'level'] as const) {
+        expect(Number.isInteger(c[key])).toBe(true);
+      }
+      expect(c.hp).toBeGreaterThan(0);
+      expect(c.hitDice).toBeUndefined(); // Pathfinder creatures have fixed hit points
+    }
+    expect(pf2eCreatures.length).toBeGreaterThan(850);
+    expect(defaultCreatures.length).toBe(srdCreatures.length + pf2eCreatures.length);
+  });
+
+  it('leaves out names that are Reserved Material (deities, planes, places, named characters)', () => {
+    const names = pf2eCreatures.map((c) => c.name).join('|');
+    for (const reserved of [
+      'Pharasma',
+      'Leng',
+      'Tindalos',
+      'Treerazer',
+      'Grisantian',
+      'Shade (',
+      // unique creatures (named individuals)
+      'Volnagur',
+      'Sorvuth-Ka',
+      'Grim Reaper',
+    ]) {
+      expect(names).not.toContain(reserved);
+    }
+  });
+
+  it('matches the book for a sample creature', () => {
+    expect(pf2eCreatures.find((c) => c.name === 'Goblin Warrior')).toMatchObject({
+      id: 'pf2e-goblin-warrior',
+      ac: 16,
+      hp: 6,
+      initiativeBonus: 2,
+      level: -1,
+    });
+  });
+});
 
 describe('built-in SRD 5.1 creature data', () => {
   it('is well formed', () => {

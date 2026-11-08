@@ -21,8 +21,19 @@ export function createWallModel(options, scene, onReady) {
   var disposed = false;
   var scratch = new THREE.Object3D();
 
+  var visible = true;
+
   var model = {
     ready: false,
+    // the 2D view does without the model (the hidden boxes stay, for raycasts)
+    setVisible: function (value) {
+      visible = value;
+      parts.forEach(function (part) {
+        if (part.mesh) {
+          part.mesh.visible = value;
+        }
+      });
+    },
     update: function (pieces) {
       lastPieces = pieces;
       if (model.ready) {
@@ -80,6 +91,7 @@ export function createWallModel(options, scene, onReady) {
         part.mesh.name = 'wall model';
         part.mesh.matrixAutoUpdate = false;
         part.mesh.raycast = function () {}; // the hidden boxes answer raycasts
+        part.mesh.visible = visible;
         scene.add(part.mesh);
       }
 

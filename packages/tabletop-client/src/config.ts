@@ -42,6 +42,8 @@ export interface ModelInfo {
   modelOffset: [number, number];
   viewDistance: number;
   baseColor: number;
+  /** false: this user may not change the model, so the Edit menu leaves its form out. */
+  editable?: boolean;
 }
 
 // The login token, or a function returning one. A function is called before EVERY connection
@@ -56,6 +58,22 @@ export interface SideButtonOptions {
   help?: string;
   hostOnly?: boolean;
   onClick: () => void;
+}
+
+export interface TokenInfo {
+  tokenId: string;
+  roomId: string;
+  name: string;
+  // True when the name was given to this token, false when it comes from its picture.
+  named: boolean;
+  // Null until someone sets them.
+  stats: { hp: number; maxHp: number; ac: number } | null;
+}
+
+export interface TokenAction {
+  name: string;
+  icon: string;
+  onClick: (token: TokenInfo) => void;
 }
 
 export interface TabletopOptions {
@@ -73,6 +91,13 @@ export interface TabletopOptions {
   // Draws an initiative tracker (or anything else) into the side drawer the Tracker button opens,
   // once, the first time it opens. Wins over trackerUrl (which frames a page instead).
   mountTracker?: (element: HTMLElement) => void;
+  // Extra items for the host's right-click menu on a token, for example "Add to Initiative".
+  // `icon` is a Material Icons ligature name.
+  tokenActions?: TokenAction[];
+  // A token's name, HP or AC changed, by anyone. `removed` is set when the token left the table.
+  onTokenChange?: (token: TokenInfo & { removed?: boolean }) => void;
+  // A room's tokens are on the table: after joining, after a reconnect and after a room switch.
+  onRoomLoad?: (roomId: string) => void;
   // Extra buttons for the side rail, below the built-in ones (for example a dice roller).
   // `icon` is a Material Icons ligature name; `help` is the line shown in the tooltip and Help.
   buttons?: SideButtonOptions[];
@@ -100,6 +125,21 @@ export interface TabletopOptions {
   // the object createDemoRoom() returns (see demo.ts): name, dm, daylight, grid, clients, tokens,
   // planes, doors, wallPoints, models. It is copied, never modified.
   demoRoom?: Record<string, unknown>;
+  // A short word shown as a small tag on the Add Token and Add Image upload buttons, for example
+  // the plan that unlocks uploads ("Silver"). Folders, models and planes in a getModels or
+  // getPlaneImages reply (a server's or demoLibrary's) may carry the same thing as `badge`.
+  uploadBadge?: string;
+  // Offline demo only: lists the token or map library in the Add Token / Add Image panes instead
+  // of the plain pawns and the "Image URL" box. Called with the pane's request (`folderId`,
+  // `parentId`, `limit`, `offset`); returns what a server would reply to getModels
+  // (`{folders: [{folderId, parentId, name}], models: [{modelId, name, src, baseColor}], folderId,
+  // parentId, showNext}`) or getPlaneImages (`planes: [{planeUploadId, name, src}]` instead of
+  // `models`). `src` goes through `imageUrl`. Nothing is saved in the demo. Any folder, model or
+  // plane may carry `badge` (see uploadBadge).
+  demoLibrary?: (
+    kind: 'model' | 'plane',
+    args: Record<string, unknown>,
+  ) => Promise<Record<string, unknown>>;
   focus?: object;
   debug?: boolean;
   // Test hooks.

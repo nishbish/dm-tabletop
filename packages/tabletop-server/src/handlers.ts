@@ -1,12 +1,15 @@
-import { TokenState } from './types';
+import { Args, TokenOverrides, TokenState } from './types';
 import { Connection, Handler, HandlerContext, Room } from './room';
 import {
   HandlerError,
+  between,
   bool,
+  color,
   idString,
   int,
   num,
   optionalEcho,
+  pair,
   requireObject,
   str,
 } from './validate';
@@ -15,6 +18,10 @@ import {
 const MAX_ENTITIES = 5000;
 // The same for one token's owners, which take a client-chosen string each.
 const MAX_TOKEN_OWNERS = 100;
+const MAX_TOKEN_NAME = 100;
+// Above the number validators' own limit nobody is keeping score any more.
+const MAX_HP = 1000000;
+const MAX_AC = 1000;
 
 function newId(room: Room, collection: object): string {
   if (Object.keys(collection).length >= MAX_ENTITIES) {
@@ -52,6 +59,32 @@ function requireTokenAccess(ctx: HandlerContext, tokenId: string): TokenState {
 function changed(ctx: HandlerContext, echo: object): void {
   ctx.markDirty();
   ctx.broadcast(echo);
+}
+
+// Every field is optional; only the ones sent are stored. The limits are the ones a picture's own
+// settings have in the hosted app.
+function tokenOverrides(a: Args): TokenOverrides {
+  const out: TokenOverrides = {};
+  if (a.name !== undefined) {
+    const name = str(a, 'name')
+      .replace(/[\u0000-\u001f\u007f]/g, '')
+      .trim();
+    if (!name || name.length > MAX_TOKEN_NAME) {
+      throw new HandlerError(`name must be 1-${MAX_TOKEN_NAME} characters`);
+    }
+    out.name = name;
+  }
+  if (a.size !== undefined) out.size = between(a, 'size', 0.01, 100);
+  if (a.scale !== undefined) out.scale = between(a, 'scale', 0.01, 100);
+  if (a.viewDistance !== undefined) out.viewDistance = between(a, 'viewDistance', 0, 10000);
+  if (a.baseColor !== undefined) {
+    if (a.baseColor === null) throw new HandlerError('baseColor must be a colour');
+    out.baseColor = color(a, 'baseColor');
+  }
+  if (a.textureRepeat !== undefined) out.textureRepeat = pair(a, 'textureRepeat', 0, 100);
+  if (a.textureOffset !== undefined) out.textureOffset = pair(a, 'textureOffset', -100, 100);
+  if (a.modelOffset !== undefined) out.modelOffset = pair(a, 'modelOffset', -100, 100);
+  return out;
 }
 
 const handlers: { [name: string]: Handler } = {
@@ -113,8 +146,38 @@ const handlers: { [name: string]: Handler } = {
     token.settings = {
       hideAvatar: bool(a, 'hideAvatar'),
       disableCamLook: bool(a, 'disableCamLook'),
+      iconColor: color(a, 'iconColor'),
     };
     changed(ctx, { tokenId, ...token.settings });
+  },
+  // Replaces the token's overrides as a whole; none at all puts it back on its picture's settings.
+  // The sender hears it back too: its viewer shows a new name only once the server has accepted it.
+  updateTokenOverrides(ctx) {
+    requireHost(ctx);
+    const a = requireObject(ctx.args);
+    const tokenId = idString(a, 'tokenId');
+    const token = find(ctx.room.state.tokens, tokenId, 'token');
+    const overrides = tokenOverrides(requireObject(a.overrides));
+    if (overrides.name !== undefined) {
+      const refused = ctx.server.checkName(overrides.name);
+      if (refused) throw new HandlerError(refused);
+    }
+    if (Object.keys(overrides).length > 0) token.overrides = overrides;
+    else delete token.overrides;
+    ctx.markDirty();
+    ctx.broadcast({ tokenId, overrides }, { includeSelf: true });
+  },
+  updateTokenStats(ctx) {
+    requireHost(ctx);
+    const a = requireObject(ctx.args);
+    const tokenId = idString(a, 'tokenId');
+    const token = find(ctx.room.state.tokens, tokenId, 'token');
+    token.stats = {
+      hp: int(a, 'hp', 0, MAX_HP),
+      maxHp: int(a, 'maxHp', 0, MAX_HP),
+      ac: int(a, 'ac', 0, MAX_AC),
+    };
+    changed(ctx, { tokenId, ...token.stats });
   },
   assignToken(ctx) {
     requireHost(ctx);
@@ -171,6 +234,19 @@ const handlers: { [name: string]: Handler } = {
     find(ctx.room.state.planes, planeId, 'plane');
     delete ctx.room.state.planes[planeId];
     changed(ctx, { planeId });
+  },
+  // Another picture for the same plane: it keeps its id, place, size, turn and layer.
+  updatePlaneImage(ctx) {
+    requireHost(ctx);
+    const a = requireObject(ctx.args);
+    const planeId = idString(a, 'planeId');
+    const plane = find(ctx.room.state.planes, planeId, 'plane');
+    // both checked before either is stored
+    const planeUploadId = idString(a, 'planeUploadId');
+    const image = a.image === undefined ? '' : str(a, 'image');
+    plane.planeUploadId = planeUploadId;
+    plane.image = image;
+    changed(ctx, { planeId, planeUploadId: plane.planeUploadId, image: plane.image });
   },
   updatePlaneTransform(ctx) {
     requireHost(ctx);

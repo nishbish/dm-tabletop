@@ -35,7 +35,8 @@ See [packages/tabletop-client](packages/tabletop-client/README.md).
 
 Try the initiative tracker: `npm run dev -w @dm-tabletop/initiative-tracker` and open the printed link.
 See [packages/initiative-tracker](packages/initiative-tracker/README.md). Its built-in creature list comes from
-the D&D 5e SRD 5.1 (CC-BY-4.0); the attribution is in [ASSETS.md](ASSETS.md).
+the D&D 5e SRD 5.1 (CC-BY-4.0) and Pathfinder Monster Core 1 and 2 (Paizo, ORC License); the notices are
+in [ASSETS.md](ASSETS.md) and the tracker's [NOTICE.md](packages/initiative-tracker/NOTICE.md).
 
 ## How this is built
 

@@ -24,6 +24,17 @@ export function builtInModels(): ModelInfo[] {
   );
 }
 
+// The built-in tokens as entries of the viewer's Add Token list.
+export function builtInModelList(): Record<string, unknown>[] {
+  return builtInModels().map((m) => ({
+    modelId: m.id,
+    name: m.name,
+    src: '',
+    baseColor: m.baseColor,
+    ownerId: '0',
+  }));
+}
+
 function makeModel(id: string, name: string, baseColor: number): ModelInfo {
   return {
     id,
@@ -111,6 +122,7 @@ export function modelToArgs(m: ModelInfo): Record<string, unknown> {
     modelOffsetY: m.modelOffset[1],
     viewDistance: m.viewDistance,
     baseColor: m.baseColor,
+    editable: m.editable,
   };
 }
 

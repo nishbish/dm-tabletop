@@ -18,9 +18,12 @@ export const ID_KEYS: Record<string, string> = {
   updateTokenScale: 'tokenId',
   updateTokenModel: 'tokenId',
   updateTokenSettings: 'tokenId',
+  updateTokenOverrides: 'tokenId',
+  updateTokenStats: 'tokenId',
   assignToken: 'tokenId',
   removePlane: 'planeId',
   updatePlaneTransform: 'planeId',
+  updatePlaneImage: 'planeId',
   removeDoor: 'doorId',
   updateDoorTransform: 'doorId',
   updateDoorState: 'doorId',
@@ -32,6 +35,7 @@ export const ID_KEYS: Record<string, string> = {
 export const COALESCED = [
   'updateTokenPosition',
   'updateTokenScale',
+  'updateTokenStats',
   'updatePlaneTransform',
   'updateDoorTransform',
   'updateWallPoint',
@@ -91,8 +95,13 @@ export function toServer(name: string, a: Args): Translated | null {
           tokenId: str(a.tokenId),
           hideAvatar: !!a.hideAvatar,
           disableCamLook: !!a.disableCamLook,
+          iconColor: a.iconColor ?? null,
         },
       };
+    case 'updateTokenOverrides':
+      return { name, args: { tokenId: str(a.tokenId), overrides: a.overrides } };
+    case 'updateTokenStats':
+      return { name, args: { tokenId: str(a.tokenId), hp: a.hp, maxHp: a.maxHp, ac: a.ac } };
     case 'assignToken':
       return {
         name,
@@ -106,6 +115,15 @@ export function toServer(name: string, a: Args): Translated | null {
       return { name: 'assignHost', args: { userId: str(a.user_id) } };
     case 'removePlane':
       return { name, args: { planeId: str(a.planeId) } };
+    case 'updatePlaneImage':
+      return {
+        name,
+        args: {
+          planeId: str(a.planeId),
+          planeUploadId: str(a.planeUploadId),
+          image: a.image === undefined ? undefined : str(a.image),
+        },
+      };
     case 'updatePlaneTransform':
       return {
         name,
@@ -226,6 +244,7 @@ export function fromServerUpdate(name: string, a: Args, from?: string): Translat
             tokenId: str(a.tokenId),
             hideAvatar: bit(a.hideAvatar),
             disableCamLook: bit(a.disableCamLook),
+            iconColor: a.iconColor ?? null,
           },
         },
       ];
