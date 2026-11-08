@@ -3730,6 +3730,10 @@ function pasteOffset(items) {
 		centre.z += item.z / items.length;
 	}
 
+	// Tokens on a hex grid move by pairs of hex rows (odd rows sit half a unit over), so every
+	// pasted token lands on a hex centre just as its original did. Doors and images line up
+	// with walls and squares, not hexes.
+	var stepZ = map.settings.gridShape == 'hex' && items[0].kind == 'token' ? 2 * grid.HEX_ROW : 1;
 	var offset = { x: 0, z: 0 };
 	var raycaster = new THREE.Raycaster();
 	raycaster.setFromCamera(map.pointer, map.objects.camera);
@@ -3737,7 +3741,7 @@ function pasteOffset(items) {
 
 	if (hit) {
 		offset.x = Math.round(hit.point.x - centre.x);
-		offset.z = Math.round(hit.point.z - centre.z);
+		offset.z = Math.round((hit.point.z - centre.z) / stepZ) * stepZ;
 	}
 
 	// pasted where the copy (or an earlier paste) already is: step aside so it shows
@@ -3747,7 +3751,7 @@ function pasteOffset(items) {
 
 	while (used(offset)) {
 		offset.x += 1;
-		offset.z += 1;
+		offset.z += stepZ;
 	}
 
 	pasteOffsets.push(offset);
