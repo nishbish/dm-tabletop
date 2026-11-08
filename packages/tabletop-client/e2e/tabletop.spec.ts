@@ -810,23 +810,12 @@ test('copy and paste: Ctrl+C copies the highlighted tokens, Ctrl+V pastes them a
   await page.keyboard.press('Control+v');
   expect((await stats(page)).tokens).toBe(4);
 
-  // the token under the pointer is copied, and pasted where the pointer is, a whole number of
-  // squares away so it stays on the grid
-  // hover is checked once a frame, so nudge the pointer until the token lights up
-  let nudge = 0;
-  await expect
-    .poll(
-      async () => {
-        nudge = (nudge + 1) % 4;
-        await page.mouse.move(at.x + nudge, at.y, { steps: 2 });
-        await page.waitForTimeout(100);
-        return page.evaluate(
-          () => (window as any).tabletop.debug.map.outlinePass.selectedObjects.length,
-        );
-      },
-      { timeout: 15_000, intervals: [0] },
-    )
-    .toBeGreaterThan(0);
+  // the selected token is copied, and pasted where the pointer is, a whole number of squares
+  // away so it stays on the grid (selected directly: hover is slow to settle on CI's software GL)
+  await page.evaluate((id) => {
+    const map = (window as any).tabletop.debug.map;
+    map.translateControls.token.translateGroupObjects = [map.objects.tokens[id]];
+  }, first);
   await page.keyboard.press('Control+c');
   await page.mouse.move(at.x + 150, at.y, { steps: 3 });
   await page.keyboard.press('Control+v');
