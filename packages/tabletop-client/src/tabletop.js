@@ -33,6 +33,7 @@ import { addWallUvs, createWallMaterial, wallTileSize } from './wall-texture';
 import { createWallModel } from './wall-model.js';
 import { showToast, createBanner, escapeHtml, hasWebGL } from './ui';
 import * as walls from './walls';
+import * as grid from './grid';
 import { DOOR_SIZE, getDoorParts } from './doors.js';
 
 // NOTE(port): three.js >= r152 changed colour management and r155 changed light units. The
@@ -273,6 +274,7 @@ const map = {
 		lookAtCam: 1,
 		gridWidth: 100,
 		gridHeight: 100,
+		gridShape: 'square',
 		view2d: 0
 	}
 }
@@ -1212,11 +1214,12 @@ function init() {
 					snapTokenClear(token, blockers);
 				}
 
-				token.intPos.copy(token.position).roundToZero();
+				//a move into another grid cell (square or hex) is sent and updates vision
+				var cell = grid.gridCellKey(map.settings.gridShape, token.position.x, token.position.z);
 
-				if (!token.intPos.equals(token.prevIntPos)) {
+				if (cell !== token.prevCell) {
 					token.prevPos.copy(token.position);
-					token.prevIntPos.copy(token.prevPos).roundToZero();				
+					token.prevCell = cell;
 
 					if (map.settings.dragUpdate && token.tokenId in map.objects.tokens) {
 						sendTokenMovement(token);
@@ -1341,6 +1344,18 @@ function tokenScaleReposition(token) {
 }
 
 function snapPosition(object) {
+	if (map.settings.gridShape == 'hex') {
+		var spot = grid.hexSnapCandidates(object.position.x, object.position.z, isEvenSize(object), map.settings.gridWidth, map.settings.gridHeight)[0];
+
+		if (spot) {
+			object.position.x = spot.x;
+			object.position.z = spot.z;
+		}
+
+		object.position.y = Math.round(object.position.y);
+		return;
+	}
+
 	var dims = ['x', 'y', 'z'];
 
 	for (var i=0;i<dims.length;i++) {
@@ -1353,6 +1368,11 @@ function snapPosition(object) {
 			object.position[dims[i]] = (object.position[dims[i]] - rounded) >= 0 ? rounded + 0.5 : rounded - 0.5;
 		}
 	}
+}
+
+// Sizes 2, 4 and 6 sit where squares (or hexes) meet instead of in the middle of one.
+function isEvenSize(object) {
+	return parseInt(object.scale.x) % 2 == 0;
 }
 
 // Walls and closed doors a token may not stop in or move through (see walls.moveBlocked).
@@ -1382,6 +1402,21 @@ function tokenBlockers() {
 // stays unsnapped where it was dropped. `blockers` is null when walls do not stop this user.
 function snapTokenClear(token, blockers) {
 	var from = { x: token.position.x, z: token.position.z };
+
+	if (map.settings.gridShape == 'hex') {
+		//on hexes the other choices are the hexes (or corners) around the one it snapped to
+		var spots = grid.hexSnapCandidates(from.x, from.z, isEvenSize(token), map.settings.gridWidth, map.settings.gridHeight);
+		var spot = !blockers ? spots[0] : spots.find(function(c) { return !walls.moveBlocked(from, c, blockers); });
+
+		token.position.y = Math.round(token.position.y);
+
+		if (spot) {
+			token.position.x = spot.x;
+			token.position.z = spot.z;
+		}
+
+		return;
+	}
 
 	snapPosition(token);
 
@@ -1443,9 +1478,8 @@ function createToken(pos, scale, modelId, local = true, owners = [], tokenId = f
 	token.modelId = modelId;
 	token.owners = owners;
 	token.position.set(playerPos.x, playerPos.y, playerPos.z);
-	token.intPos = token.position.clone().roundToZero();
 	token.prevPos = token.position.clone();
-	token.prevIntPos = token.prevPos.clone().roundToZero();
+	token.prevCell = grid.gridCellKey(map.settings.gridShape, token.prevPos.x, token.prevPos.z);
 	token.scale.set(scale.x, scale.y, scale.z);
 	token.prevScale = new THREE.Vector3(1, 1, 1);
 	token.modelName = map.models[modelId].name;
@@ -2119,24 +2153,7 @@ function updateGridSize(local = true) {
 	map.objects.plane.geometry = new THREE.PlaneGeometry(map.settings.gridWidth, map.settings.gridHeight);
 	map.objects.plane.position.set((map.settings.gridWidth / 2) - 0.5, -0.53, (map.settings.gridHeight / 2) - 0.5);
 	
-	if ('gridHelper' in map) {
-		map.scene.remove(map.gridHelper);
-	}
-
-	var gridSize = map.settings.gridWidth >= map.settings.gridHeight ? map.settings.gridWidth : map.settings.gridHeight;
-	var widthOffset = (map.settings.gridWidth % 2 == (map.settings.gridHeight % 2 == 0)) * 0.5;
-
-	var offset = {
-		x: gridSize == map.settings.gridWidth ? 0 : widthOffset,
-		z: gridSize != map.settings.gridWidth ? 0 : widthOffset
-	}
-
-	map.gridHelper = createGrid(map.settings.gridWidth, map.settings.gridHeight, 1, 0x000000);
-	map.gridHelper.rotation.x = Math.PI * 0.5;
-	map.gridHelper.position.x -= 0.5;
-	map.gridHelper.position.y = -0.51;
-	map.gridHelper.position.z -= 0.5;
-	map.scene.add(map.gridHelper);
+	drawGrid();
 
 	//update mask size
 	if ('mask' in map) {
@@ -2152,6 +2169,53 @@ function updateGridSize(local = true) {
 		}
 
 		sendMessage('update', 'updateGridSize', args);
+	}
+}
+
+// (Re)draws the grid lines for the room's size and shape, freeing the old ones.
+function drawGrid() {
+	if ('gridHelper' in map) {
+		map.scene.remove(map.gridHelper);
+		map.gridHelper.traverse(function(object) {
+			if (object.geometry) { object.geometry.dispose(); }
+			if (object.material) { object.material.dispose(); }
+		});
+	}
+
+	if (map.settings.gridShape == 'hex') {
+		map.gridHelper = grid.createHexGrid(map.settings.gridWidth, map.settings.gridHeight, 0x000000);
+		map.gridHelper.position.y = -0.51;
+	}
+	else {
+		map.gridHelper = createGrid(map.settings.gridWidth, map.settings.gridHeight, 1, 0x000000);
+		map.gridHelper.rotation.x = Math.PI * 0.5;
+		map.gridHelper.position.x -= 0.5;
+		map.gridHelper.position.y = -0.51;
+		map.gridHelper.position.z -= 0.5;
+	}
+
+	map.scene.add(map.gridHelper);
+}
+
+// Switches the grid between squares and hexes. Nothing on the map moves (see grid.ts): tokens snap
+// to the new grid the next time they are moved, so switching back and forth loses nothing.
+function updateGridShape(shape, local = true) {
+	map.settings.gridShape = grid.gridShape(shape);
+	drawGrid();
+
+	if (map.local.gridShapeInput) {
+		map.local.gridShapeInput.checked = map.settings.gridShape == 'hex';
+	}
+
+	//the cell a token is in is counted on the new grid from now on
+	for (const token of Object.values(map.objects.tokens)) {
+		if (token.prevPos) {
+			token.prevCell = grid.gridCellKey(map.settings.gridShape, token.prevPos.x, token.prevPos.z);
+		}
+	}
+
+	if (local) {
+		sendMessage('update', 'updateGridShape', { shape: map.settings.gridShape });
 	}
 }
 
@@ -5811,6 +5875,13 @@ function buildGui() {
 		updateGridSize();
 	};
 
+	//grid shape: squares or hexes (the room's, so the host's switch changes it for everyone)
+	var gridHex = buildPaneItem(settingsPane, 'Hex Grid', 'toggle', map.settings.gridShape == 'hex', true);
+	map.local.gridShapeInput = gridHex.input;
+	gridHex.input.addEventListener('change', function() {
+		updateGridShape(this.checked ? 'hex' : 'square');
+	}, false);
+
 	//global settings binding
 	for (var i=0;i<globalGraphics.input.length;i++) {
 		globalGraphics.input[i].addEventListener('change', function() {
@@ -6208,7 +6279,13 @@ function buildRoom(room) {
 	if ('grid' in room) {
 		map.settings.gridWidth = parseData.int(room.grid.width);
 		map.settings.gridHeight = parseData.int(room.grid.height);
+		//before the size, which draws the grid; a room saved before hexes has no shape: squares
+		map.settings.gridShape = grid.gridShape(room.grid.shape);
 		updateGridSize(false);
+
+		if (map.local.gridShapeInput) {
+			map.local.gridShapeInput.checked = map.settings.gridShape == 'hex';
+		}
 	}
 	
 	//build client list
@@ -7253,6 +7330,12 @@ var updateClient = {
 			map.settings.gridWidth = args.width;
 			map.settings.gridHeight = args.height;
 			updateGridSize(false);
+		}
+	},
+
+	updateGridShape: function(args) {
+		if (args && typeof args == 'object') {
+			updateGridShape(args.shape, false);
 		}
 	}
 }
