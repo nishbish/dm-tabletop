@@ -22,10 +22,9 @@ const MAX_TOKEN_NAME = 100;
 // Above the number validators' own limit nobody is keeping score any more.
 const MAX_HP = 1000000;
 const MAX_AC = 1000;
-// The in-game clock counts minutes from midnight at the start of day 1, up to the end of day 600.
-export const MINUTES_PER_DAY = 1440;
-export const MAX_CLOCK = MINUTES_PER_DAY * 600 - 1;
-// The weather a host can pick. 'clear' is also what a room without any weather shows.
+// The ambience a host can pick: a time of day and a weather. A room without a `time` shows day,
+// or night when its older `moonlight` switch is on; 'clear' is what a room without weather shows.
+export const TIMES = ['dawn', 'day', 'dusk', 'night'];
 export const WEATHERS = ['clear', 'cloudy', 'rain', 'storm', 'snow', 'fog'];
 
 function newId(room: Room, collection: object): string {
@@ -209,20 +208,24 @@ const handlers: { [name: string]: Handler } = {
   updateMoonlight(ctx) {
     requireHost(ctx);
     ctx.room.state.moonlight = num(requireObject(ctx.args), 'moonlight');
+    // the older switch speaks for the time of day again (night when on, day when off)
+    delete ctx.room.state.time;
     changed(ctx, { moonlight: ctx.room.state.moonlight });
   },
-  // The clock: a whole number of minutes, or null to take the clock away (the room then looks as
-  // it did before it had one).
-  updateClock(ctx) {
+  // The time of day. It also sets the two older switches to match, so they stay a true summary:
+  // night is moonlight with tokens seeing only as far as their view distance, every other time is
+  // daylight (they see much further).
+  updateTime(ctx) {
     requireHost(ctx);
-    const a = requireObject(ctx.args);
-    if (a.clock === null) {
-      delete ctx.room.state.clock;
-      changed(ctx, { clock: null });
-      return;
+    const time = str(requireObject(ctx.args), 'time');
+    if (TIMES.indexOf(time) === -1) {
+      throw new HandlerError(`time must be one of ${TIMES.join(', ')}`);
     }
-    ctx.room.state.clock = int(a, 'clock', 0, MAX_CLOCK);
-    changed(ctx, { clock: ctx.room.state.clock });
+    const state = ctx.room.state;
+    state.time = time;
+    state.daylight = time === 'night' ? 0 : 100;
+    state.moonlight = time === 'night' ? 1 : 0;
+    changed(ctx, { time, daylight: state.daylight, moonlight: state.moonlight });
   },
   updateWeather(ctx) {
     requireHost(ctx);

@@ -259,7 +259,7 @@ export function fromServerUpdate(name: string, a: Args, from?: string): Translat
       return [{ name, args: { x: a.x, z: a.z, user_id: str(from) } }];
     default:
       // removeToken, updateTokenPosition/Scale/Model, removePlane, removeDoor, door transform,
-      // wall point removal/update, daylight, moonlight, clock, weather, grid size and host-app events.
+      // wall point removal/update, daylight, moonlight, time, weather, grid size and host-app events.
       return [{ name, args: a }];
   }
 }
@@ -292,8 +292,8 @@ export function stateToRoom(
     dm: self.role === 'host' ? self.userId : host ? host.userId : '',
     daylight: state.daylight,
     moonlight: state.moonlight,
-    // absent in rooms that never had a clock or weather
-    clock: typeof state.clock === 'number' ? state.clock : null,
+    // absent in rooms that never had a time or weather (the viewer then goes by moonlight)
+    time: typeof state.time === 'string' ? state.time : null,
     weather: typeof state.weather === 'string' ? state.weather : 'clear',
     grid: state.grid,
     clients,

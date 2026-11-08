@@ -1,20 +1,23 @@
-// Time of day and weather: the pure part (numbers and words, no three.js), so it can be tested on
-// its own. The room's clock counts minutes from midnight at the start of day 1; the server keeps it
-// and the weather (tabletop-server's updateClock and updateWeather). weather.js draws the rain,
-// snow and fog; tabletop.js uses look() for the light and the sky.
+// Ambience: the time of day and the weather a host picks for the room, the pure part (names and
+// colours, no three.js), so it can be tested on its own. The server keeps both (tabletop-server's
+// updateTime and updateWeather); weather.js draws the rain, snow and fog, clouds.js the clouds, and
+// tabletop.js uses look() for the light and the sky.
 
-export const MINUTES_PER_DAY = 1440;
-// The same limit as the server: the end of day 600.
-export const MAX_CLOCK = MINUTES_PER_DAY * 600 - 1;
-
-export interface WeatherKind {
+export interface Preset {
   id: string;
   label: string;
   // a Material Icons ligature
   icon: string;
 }
 
-export const WEATHERS: WeatherKind[] = [
+export const TIMES: Preset[] = [
+  { id: 'dawn', label: 'Dawn', icon: 'wb_twilight' },
+  { id: 'day', label: 'Day', icon: 'light_mode' },
+  { id: 'dusk', label: 'Dusk', icon: 'brightness_4' },
+  { id: 'night', label: 'Night', icon: 'dark_mode' },
+];
+
+export const WEATHERS: Preset[] = [
   { id: 'clear', label: 'Clear', icon: 'wb_sunny' },
   { id: 'cloudy', label: 'Cloudy', icon: 'cloud' },
   { id: 'rain', label: 'Rain', icon: 'water_drop' },
@@ -23,69 +26,54 @@ export const WEATHERS: WeatherKind[] = [
   { id: 'fog', label: 'Fog', icon: 'blur_on' },
 ];
 
-export function weatherKind(id: unknown): WeatherKind {
+export function timeKind(id: unknown): Preset {
+  return TIMES.find((t) => t.id === id) || TIMES[1];
+}
+
+export function weatherKind(id: unknown): Preset {
   return WEATHERS.find((w) => w.id === id) || WEATHERS[0];
 }
 
-// A clock from the server or a click, kept to whole minutes inside the allowed range.
-export function clampClock(clock: number): number {
-  if (!Number.isFinite(clock)) return 0;
-  return Math.min(MAX_CLOCK, Math.max(0, Math.round(clock)));
+// The time a room shows. Rooms saved before there were times only have the older Moonlight
+// switch: on is night, off is day, so they look exactly as they did.
+export function roomTime(time: unknown, moonlight: unknown): string {
+  if (TIMES.some((t) => t.id === time)) return time as string;
+  return moonlight ? 'night' : 'day';
 }
 
-export function minuteOfDay(clock: number): number {
-  return ((clock % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+// Whether tokens see as far as their view distance (daylight) or only by their own light: night
+// is the only dark time. The server sets the room's `daylight` the same way (updateTime).
+export function hasDaylight(time: string): boolean {
+  return time !== 'night';
 }
 
-export function dayOf(clock: number): number {
-  return Math.floor(clock / MINUTES_PER_DAY) + 1;
-}
-
-const pad = (n: number) => (n < 10 ? '0' : '') + n;
-
-// "14:05"
-export function timeText(clock: number): string {
-  const m = minuteOfDay(clock);
-  return pad(Math.floor(m / 60)) + ':' + pad(m % 60);
-}
-
-// The part of the day, in words a table would use.
-export function periodName(clock: number): string {
-  const h = minuteOfDay(clock) / 60;
-  if (h < 5) return 'Night';
-  if (h < 7) return 'Dawn';
-  if (h < 11) return 'Morning';
-  if (h < 14) return 'Midday';
-  if (h < 17.5) return 'Afternoon';
-  if (h < 19.5) return 'Dusk';
-  if (h < 22) return 'Evening';
-  return 'Night';
-}
-
-// "Day 2, 14:05, Afternoon"
-export function clockText(clock: number): string {
-  return 'Day ' + dayOf(clock) + ', ' + timeText(clock) + ', ' + periodName(clock);
+// "Dusk · Rain" for the card everyone sees; empty for an ordinary clear day (no card).
+export function ambienceText(time: string, weather: string): string {
+  const parts: string[] = [];
+  if (time !== 'day') parts.push(timeKind(time).label);
+  if (weather !== 'clear') parts.push(weatherKind(weather).label);
+  return parts.join(' · ');
 }
 
 // ---- the look: how bright and what colour the light is, and which sky shows ----
 
-// [minute of day, light strength (1 = the room's normal light), light colour, sky tint]. The sky
-// tint multiplies the sky picture; between 19:15 and 05:45 the night sky shows (see isNight).
-type Key = [number, number, number, number];
+// For each time: light strength (1 = the room's normal light), light colour, a tint that
+// multiplies the sky picture, whether the night sky shows, and how much like full day it is (for
+// the fog and the clouds). Day and night are the room's old daylight and moonlight looks.
+interface TimeLook {
+  light: number;
+  color: number;
+  sky: number;
+  night: boolean;
+  dayness: number;
+}
 
-const KEYS: Key[] = [
-  [0, 0.8, 0x8cb9ff, 0xffffff],
-  [300, 0.8, 0x8cb9ff, 0xffffff],
-  [345, 0.82, 0xa8a8e0, 0x6a5a78],
-  [390, 0.9, 0xffb37a, 0xe0a080],
-  [480, 1, 0xfff1dc, 0xffffff],
-  [720, 1.05, 0xffffff, 0xffffff],
-  [1020, 1, 0xfff1dc, 0xffffff],
-  [1110, 0.9, 0xff9d6b, 0xe09070],
-  [1155, 0.82, 0xa8a8e0, 0x6a5a78],
-  [1200, 0.8, 0x8cb9ff, 0xffffff],
-  [MINUTES_PER_DAY, 0.8, 0x8cb9ff, 0xffffff],
-];
+const TIME_LOOK: { [id: string]: TimeLook } = {
+  dawn: { light: 0.9, color: 0xffb37a, sky: 0xe0a080, night: false, dayness: 0.45 },
+  day: { light: 1, color: 0xffffff, sky: 0xffffff, night: false, dayness: 1 },
+  dusk: { light: 0.9, color: 0xff9d6b, sky: 0xe09070, night: false, dayness: 0.4 },
+  night: { light: 0.8, color: 0x8cb9ff, sky: 0xffffff, night: true, dayness: 0 },
+};
 
 // How weather changes the light: strength, a colour the light and sky are mixed towards, and how
 // far. Kept gentle: the map must stay readable in every weather. The rest is the sky's clouds
@@ -195,11 +183,6 @@ export function multiplyColor(a: number, b: number): number {
   return out;
 }
 
-export function isNight(clock: number): boolean {
-  const m = minuteOfDay(clock);
-  return m < 345 || m >= 1155;
-}
-
 export interface Look {
   // multiplies the room's normal light strength
   light: number;
@@ -216,39 +199,20 @@ export interface Look {
   wind: number;
 }
 
-// `clock` null = the room has no clock: day, or night when `moonlight` is on, as before.
-export function look(clock: number | null, weather: string, moonlight: boolean): Look {
-  let light = moonlight ? 0.8 : 1;
-  let lightColor = moonlight ? 0x8cb9ff : 0xffffff;
-  let skyTint = 0xffffff;
-  let night = moonlight;
-
-  if (clock !== null) {
-    const m = minuteOfDay(clock);
-    let i = 0;
-    while (i < KEYS.length - 2 && KEYS[i + 1][0] <= m) i += 1;
-    const [m0, l0, c0, s0] = KEYS[i];
-    const [m1, l1, c1, s1] = KEYS[i + 1];
-    const t = m1 === m0 ? 0 : (m - m0) / (m1 - m0);
-    light = l0 + (l1 - l0) * t;
-    lightColor = mixColor(c0, c1, t);
-    skyTint = mixColor(s0, s1, t);
-    night = isNight(clock);
-  }
-
+export function look(time: string, weather: string): Look {
+  const t = TIME_LOOK[time] || TIME_LOOK.day;
   const w = WEATHER_LOOK[weather] || WEATHER_LOOK.clear;
-  // between night (0) and full day (1): fog is dark at night, pale by day
-  const dayness = Math.min(1, Math.max(0, (light - 0.8) / 0.25));
-  const fogColor = night ? 0x2a2f3a : mixColor(0x5a606a, 0xb8bec4, dayness);
+  // fog is dark at night, pale by day
+  const fogColor = t.night ? 0x2a2f3a : mixColor(0x5a606a, 0xb8bec4, t.dayness);
   // by day the clouds catch the sun's colour (warm at dawn and dusk); at night they go dim
-  const cloudDay = night ? 0 : Math.min(1, dayness * 2);
+  const cloudDay = t.night ? 0 : Math.min(1, t.dayness * 2);
   const cloud = (day: number, dark: number) =>
-    mixColor(dark, multiplyColor(day, lightColor), cloudDay);
+    mixColor(dark, multiplyColor(day, t.color), cloudDay);
   return {
-    light: light * w.light,
-    lightColor: mixColor(lightColor, w.tint, w.mix),
-    night,
-    skyTint: mixColor(skyTint, w.tint, w.sky),
+    light: t.light * w.light,
+    lightColor: mixColor(t.color, w.tint, w.mix),
+    night: t.night,
+    skyTint: mixColor(t.sky, w.tint, w.sky),
     fogColor,
     cloudCover: w.cover,
     cloudOvercast: w.overcast,

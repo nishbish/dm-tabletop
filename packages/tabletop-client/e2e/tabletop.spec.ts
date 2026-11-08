@@ -206,7 +206,7 @@ test('two players share a room, see token moves, and survive a server restart', 
   }
 });
 
-test('time and weather: the host sets them, the player sees them, a rejoin keeps them', async ({
+test('ambience: the host picks a time and weather, the player sees them, a rejoin keeps them', async ({
   browser,
 }) => {
   // two 3D pages and a reload on software WebGL
@@ -232,53 +232,48 @@ test('time and weather: the host sets them, the player sees them, a rejoin keeps
     await waitConnected(guest);
     await host.waitForSelector('#load-screen', { state: 'hidden', timeout: 30_000 });
 
-    // nothing set: no card, and players have no button for it
-    await expect(guest.locator('#time-weather')).toHaveCount(0);
-    await expect(guest.locator('[data-button="timeWeather"]')).toBeHidden();
+    // a new room: an ordinary clear day, no card, and players have no button for it
+    await expect(guest.locator('#ambience')).toHaveCount(0);
+    await expect(guest.locator('[data-button="ambience"]')).toBeHidden();
+    expect(await stats(guest)).toMatchObject({ time: 'day', weather: 'clear', clouds: false });
 
-    await host.locator('.side-button[data-button="timeWeather"]').click();
-    const panel = host.locator('#time-weather-panel');
-    await panel.locator('[data-button="clock"]').click();
-    await expect(panel.locator('[data-tw-readout]')).toHaveText('Day 1, 08:00, Morning');
-    await panel.getByRole('button', { name: 'Forward eight hours, a long rest' }).click();
-    await panel.getByRole('button', { name: 'Forward eight hours, a long rest' }).click();
-    await expect(panel.locator('[data-tw-readout]')).toHaveText('Day 2, 00:00, Night');
+    await host.locator('.side-button[data-button="ambience"]').click();
+    const panel = host.locator('#ambience-panel');
+    await expect(panel.getByRole('radio', { name: 'Day' })).toHaveAttribute('aria-checked', 'true');
+    await panel.getByRole('radio', { name: 'Night' }).click();
     await panel.getByRole('radio', { name: 'Storm' }).click();
 
     // two 3D pages on software WebGL: the player's page can take a while to get to the messages
     const slow = { timeout: 20_000 };
-    const card = guest.locator('#time-weather');
-    await expect(card).toContainText('Day 2 \u00b7 00:00', slow);
-    await expect(card).toContainText('Storm', slow);
+    const card = guest.locator('#ambience');
+    await expect(card).toContainText('Night · Storm', slow);
+    // night takes away daylight: tokens see only by their own light
     expect(await stats(guest)).toMatchObject({
-      clock: 1440,
+      time: 'night',
       weather: 'storm',
+      daylight: 0,
       falling: true,
       fog: false,
       clouds: true,
     });
 
+    await panel.getByRole('radio', { name: 'Dusk' }).click();
     await panel.getByRole('radio', { name: 'Fog' }).click();
     await expect.poll(async () => (await stats(guest)).fog, slow).toBe(true);
-    expect((await stats(guest)).falling).toBe(false);
-
-    // with a clock the night comes by itself, so the Moonlight switch goes
-    await host.locator('.side-button[data-button="lighting"]').click();
-    await expect(host.locator('#lighting-panel [data-button="moonlight"]')).toBeHidden();
+    expect(await stats(guest)).toMatchObject({ time: 'dusk', daylight: 100, falling: false });
 
     // a player arriving later (or reloading) gets both from the room
     await guest.reload();
     await waitConnected(guest);
     await expect.poll(async () => (await stats(guest)).weather, { timeout: 30_000 }).toBe('fog');
-    await expect(guest.locator('#time-weather')).toContainText('Fog', slow);
+    await expect(guest.locator('#ambience')).toContainText('Dusk · Fog', slow);
 
-    // the clock off and clear skies: the card goes
-    await host.locator('.side-button[data-button="timeWeather"]').click();
-    await panel.locator('[data-button="clock"]').click();
+    // an ordinary clear day again (the panel is still open): the card goes
+    await panel.getByRole('radio', { name: 'Day' }).click();
     await panel.getByRole('radio', { name: 'Clear' }).click();
-    await expect(guest.locator('#time-weather')).toBeHidden(slow);
+    await expect(guest.locator('#ambience')).toBeHidden(slow);
     expect(await stats(guest)).toMatchObject({
-      clock: null,
+      time: 'day',
       weather: 'clear',
       fog: false,
       clouds: false,
