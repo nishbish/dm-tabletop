@@ -2965,7 +2965,8 @@ function updateTokenVision() {
 		}
 	}
 
-	map.mask.fog.setVision(holePoints);
+	//the origin lets the fog carry rays that reach the map's edge on past it (fog.js)
+	map.mask.fog.setVision(holePoints, { x: origin.x, z: origin.z });
 }
 
 function findParentToken(obj, depth = 3) {
