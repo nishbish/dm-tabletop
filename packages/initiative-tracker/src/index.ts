@@ -62,6 +62,7 @@ export type {
   StatBlockSource,
   Tracker,
   TrackerOptions,
+  DiceResult,
   TrackerRow,
   TrackerState,
 } from './types';

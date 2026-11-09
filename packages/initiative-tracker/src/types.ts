@@ -88,6 +88,13 @@ export interface TrackerOptions {
   creatures?: CreatureTemplate[];
   /** Random source returning [0, 1). Defaults to Math.random. */
   rng?: () => number;
+  /**
+   * Rolls the dice of a roll button another way, for example as 3D dice on the page. Gets dice
+   * notation ("1d20+3", "4d20" for Roll all, "2d8+4" for hit points) and resolves with each die's
+   * value in order (`rolls`) and the total, or null to let the tracker roll as usual. The tracker
+   * uses exactly these numbers.
+   */
+  roll?: (notation: string) => Promise<DiceResult | null> | DiceResult | null;
   /** Called after every change the user makes (not after `setState`). */
   onChange?: (state: TrackerState) => void;
   /** Called when the user changes the HP, max HP or AC of a linked row. */
@@ -132,4 +139,11 @@ export interface Tracker {
   destroy(): void;
   /** Resolves once the last session has been restored (or there was nothing to restore). */
   ready: Promise<void>;
+}
+
+/** What `TrackerOptions.roll` resolves with. */
+export interface DiceResult {
+  /** Each die's value, in the order of the notation. */
+  rolls: number[];
+  total: number;
 }

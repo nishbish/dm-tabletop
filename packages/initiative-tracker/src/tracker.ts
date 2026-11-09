@@ -118,6 +118,35 @@ const intOr = (text: string, fallback: number) => {
 export function createTracker(container: HTMLElement, options: TrackerOptions = {}): Tracker {
   const doc = container.ownerDocument;
   const rng = options.rng || Math.random;
+
+  // A roll button: the host's roll (3D dice) when it gives one, else the tracker's own numbers.
+  // `dice` is the notation and `sides` its die, to check what came back.
+  async function rolled(dice: string, count: number, sides: number): Promise<number[] | null> {
+    if (!options.roll || count < 1) return null;
+    try {
+      const out = await options.roll(dice);
+      const values = out && Array.isArray(out.rolls) ? out.rolls.map(Number) : null;
+      if (!values || values.length !== count) return null;
+      return values.every((v) => Number.isInteger(v) && v >= 1 && v <= sides) ? values : null;
+    } catch {
+      return null;
+    }
+  }
+  // Runs `apply` with the host's dice, or straight away with null (the tracker's own numbers)
+  // when there is no host roll, so a tracker without one behaves exactly as before.
+  function withDice(
+    dice: string,
+    count: number,
+    sides: number,
+    apply: (values: number[] | null) => void,
+  ) {
+    if (!options.roll || count < 1) apply(null);
+    else void rolled(dice, count, sides).then(apply);
+  }
+  const withBonus = (bonus: number) => {
+    const b = Number(bonus) || 0;
+    return b > 0 ? '+' + b : b < 0 ? String(b) : '';
+  };
   const creatures: CreatureTemplate[] = options.creatures || defaultCreatures;
   // suggestions only carry a game-system tag when there is more than one system to tell apart
   const mixedRulesets = new Set(creatures.map((c) => c.ruleset || '')).size > 1;
@@ -1135,34 +1164,60 @@ export function createTracker(container: HTMLElement, options: TrackerOptions = 
         if (field) field.focus();
         break;
       }
-      case 'roll-all':
-        commit({
-          ...state,
-          // empty rows are left empty
-          rows: state.rows.map((r) =>
-            isBlankRow(r) ? r : { ...r, initiative: rollInitiative(r.initiativeBonus, rng) },
-          ),
+      case 'roll-all': {
+        // empty rows are left empty
+        const ids = state.rows.filter((r) => !isBlankRow(r)).map((r) => r.id);
+        withDice(ids.length + 'd20', ids.length, 20, (dice) => {
+          const at = new Map(ids.map((rowId, i) => [rowId, i]));
+          commit({
+            ...state,
+            rows: state.rows.map((r) =>
+              !at.has(r.id) || isBlankRow(r)
+                ? r
+                : {
+                    ...r,
+                    initiative: dice
+                      ? dice[at.get(r.id)] + (Number(r.initiativeBonus) || 0)
+                      : rollInitiative(r.initiativeBonus, rng),
+                  },
+            ),
+          });
+          renderRows();
+          say('Rolled initiative for everyone');
         });
-        renderRows();
-        say('Rolled initiative for everyone');
         break;
+      }
       case 'roll-hp': {
         const row = id && state.rows.find((r) => r.id === id);
         const hitDice = row ? hitDiceOf(row) : '';
         if (!hitDice) break;
-        const hp = rollHitDice(hitDice, rng);
-        commit(updateRow(state, id, { hp, maxHp: hp }));
-        const next = state.rows.find((r) => r.id === id);
-        syncInputs(rowEl(id), next);
-        edited(id);
-        say(`${labelOf(next, state.rows.indexOf(next))}: rolled ${hp} HP`);
+        const m = /^(\d+)d(\d+)([+-]\d+)?$/i.exec(hitDice.replace(/\s/g, ''));
+        const count = m ? Number(m[1]) : 0;
+        withDice(m ? hitDice.replace(/\s/g, '') : '', count, m ? Number(m[2]) : 0, (dice) => {
+          if (!state.rows.some((r) => r.id === id)) return; // removed while the dice rolled
+          const hp = dice
+            ? Math.max(1, dice.reduce((a, b) => a + b, 0) + (m[3] ? Number(m[3]) : 0))
+            : rollHitDice(hitDice, rng);
+          commit(updateRow(state, id, { hp, maxHp: hp }));
+          const next = state.rows.find((r) => r.id === id);
+          syncInputs(rowEl(id), next);
+          edited(id);
+          say(`${labelOf(next, state.rows.indexOf(next))}: rolled ${hp} HP`);
+        });
         break;
       }
       case 'roll':
         if (id) {
           const row = state.rows.find((r) => r.id === id);
-          commit(updateRow(state, id, { initiative: rollInitiative(row.initiativeBonus, rng) }));
-          renderRows();
+          withDice('1d20' + withBonus(row.initiativeBonus), 1, 20, (dice) => {
+            const now = state.rows.find((r) => r.id === id);
+            if (!now) return; // removed while the dice rolled
+            const initiative = dice
+              ? dice[0] + (Number(now.initiativeBonus) || 0)
+              : rollInitiative(now.initiativeBonus, rng);
+            commit(updateRow(state, id, { initiative }));
+            renderRows();
+          });
         }
         break;
       case 'hp-down':
