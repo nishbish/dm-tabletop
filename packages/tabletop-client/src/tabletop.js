@@ -6702,9 +6702,18 @@ function buildGui() {
 	};
 
 	//grid shape: squares or hexes (the room's, so the host's switch changes it for everyone)
+	// A host app may keep hexes for some hosts, as with the 3D characters: `hexGridBadge` tags the
+	// switch and with `hexGridLocked` turning hexes on shows that notice instead. A room already on
+	// hexes can always go back to squares.
 	var gridHex = buildPaneItem(settingsPane, 'Hex Grid', 'toggle', map.settings.gridShape == 'hex', true);
+	addPaneBadge(badgeLabel(gridHex), options.hexGridBadge);
 	map.local.gridShapeInput = gridHex.input;
 	gridHex.input.addEventListener('change', function() {
+		if (this.checked && options.hexGridLocked) {
+			this.checked = false;
+			showNotice(options.hexGridLocked);
+			return;
+		}
 		updateGridShape(this.checked ? 'hex' : 'square');
 	}, false);
 
