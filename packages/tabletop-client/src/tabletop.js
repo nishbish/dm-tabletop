@@ -4739,6 +4739,20 @@ function changePlanePage(folderId, parentId, offset) {
 	sendMessage('request', 'getPlaneImages', args);
 }
 
+// A host app may keep the built-in 3D characters and props for some hosts, as with the Ambience
+// presets: `modelLibraryBadge` marks them (the folders and each tile) and with `modelLibraryLocked`
+// picking one shows that notice instead. Pieces already in the room still move and can be removed.
+function markModelLibrary(item) {
+	addPaneBadge(badgeLabel(item), options.modelLibraryBadge);
+	return item;
+}
+
+function modelLibraryRefused() {
+	if (!options.modelLibraryLocked) { return false; }
+	showNotice(options.modelLibraryLocked);
+	return true;
+}
+
 // The built-in 3D characters: a folder of their own in the Tokens pane, with no server behind it.
 function openCharacterFolder() {
 	var pane = map.panes.tokens;
@@ -4749,8 +4763,9 @@ function openCharacterFolder() {
 	});
 
 	modelLibrary.characters.forEach(function(character) {
-		var image = buildPaneItem(pane, escapeHtml(character.name), 'image', modelLibrary.thumb(character));
+		var image = markModelLibrary(buildPaneItem(pane, escapeHtml(character.name), 'image', modelLibrary.thumb(character)));
 		image.input.image.addEventListener('click', function() {
+			if (modelLibraryRefused()) { return; }
 			getModel(character.id);
 			closePane(pane);
 		}, false);
@@ -4767,7 +4782,7 @@ function openPropPane(folder) {
 
 	if (!folder) {
 		modelLibrary.propFolders.forEach(function(propFolder) {
-			buildPaneItem(pane, escapeHtml(propFolder.name), 'folder').element.addEventListener('click', function() {
+			markModelLibrary(buildPaneItem(pane, escapeHtml(propFolder.name), 'folder')).element.addEventListener('click', function() {
 				openPropPane(propFolder);
 			});
 		});
@@ -4778,8 +4793,9 @@ function openPropPane(folder) {
 		});
 
 		folder.items.forEach(function(item) {
-			var image = buildPaneItem(pane, escapeHtml(item.name), 'image', modelLibrary.thumb(item));
+			var image = markModelLibrary(buildPaneItem(pane, escapeHtml(item.name), 'image', modelLibrary.thumb(item)));
 			image.input.image.addEventListener('click', function() {
+				if (modelLibraryRefused()) { return; }
 				placeProp(item);
 				closePane(pane);
 			}, false);
@@ -8337,7 +8353,7 @@ var clientRequest = {
 		}, false);
 
 		if (modelLibrary.characterFolder && !isFolderId(args.folderId)) {
-			buildPaneItem(map.panes.tokens, escapeHtml(modelLibrary.characterFolder), 'folder').element.addEventListener('click', openCharacterFolder);
+			markModelLibrary(buildPaneItem(map.panes.tokens, escapeHtml(modelLibrary.characterFolder), 'folder')).element.addEventListener('click', openCharacterFolder);
 		}
 
 		//the plain coloured pawns are always on offer: a folder of their own, filled here, unless
